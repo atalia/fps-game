@@ -21,6 +21,7 @@ services:
       - LOG_LEVEL=info
       - METRICS_ENABLED=true
       - METRICS_PORT=9090
+      - CLIENT_PATH=/app/client
     depends_on:
       redis:
         condition: service_healthy

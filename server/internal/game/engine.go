@@ -98,6 +98,17 @@ func (e *Engine) GetActiveRoomCount() int {
 	return count
 }
 
+// GetPlayerCount 获取总玩家数
+func (e *Engine) GetPlayerCount() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	count := 0
+	for _, r := range e.rooms {
+		count += r.GetPlayerCount()
+	}
+	return count
+}
+
 // Collision 碰撞检测
 type Collision struct {
 	MapSize float64

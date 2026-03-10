@@ -228,6 +228,23 @@ func (m *Manager) GetAllRooms() []*Room {
 	return rooms
 }
 
+// ListRooms 列出所有房间（简化信息）
+func (m *Manager) ListRooms() []map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]map[string]interface{}, 0, len(m.rooms))
+	for _, r := range m.rooms {
+		result = append(result, map[string]interface{}{
+			"id":          r.ID,
+			"name":        r.Name,
+			"player_count": r.GetPlayerCount(),
+			"max_size":    r.MaxSize,
+		})
+	}
+	return result
+}
+
 // FindAvailableRoom 查找可用房间
 func (m *Manager) FindAvailableRoom() *Room {
 	m.mu.RLock()

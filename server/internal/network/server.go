@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/json"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -104,6 +105,25 @@ func (m Message) ToJSON() []byte {
 func mustMarshal(v interface{}) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+// ServeWS 处理 WebSocket 连接
+func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, w http.ResponseWriter, r *http.Request) {
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true // 允许所有来源
+		},
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade failed: %v", err)
+		return
+	}
+
+	HandleConnection(conn, hub, roomManager)
 }
 
 // HandleConnection 处理连接

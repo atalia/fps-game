@@ -8,11 +8,12 @@ import (
 
 // Config 游戏服务器配置
 type Config struct {
-	Server   ServerConfig
-	Game     GameConfig
-	Redis    RedisConfig
-	Log      LogConfig
-	Metrics  MetricsConfig
+	Server     ServerConfig
+	Game       GameConfig
+	Redis      RedisConfig
+	Log        LogConfig
+	Metrics    MetricsConfig
+	ClientPath string
 }
 
 // ServerConfig 服务器配置
@@ -84,6 +85,7 @@ func Load() *Config {
 			Enabled: getBoolEnv("METRICS_ENABLED", true),
 			Port:    getEnv("METRICS_PORT", "9090"),
 		},
+		ClientPath: getEnv("CLIENT_PATH", "./client"),
 	}
 }
 
