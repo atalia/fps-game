@@ -1,105 +1,92 @@
-// Network module - WebSocket communication
+// network.js - WebSocket 网络通信
 class Network {
-    constructor() {
+    constructor(url) {
+        this.url = url;
         this.ws = null;
-        this.playerId = null;
         this.connected = false;
-        this.messageHandlers = {};
+        this.playerId = null;
+        this.handlers = new Map();
+
+        this.connect();
     }
 
-    connect(url) {
-        return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(url);
+    connect() {
+        this.ws = new WebSocket(this.url);
 
-            this.ws.onopen = () => {
-                this.connected = true;
-                this.updateConnectionStatus(true);
-                console.log('Connected to server');
-                resolve();
-            };
+        this.ws.onopen = () => {
+            console.log('✅ WebSocket connected');
+            this.connected = true;
+            if (this.onConnect) this.onConnect();
+        };
 
-            this.ws.onclose = () => {
-                this.connected = false;
-                this.updateConnectionStatus(false);
-                console.log('Disconnected from server');
-            };
+        this.ws.onclose = () => {
+            console.log('❌ WebSocket disconnected');
+            this.connected = false;
+            // 自动重连
+            setTimeout(() => this.connect(), 3000);
+        };
 
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                reject(error);
-            };
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            if (this.onError) this.onError(error);
+        };
 
-            this.ws.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                this.handleMessage(message);
-            };
-        });
+        this.ws.onmessage = (event) => {
+            this.handleMessage(event.data);
+        };
     }
 
-    disconnect() {
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
-    }
+    handleMessage(data) {
+        try {
+            const messages = data.split('\n').filter(m => m.trim());
 
-    send(type, data = {}) {
-        if (!this.connected) {
-            console.warn('Not connected');
-            return;
-        }
+            messages.forEach(msg => {
+                const parsed = JSON.parse(msg);
+                const handler = this.handlers.get(parsed.type);
 
-        const message = JSON.stringify({ type, data });
-        this.ws.send(message);
-    }
-
-    handleMessage(message) {
-        const { type, data } = message;
-
-        switch (type) {
-            case 'welcome':
-                this.playerId = data.player_id;
-                console.log('Welcome! Player ID:', this.playerId);
-                break;
-            case 'room_joined':
-                window.game?.onRoomJoined(data);
-                break;
-            case 'player_joined':
-                window.game?.onPlayerJoined(data);
-                break;
-            case 'player_left':
-                window.game?.onPlayerLeft(data);
-                break;
-            case 'player_moved':
-                window.game?.onPlayerMoved(data);
-                break;
-            case 'player_shot':
-                window.game?.onPlayerShot(data);
-                break;
-            case 'chat':
-                window.game?.onChat(data);
-                break;
-            default:
-                console.log('Unknown message type:', type);
-        }
-
-        // Call custom handlers
-        if (this.messageHandlers[type]) {
-            this.messageHandlers[type](data);
+                if (handler) {
+                    handler(parsed.data);
+                } else {
+                    // 默认处理
+                    switch (parsed.type) {
+                        case 'welcome':
+                            this.playerId = parsed.data.player_id;
+                            console.log('🎮 Player ID:', this.playerId);
+                            break;
+                        default:
+                            console.log('Message:', parsed.type, parsed.data);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Parse error:', error);
         }
     }
 
     on(type, handler) {
-        this.messageHandlers[type] = handler;
+        this.handlers.set(type, handler);
     }
 
-    updateConnectionStatus(connected) {
-        const status = document.getElementById('connection-status');
-        if (status) {
-            status.textContent = connected ? '已连接' : '已断开';
-            status.className = connected ? 'connected' : 'disconnected';
+    send(type, data) {
+        if (!this.connected) {
+            console.warn('WebSocket not connected');
+            return;
+        }
+
+        const message = JSON.stringify({
+            type,
+            data,
+            timestamp: Date.now()
+        });
+
+        this.ws.send(message);
+    }
+
+    close() {
+        if (this.ws) {
+            this.ws.close();
         }
     }
 }
 
-window.network = new Network();
+window.Network = Network;

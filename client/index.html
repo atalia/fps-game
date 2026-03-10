@@ -10,454 +10,489 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
             background: #1a1a2e;
-            color: #fff;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            color: #eee;
             overflow: hidden;
         }
-        
-        #login-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            z-index: 100;
-        }
-        
-        .login-container {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 40px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-        }
-        
-        .login-container h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(45deg, #e94560, #0f3460);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .login-container p {
-            color: #888;
-            margin-bottom: 30px;
-        }
-        
-        .input-group {
-            margin-bottom: 20px;
-        }
-        
-        .input-group input {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #333;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-        
-        .input-group input:focus {
-            outline: none;
-            border-color: #e94560;
-        }
-        
-        .btn {
-            padding: 15px 40px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(45deg, #e94560, #0f3460);
-            color: #fff;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(233, 69, 96, 0.3);
-        }
-        
-        #game-screen {
-            display: none;
-            width: 100%;
-            height: 100vh;
-        }
-        
+
         #game-container {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
         }
-        
+
         /* HUD */
         #hud {
-            position: fixed;
+            position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            right: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
             pointer-events: none;
-            z-index: 10;
+            z-index: 100;
         }
-        
-        .hud-top {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 20px;
-        }
-        
-        .hud-item {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        
-        .hud-bottom {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 20px;
-            align-items: flex-end;
-        }
-        
-        .health-bar {
+
+        /* 血量条 */
+        #health-bar {
             width: 200px;
             height: 20px;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0,0,0,0.5);
             border-radius: 10px;
             overflow: hidden;
         }
-        
-        .health-fill {
-            width: 100%;
+
+        #health-fill {
             height: 100%;
-            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            background: linear-gradient(90deg, #ff4444, #ff6666);
             transition: width 0.3s;
         }
-        
-        .ammo-display {
-            font-size: 2rem;
+
+        #health-text {
+            position: absolute;
+            left: 10px;
+            top: 5px;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        /* 弹药 */
+        #ammo-display {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-align: right;
+        }
+
+        #ammo-count {
+            font-size: 28px;
             font-weight: bold;
         }
-        
-        .crosshair {
+
+        #ammo-reserve {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        #current-weapon {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        /* 准星 */
+        #crosshair {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
         }
-        
-        .crosshair::before,
-        .crosshair::after {
+
+        #crosshair::before,
+        #crosshair::after {
             content: '';
             position: absolute;
-            background: #fff;
+            background: rgba(255,255,255,0.8);
         }
-        
-        .crosshair::before {
+
+        #crosshair::before {
             width: 2px;
             height: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 14px;
+            top: 5px;
         }
-        
-        .crosshair::after {
+
+        #crosshair::after {
             width: 20px;
             height: 2px;
-            top: 50%;
-            transform: translateY(-50%);
+            left: 5px;
+            top: 14px;
         }
-        
-        /* Scoreboard */
+
+        /* 记分板 */
         #scoreboard {
-            position: fixed;
+            position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border-radius: 20px;
+            background: rgba(0,0,0,0.85);
+            padding: 20px;
+            border-radius: 10px;
             display: none;
-            z-index: 20;
+            min-width: 400px;
+            z-index: 200;
         }
-        
-        #scoreboard.show {
+
+        #scoreboard.visible {
             display: block;
         }
-        
+
         #scoreboard h2 {
             text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        #scoreboard table {
-            width: 300px;
-            border-collapse: collapse;
-        }
-        
-        #scoreboard th,
-        #scoreboard td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #333;
-        }
-        
-        /* Chat */
-        #chat {
-            position: absolute;
-            bottom: 80px;
-            left: 20px;
-            width: 300px;
-        }
-        
-        #chat-messages {
-            height: 150px;
-            overflow-y: auto;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        
-        .chat-message {
-            margin-bottom: 5px;
-            font-size: 0.9rem;
-        }
-        
-        .chat-message .name {
-            color: #e94560;
-            font-weight: bold;
-        }
-        
-        #chat-input {
-            pointer-events: auto;
-            width: 100%;
-            padding: 10px;
-            border: none;
-            border-radius: 10px;
-            background: rgba(0, 0, 0, 0.5);
+            margin-bottom: 15px;
             color: #fff;
         }
-        
-        #chat-input:focus {
-            outline: none;
-        }
-        
-        /* Kill Feed */
-        #kill-feed {
-            position: absolute;
-            top: 60px;
-            right: 20px;
-            width: 250px;
-        }
-        
-        .kill-item {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 5px;
-            font-size: 0.9rem;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        
-        /* Connection Status */
-        #connection-status {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            z-index: 100;
-        }
-        
-        .connected {
-            background: #10b981;
-        }
-        
-        .disconnected {
-            background: #ef4444;
-        }
-        
-        /* Instructions */
-        .instructions {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #333;
-            font-size: 0.8rem;
-            color: #666;
+
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 15px;
+            border-bottom: 1px solid #333;
         }
 
-        /* 低血量警告动画 */
-        @keyframes pulse {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 0.6; }
-        }
-
-        /* 消息淡入淡出 */
-        @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-            20% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            80% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-        }
-
-        /* 武器切换指示器 */
-        #weapon-indicator {
-            position: absolute;
-            bottom: 80px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 1.2rem;
+        .score-row.header {
+            background: #333;
+            font-weight: bold;
         }
 
         /* 小地图 */
         #minimap {
             position: absolute;
-            top: 80px;
+            bottom: 20px;
             right: 20px;
             width: 150px;
             height: 150px;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 10px;
-            border: 2px solid #333;
+            background: rgba(0,0,0,0.5);
+            border-radius: 5px;
+            border: 2px solid #444;
+            z-index: 100;
         }
 
-        #minimap canvas {
+        #minimap-canvas {
             width: 100%;
             height: 100%;
+        }
+
+        /* 聊天 */
+        #chat-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 300px;
+            z-index: 100;
+        }
+
+        #chat-messages {
+            height: 150px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+
+        .chat-message {
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+
+        .chat-message .name {
+            color: #4fc3f7;
+        }
+
+        #chat-input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        #chat-input:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+
+        /* 击杀信息 */
+        #kill-feed {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            width: 250px;
+            z-index: 100;
+        }
+
+        .kill-item {
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            font-size: 12px;
+            animation: fadeOut 3s forwards;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* 房间信息 */
+        #room-info {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-align: center;
+            z-index: 100;
+        }
+
+        /* 伤害闪烁 */
+        #damage-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #damage-overlay.hit {
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.3) 100%);
+            animation: damageFlash 0.3s;
+        }
+
+        #damage-overlay.kill {
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,255,0,0.3) 100%);
+            animation: killFlash 0.5s;
+        }
+
+        #damage-overlay.death {
+            background: rgba(0,0,0,0.8);
+        }
+
+        @keyframes damageFlash {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        @keyframes killFlash {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* 消息提示 */
+        #message-center {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 100;
+            text-align: center;
+        }
+
+        /* 武器选择提示 */
+        #weapon-hint {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #888;
+            z-index: 100;
+        }
+
+        /* 加载画面 */
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #loading h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        #loading p {
+            color: #888;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #333;
+            border-top-color: #4fc3f7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px 0;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="login-screen">
-        <div class="login-container">
-            <h1>🎮 FPS GAME</h1>
-            <p>多人在线对战</p>
-            
-            <div class="input-group">
-                <input type="text" id="player-name" placeholder="输入你的名字" maxlength="20">
+    <!-- 加载画面 -->
+    <div id="loading">
+        <h1>🎮 FPS Game</h1>
+        <div class="spinner"></div>
+        <p>连接服务器中...</p>
+    </div>
+
+    <!-- 游戏容器 -->
+    <div id="game-container"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div style="position: relative;">
+            <div id="health-bar">
+                <div id="health-fill" style="width: 100%"></div>
             </div>
-            
-            <div class="input-group">
-                <input type="text" id="server-url" placeholder="服务器地址" value="ws://localhost:8080/ws">
-            </div>
-            
-            <button class="btn btn-primary" onclick="joinGame()">开始游戏</button>
-            
-            <div class="instructions">
-                <p>WASD - 移动 | 鼠标 - 视角</p>
-                <p>左键 - 射击 | R - 换弹</p>
-                <p>Tab - 记分板 | Enter - 聊天</p>
-            </div>
+            <span id="health-text">100 HP</span>
+        </div>
+
+        <div id="room-info">
+            <div id="room-id">等待加入...</div>
+            <div id="player-count">玩家: 0/10</div>
+        </div>
+
+        <div id="ammo-display">
+            <div id="ammo-count">30</div>
+            <div id="ammo-reserve">/ 90</div>
+            <div id="current-weapon">RIFLE</div>
         </div>
     </div>
-    
-    <!-- Game Screen -->
-    <div id="game-screen">
-        <div id="game-container"></div>
-        
-        <!-- HUD -->
-        <div id="hud">
-            <div id="connection-status" class="disconnected">已断开</div>
-            
-            <div class="hud-top">
-                <div class="hud-item">
-                    <div>房间: <span id="room-id">-</span></div>
-                    <div>玩家: <span id="player-count">0</span></div>
-                </div>
-            </div>
-            
-            <div class="crosshair"></div>
-            
-            <div class="hud-bottom">
-                <div class="health-bar">
-                    <div class="health-fill" id="health-fill"></div>
-                </div>
-                <div class="hud-item ammo-display">
-                    <span id="ammo">30</span> / <span id="ammo-reserve">90</span>
-                </div>
-                <div class="hud-item">
-                    <div>得分: <span id="score">0</span></div>
-                    <div>击杀: <span id="kills">0</span></div>
-                </div>
-            </div>
-            
-            <div id="kill-feed"></div>
-            
-            <div id="chat">
-                <div id="chat-messages"></div>
-                <input type="text" id="chat-input" placeholder="按 Enter 发送消息..." maxlength="100">
-            </div>
-            
-            <div id="minimap">
-                <canvas id="minimap-canvas"></canvas>
-            </div>
-            
-            <div id="weapon-indicator">
-                🔫 <span id="current-weapon">Rifle</span>
-            </div>
-        </div>
-        
-        <!-- Scoreboard -->
-        <div id="scoreboard">
-            <h2>记分板</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>玩家</th>
-                        <th>击杀</th>
-                        <th>死亡</th>
-                        <th>得分</th>
-                    </tr>
-                </thead>
-                <tbody id="scoreboard-body"></tbody>
-            </table>
-        </div>
+
+    <!-- 准星 -->
+    <div id="crosshair"></div>
+
+    <!-- 小地图 -->
+    <div id="minimap">
+        <canvas id="minimap-canvas"></canvas>
     </div>
-    
+
+    <!-- 聊天 -->
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <input type="text" id="chat-input" placeholder="按 Enter 发送消息..." />
+    </div>
+
+    <!-- 击杀信息 -->
+    <div id="kill-feed"></div>
+
+    <!-- 记分板 -->
+    <div id="scoreboard">
+        <h2>记分板</h2>
+        <div class="score-row header">
+            <span>玩家</span>
+            <span>击杀</span>
+            <span>死亡</span>
+            <span>分数</span>
+        </div>
+        <div id="scoreboard-rows"></div>
+    </div>
+
+    <!-- 伤害覆盖层 -->
+    <div id="damage-overlay"></div>
+
+    <!-- 消息中心 -->
+    <div id="message-center"></div>
+
+    <!-- 武器提示 -->
+    <div id="weapon-hint">
+        [1] 手枪 | [2] 步枪 | [3] 霰弹枪 | [4] 狙击枪 | [R] 换弹 | [Tab] 记分板
+    </div>
+
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <script src="js/network.js"></script>
-    <script src="js/renderer.js"></script>
-    <script src="js/player.js"></script>
-    <script src="js/audio.js"></script>
-    <script src="js/effects.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/game.js"></script>
-    <script src="js/main.js"></script>
+
+    <!-- 游戏模块 -->
+    <script src="/js/renderer.js"></script>
+    <script src="/js/player.js"></script>
+    <script src="/js/network.js"></script>
+    <script src="/js/audio.js"></script>
+    <script src="/js/effects.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/game.js"></script>
+
+    <script>
+        // 初始化游戏
+        async function init() {
+            const loading = document.getElementById('loading');
+
+            try {
+                // 初始化音效
+                window.audioManager = new AudioManager();
+                await window.audioManager.init();
+
+                // 初始化 UI
+                window.uiManager = new UIManager();
+                window.screenEffects = new ScreenEffects();
+
+                // 初始化渲染器
+                window.renderer = new Renderer('game-container');
+
+                // 初始化网络
+                const wsUrl = `ws://${window.location.host}/ws`;
+                window.network = new Network(wsUrl);
+
+                // 等待连接
+                await new Promise((resolve, reject) => {
+                    window.network.onConnect = resolve;
+                    window.network.onError = reject;
+                    setTimeout(() => reject(new Error('连接超时')), 5000);
+                });
+
+                // 初始化游戏
+                window.game = new Game();
+                await window.game.init();
+
+                // 隐藏加载画面
+                loading.style.display = 'none';
+
+                // 自动加入游戏
+                window.network.send('join_room', {
+                    room_id: '',
+                    name: 'Player_' + Math.random().toString(36).substr(2, 4)
+                });
+
+                console.log('🎮 Game initialized successfully!');
+
+            } catch (error) {
+                console.error('初始化失败:', error);
+                loading.innerHTML = `
+                    <h1>❌ 连接失败</h1>
+                    <p>${error.message}</p>
+                    <p style="margin-top: 20px">
+                        <button onclick="location.reload()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+                            重试
+                        </button>
+                    </p>
+                `;
+            }
+        }
+
+        // 启动
+        init();
+    </script>
 </body>
 </html>

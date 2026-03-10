@@ -1,40 +1,27 @@
-// Renderer module - Three.js rendering
+// renderer.js - Three.js 3D 渲染器
 class Renderer {
-    constructor(container) {
-        this.container = container;
-        this.scene = null;
-        this.camera = null;
-        this.renderer = null;
+    constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.players = new Map();
-        this.bullets = [];
-        this.map = null;
+        this.projectiles = [];
 
         this.init();
     }
 
     init() {
-        // Scene
-        this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB);
-        this.scene.fog = new THREE.Fog(0x87CEEB, 50, 200);
-
-        // Camera (First Person)
-        this.camera = new THREE.PerspectiveCamera(
-            75,
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        );
-        this.camera.position.set(0, 2, 0);
-
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        // 渲染器设置
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setClearColor(0x87ceeb); // 天空蓝
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.container.appendChild(this.renderer.domElement);
 
-        // Lighting
+        // 相机位置
+        this.camera.position.set(0, 2, 5);
+
+        // 光照
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         this.scene.add(ambientLight);
 
@@ -45,137 +32,151 @@ class Renderer {
         directionalLight.shadow.mapSize.height = 2048;
         this.scene.add(directionalLight);
 
-        // Create map
+        // 创建地面
+        this.createGround();
+
+        // 创建简单的地图
         this.createMap();
 
-        // Handle resize
+        // 创建天空盒
+        this.createSkybox();
+
+        // 窗口大小调整
         window.addEventListener('resize', () => this.onResize());
     }
 
-    createMap() {
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(200, 200);
-        const groundMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x3a5a40,
+    createGround() {
+        const geometry = new THREE.PlaneGeometry(100, 100);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0x3d3d3d,
             roughness: 0.8
         });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        const ground = new THREE.Mesh(geometry, material);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         this.scene.add(ground);
 
-        // Create some buildings/obstacles
-        const boxGeometry = new THREE.BoxGeometry(5, 5, 5);
-        const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        // 网格线
+        const gridHelper = new THREE.GridHelper(100, 50, 0x555555, 0x333333);
+        this.scene.add(gridHelper);
+    }
 
-        const positions = [
-            { x: 20, z: 20 },
-            { x: -20, z: 20 },
-            { x: 20, z: -20 },
-            { x: -20, z: -20 },
-            { x: 0, z: 30 },
-            { x: 0, z: -30 },
-            { x: 30, z: 0 },
-            { x: -30, z: 0 },
+    createMap() {
+        // 创建一些简单的障碍物
+        const obstacles = [
+            { x: 10, z: 10, w: 4, h: 3, d: 4 },
+            { x: -10, z: -10, w: 4, h: 3, d: 4 },
+            { x: 15, z: -15, w: 6, h: 2, d: 2 },
+            { x: -15, z: 15, w: 2, h: 2, d: 6 },
+            { x: 0, z: 20, w: 8, h: 4, d: 2 },
+            { x: 0, z: -20, w: 8, h: 4, d: 2 },
+            { x: 20, z: 0, w: 2, h: 4, d: 8 },
+            { x: -20, z: 0, w: 2, h: 4, d: 8 },
         ];
 
-        positions.forEach(pos => {
-            const box = new THREE.Mesh(boxGeometry, boxMaterial);
-            box.position.set(pos.x, 2.5, pos.z);
+        obstacles.forEach(obs => {
+            const geometry = new THREE.BoxGeometry(obs.w, obs.h, obs.d);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x666666,
+                roughness: 0.5
+            });
+            const box = new THREE.Mesh(geometry, material);
+            box.position.set(obs.x, obs.h / 2, obs.z);
             box.castShadow = true;
             box.receiveShadow = true;
             this.scene.add(box);
         });
-
-        // Walls
-        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
-        const wallPositions = [
-            { x: 0, y: 2, z: -50, rx: 0 },
-            { x: 0, y: 2, z: 50, rx: 0 },
-            { x: -50, y: 2, z: 0, rx: Math.PI / 2 },
-            { x: 50, y: 2, z: 0, rx: Math.PI / 2 },
-        ];
-
-        wallPositions.forEach(pos => {
-            const wall = new THREE.Mesh(
-                new THREE.BoxGeometry(100, 4, 1),
-                wallMaterial
-            );
-            wall.position.set(pos.x, pos.y, pos.z);
-            wall.rotation.y = pos.rx;
-            this.scene.add(wall);
-        });
     }
 
-    addPlayer(id, position = { x: 0, y: 0, z: 0 }, isLocal = false) {
-        if (this.players.has(id)) return;
-
-        // Player mesh (simple box for now)
-        const geometry = new THREE.BoxGeometry(1, 2, 1);
-        const material = new THREE.MeshStandardMaterial({ 
-            color: isLocal ? 0x00ff00 : 0xff0000 
+    createSkybox() {
+        const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+        const skyMat = new THREE.MeshBasicMaterial({
+            color: 0x87ceeb,
+            side: THREE.BackSide
         });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(position.x, position.y + 1, position.z);
-        mesh.castShadow = true;
-        this.scene.add(mesh);
+        const sky = new THREE.Mesh(skyGeo, skyMat);
+        this.scene.add(sky);
+    }
 
-        this.players.set(id, {
-            mesh,
-            position,
-            rotation: 0
+    addPlayer(id, position, isLocal = false) {
+        // 玩家身体
+        const bodyGeometry = new THREE.CapsuleGeometry(0.5, 1.5, 4, 8);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: isLocal ? 0x00ff00 : 0xff0000,
+            roughness: 0.5
         });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
 
-        console.log(`Player ${id} added`);
+        // 头部
+        const headGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+        const head = new THREE.Mesh(headGeometry, bodyMaterial);
+        head.position.y = 1.2;
+
+        // 组合
+        const playerGroup = new THREE.Group();
+        playerGroup.add(body);
+        playerGroup.add(head);
+        playerGroup.position.set(position.x || 0, position.y || 0, position.z || 0);
+
+        this.scene.add(playerGroup);
+        this.players.set(id, playerGroup);
+
+        return playerGroup;
     }
 
     removePlayer(id) {
         const player = this.players.get(id);
         if (player) {
-            this.scene.remove(player.mesh);
+            this.scene.remove(player);
             this.players.delete(id);
-            console.log(`Player ${id} removed`);
         }
     }
 
     updatePlayer(id, position, rotation) {
         const player = this.players.get(id);
         if (player) {
-            player.mesh.position.set(position.x, position.y + 1, position.z);
-            player.mesh.rotation.y = rotation;
-            player.position = position;
-            player.rotation = rotation;
+            player.position.set(position.x, position.y, position.z);
+            player.rotation.y = rotation;
         }
     }
 
     updateCamera(position, rotation) {
-        this.camera.position.set(position.x, position.y + 2, position.z);
+        this.camera.position.set(position.x, position.y + 1.7, position.z);
+        this.camera.rotation.order = 'YXZ';
         this.camera.rotation.y = rotation;
     }
 
-    addBullet(from, to) {
-        const geometry = new THREE.SphereGeometry(0.1);
+    addProjectile(from, to) {
+        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
         const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
         const bullet = new THREE.Mesh(geometry, material);
-        bullet.position.set(from.x, from.y + 1.5, from.z);
 
-        // Direction
-        const direction = new THREE.Vector3(to.x, to.y, to.z)
-            .sub(new THREE.Vector3(from.x, from.y, from.z))
-            .normalize();
-
+        bullet.position.set(from.x, from.y, from.z);
         this.scene.add(bullet);
-        this.bullets.push({ mesh: bullet, direction, life: 100 });
+
+        const direction = new THREE.Vector3(
+            to.x - from.x,
+            to.y - from.y,
+            to.z - from.z
+        ).normalize();
+
+        this.projectiles.push({
+            mesh: bullet,
+            direction,
+            distance: 0,
+            maxDistance: 100
+        });
     }
 
     update() {
-        // Update bullets
-        this.bullets = this.bullets.filter(bullet => {
-            bullet.mesh.position.add(bullet.direction.clone().multiplyScalar(2));
-            bullet.life--;
-            
-            if (bullet.life <= 0) {
-                this.scene.remove(bullet.mesh);
+        // 更新弹道
+        const speed = 2;
+        this.projectiles = this.projectiles.filter(p => {
+            p.mesh.position.add(p.direction.clone().multiplyScalar(speed));
+            p.distance += speed;
+
+            if (p.distance >= p.maxDistance) {
+                this.scene.remove(p.mesh);
                 return false;
             }
             return true;

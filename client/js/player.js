@@ -1,158 +1,107 @@
-// Player module - Local player control
+// player.js - 玩家控制器
 class PlayerController {
     constructor() {
         this.position = { x: 0, y: 0, z: 0 };
+        this.velocity = { x: 0, y: 0, z: 0 };
         this.rotation = 0;
         this.pitch = 0;
-        this.velocity = { x: 0, y: 0, z: 0 };
-        this.speed = 0.15;
-        this.jumpForce = 0.3;
-        this.gravity = -0.02;
-        this.onGround = true;
-
-        this.keys = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            jump: false
-        };
-
-        this.mouse = {
-            sensitivity: 0.002,
-            locked: false
-        };
 
         this.health = 100;
+        this.maxHealth = 100;
         this.ammo = 30;
         this.ammoReserve = 90;
+        this.maxAmmo = 30;
+
         this.kills = 0;
         this.deaths = 0;
         this.score = 0;
 
-        this.canShoot = true;
+        this.weapon = 'rifle';
+        this.speed = 5;
+        this.jumpForce = 8;
+        this.isGrounded = true;
+
+        this.keys = {};
+        this.mouse = { x: 0, y: 0 };
+        this.isLocked = false;
+
+        this.lastShot = 0;
         this.shootCooldown = 100; // ms
 
         this.init();
     }
 
     init() {
-        // Keyboard events
-        document.addEventListener('keydown', (e) => this.onKeyDown(e));
-        document.addEventListener('keyup', (e) => this.onKeyUp(e));
+        // 键盘事件
+        document.addEventListener('keydown', (e) => {
+            this.keys[e.code] = true;
+        });
 
-        // Mouse events
-        document.addEventListener('click', () => this.requestPointerLock());
-        document.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
-        document.addEventListener('mousedown', (e) => this.onMouseDown(e));
-    }
+        document.addEventListener('keyup', (e) => {
+            this.keys[e.code] = false;
+        });
 
-    requestPointerLock() {
-        const gameScreen = document.getElementById('game-screen');
-        if (gameScreen.style.display !== 'none') {
-            gameScreen.requestPointerLock();
-        }
-    }
+        // 鼠标锁定
+        document.addEventListener('click', () => {
+            if (!this.isLocked) {
+                document.body.requestPointerLock();
+            } else {
+                this.shoot();
+            }
+        });
 
-    onPointerLockChange() {
-        this.mouse.locked = document.pointerLockElement !== null;
-    }
+        document.addEventListener('pointerlockchange', () => {
+            this.isLocked = document.pointerLockElement === document.body;
+        });
 
-    onKeyDown(e) {
-        switch (e.code) {
-            case 'KeyW': this.keys.forward = true; break;
-            case 'KeyS': this.keys.backward = true; break;
-            case 'KeyA': this.keys.left = true; break;
-            case 'KeyD': this.keys.right = true; break;
-            case 'Space': this.keys.jump = true; break;
-            case 'Tab':
-                e.preventDefault();
-                window.game?.toggleScoreboard(true);
-                break;
-        }
-    }
-
-    onKeyUp(e) {
-        switch (e.code) {
-            case 'KeyW': this.keys.forward = false; break;
-            case 'KeyS': this.keys.backward = false; break;
-            case 'KeyA': this.keys.left = false; break;
-            case 'KeyD': this.keys.right = false; break;
-            case 'Space': this.keys.jump = false; break;
-            case 'Tab':
-                window.game?.toggleScoreboard(false);
-                break;
-        }
-    }
-
-    onMouseMove(e) {
-        if (!this.mouse.locked) return;
-
-        this.rotation -= e.movementX * this.mouse.sensitivity;
-        this.pitch -= e.movementY * this.mouse.sensitivity;
-
-        // Clamp pitch
-        this.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.pitch));
-    }
-
-    onMouseDown(e) {
-        if (!this.mouse.locked) return;
-
-        if (e.button === 0) { // Left click - shoot
-            this.shoot();
-        }
+        // 鼠标移动
+        document.addEventListener('mousemove', (e) => {
+            if (this.isLocked) {
+                this.rotation -= e.movementX * 0.002;
+                this.pitch -= e.movementY * 0.002;
+                this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+            }
+        });
     }
 
     update() {
-        // Movement
-        const moveDirection = { x: 0, z: 0 };
+        const dt = 1 / 60;
 
-        if (this.keys.forward) {
-            moveDirection.x += Math.sin(this.rotation);
-            moveDirection.z += Math.cos(this.rotation);
-        }
-        if (this.keys.backward) {
-            moveDirection.x -= Math.sin(this.rotation);
-            moveDirection.z -= Math.cos(this.rotation);
-        }
-        if (this.keys.left) {
-            moveDirection.x += Math.cos(this.rotation);
-            moveDirection.z -= Math.sin(this.rotation);
-        }
-        if (this.keys.right) {
-            moveDirection.x -= Math.cos(this.rotation);
-            moveDirection.z += Math.sin(this.rotation);
-        }
+        // 移动
+        let moveX = 0;
+        let moveZ = 0;
 
-        // Normalize
-        const length = Math.sqrt(moveDirection.x ** 2 + moveDirection.z ** 2);
-        if (length > 0) {
-            moveDirection.x /= length;
-            moveDirection.z /= length;
-        }
+        if (this.keys['KeyW']) moveZ -= 1;
+        if (this.keys['KeyS']) moveZ += 1;
+        if (this.keys['KeyA']) moveX -= 1;
+        if (this.keys['KeyD']) moveX += 1;
 
-        // Apply movement
-        this.position.x += moveDirection.x * this.speed;
-        this.position.z += moveDirection.z * this.speed;
-
-        // Jump and gravity
-        if (this.keys.jump && this.onGround) {
+        // 跳跃
+        if (this.keys['Space'] && this.isGrounded) {
             this.velocity.y = this.jumpForce;
-            this.onGround = false;
+            this.isGrounded = false;
         }
 
-        this.velocity.y += this.gravity;
-        this.position.y += this.velocity.y;
+        // 应用移动
+        const sin = Math.sin(this.rotation);
+        const cos = Math.cos(this.rotation);
 
-        // Ground check
-        if (this.position.y <= 0) {
-            this.position.y = 0;
-            this.velocity.y = 0;
-            this.onGround = true;
+        this.position.x += (moveX * cos - moveZ * sin) * this.speed * dt;
+        this.position.z += (moveX * sin + moveZ * cos) * this.speed * dt;
+
+        // 重力
+        if (!this.isGrounded) {
+            this.velocity.y -= 20 * dt;
+            this.position.y += this.velocity.y * dt;
+
+            if (this.position.y <= 0) {
+                this.position.y = 0;
+                this.velocity.y = 0;
+                this.isGrounded = true;
+            }
         }
 
-        // Boundary check
+        // 边界限制
         const boundary = 48;
         this.position.x = Math.max(-boundary, Math.min(boundary, this.position.x));
         this.position.z = Math.max(-boundary, Math.min(boundary, this.position.z));
@@ -164,75 +113,70 @@ class PlayerController {
     }
 
     shoot() {
-        if (!this.canShoot || this.ammo <= 0) return;
+        const now = Date.now();
+        if (now - this.lastShot < this.shootCooldown) return false;
+        if (this.ammo <= 0) return false;
 
+        this.lastShot = now;
         this.ammo--;
-        this.canShoot = false;
-        this.updateHUD();
 
-        // Send shoot event
-        window.network.send('shoot', {
-            position: this.position,
-            rotation: this.rotation
-        });
+        // 根据武器类型设置冷却
+        switch (this.weapon) {
+            case 'pistol':
+                this.shootCooldown = 200;
+                break;
+            case 'rifle':
+                this.shootCooldown = 100;
+                break;
+            case 'shotgun':
+                this.shootCooldown = 800;
+                break;
+            case 'sniper':
+                this.shootCooldown = 1500;
+                break;
+        }
 
-        // Cooldown
-        setTimeout(() => {
-            this.canShoot = true;
-        }, this.shootCooldown);
+        return true;
     }
 
     reload() {
-        const needed = 30 - this.ammo;
-        if (needed <= 0 || this.ammoReserve <= 0) return;
+        if (this.ammoReserve <= 0) return;
 
-        const toReload = Math.min(needed, this.ammoReserve);
-        this.ammo += toReload;
-        this.ammoReserve -= toReload;
-        this.updateHUD();
+        const needed = this.maxAmmo - this.ammo;
+        const available = Math.min(needed, this.ammoReserve);
+
+        this.ammo += available;
+        this.ammoReserve -= available;
     }
 
     takeDamage(damage) {
         this.health -= damage;
-        this.updateHUD();
-
-        if (this.health <= 0) {
-            this.die();
-        }
+        if (this.health < 0) this.health = 0;
+        return this.health;
     }
 
-    die() {
-        this.deaths++;
-        this.health = 0;
-        this.updateHUD();
+    heal(amount) {
+        this.health = Math.min(this.maxHealth, this.health + amount);
+        return this.health;
+    }
 
-        // Respawn after 3 seconds
-        setTimeout(() => this.respawn(), 3000);
+    addKill(score = 100) {
+        this.kills++;
+        this.score += score;
+    }
+
+    addDeath() {
+        this.deaths++;
     }
 
     respawn() {
-        this.health = 100;
-        this.ammo = 30;
+        this.health = this.maxHealth;
+        this.ammo = this.maxAmmo;
         this.position = {
             x: (Math.random() - 0.5) * 40,
             y: 0,
             z: (Math.random() - 0.5) * 40
         };
-        this.updateHUD();
-    }
-
-    addKill() {
-        this.kills++;
-        this.score += 100;
-        this.updateHUD();
-    }
-
-    updateHUD() {
-        document.getElementById('health-fill').style.width = `${this.health}%`;
-        document.getElementById('ammo').textContent = this.ammo;
-        document.getElementById('ammo-reserve').textContent = this.ammoReserve;
-        document.getElementById('score').textContent = this.score;
-        document.getElementById('kills').textContent = this.kills;
     }
 }
 
