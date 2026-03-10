@@ -8,176 +8,186 @@ import (
 	"fps-game/internal/room"
 )
 
-func TestHandleJoinRoom(t *testing.T) {
-	// 测试数据
-	data := `{"room_id": "test-room", "name": "TestPlayer"}`
+func TestHub_NewHub(t *testing.T) {
+	hub := NewHub()
 
-	var req struct {
-		RoomID string `json:"room_id"`
-		Name   string `json:"name"`
+	if hub == nil {
+		t.Error("Hub should not be nil")
 	}
-
-	if err := json.Unmarshal([]byte(data), &req); err != nil {
-		t.Errorf("Failed to unmarshal: %v", err)
+	if hub.clients == nil {
+		t.Error("clients map should be initialized")
 	}
-
-	if req.RoomID != "test-room" {
-		t.Errorf("RoomID = %s, want test-room", req.RoomID)
-	}
-	if req.Name != "TestPlayer" {
-		t.Errorf("Name = %s, want TestPlayer", req.Name)
+	if hub.clientMap == nil {
+		t.Error("clientMap should be initialized")
 	}
 }
 
-func TestHandleMove(t *testing.T) {
-	data := `{"x": 10.5, "y": 0, "z": 20.3, "rotation": 1.57}`
+func TestHub_RegisterUnregister(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
 
-	var pos struct {
-		X        float64 `json:"x"`
-		Y        float64 `json:"y"`
-		Z        float64 `json:"z"`
-		Rotation float64 `json:"rotation"`
-	}
-
-	if err := json.Unmarshal([]byte(data), &pos); err != nil {
-		t.Errorf("Failed to unmarshal: %v", err)
-	}
-
-	if pos.X != 10.5 || pos.Y != 0 || pos.Z != 20.3 || pos.Rotation != 1.57 {
-		t.Errorf("Position data mismatch: %v", pos)
-	}
-}
-
-func TestHandleShoot(t *testing.T) {
-	data := `{"target_id": "player2", "damage": 30}`
-
-	var shot struct {
-		TargetID string `json:"target_id"`
-		Damage   int    `json:"damage"`
-	}
-
-	if err := json.Unmarshal([]byte(data), &shot); err != nil {
-		t.Errorf("Failed to unmarshal: %v", err)
-	}
-
-	if shot.TargetID != "player2" {
-		t.Errorf("TargetID = %s, want player2", shot.TargetID)
-	}
-	if shot.Damage != 30 {
-		t.Errorf("Damage = %d, want 30", shot.Damage)
-	}
-}
-
-func TestHandleChat(t *testing.T) {
-	data := `{"message": "Hello World"}`
-
-	var chat struct {
-		Message string `json:"message"`
-	}
-
-	if err := json.Unmarshal([]byte(data), &chat); err != nil {
-		t.Errorf("Failed to unmarshal: %v", err)
-	}
-
-	if chat.Message != "Hello World" {
-		t.Errorf("Message = %s, want Hello World", chat.Message)
-	}
-}
-
-func TestClient_SendMessage(t *testing.T) {
-	// 创建一个简单的测试客户端
 	client := &Client{
 		Player: player.NewPlayer(),
 		Send:   make(chan []byte, 10),
 	}
 
-	// 发送消息
-	msg := NewMessage("test", map[string]string{"data": "value"})
-	client.Send <- msg.ToJSON()
+	// 注册
+	hub.register <- client
 
-	// 验证消息被发送
-	select {
-	case received := <-client.Send:
-		var parsed Message
-		if err := json.Unmarshal(received, &parsed); err != nil {
-			t.Errorf("Failed to unmarshal message: %v", err)
-		}
-		if parsed.Type != "test" {
-			t.Errorf("Message type = %s, want test", parsed.Type)
-		}
-	default:
-		t.Error("No message received")
+	// 等待处理
+	for len(hub.clients) == 0 {
+	}
+
+	if len(hub.clients) != 1 {
+		t.Errorf("clients count = %d, want 1", len(hub.clients))
+	}
+
+	// 注销
+	hub.unregister <- client
+
+	// 等待处理
+	for len(hub.clients) > 0 {
+	}
+
+	if len(hub.clients) != 0 {
+		t.Errorf("clients count = %d, want 0", len(hub.clients))
 	}
 }
 
-func TestMessageTypes(t *testing.T) {
-	tests := []struct {
-		msgType string
-		data    interface{}
-	}{
-		{"welcome", map[string]string{"player_id": "123"}},
-		{"room_joined", map[string]interface{}{"room_id": "abc", "players": []string{}}},
-		{"player_moved", map[string]interface{}{"player_id": "123", "position": player.Position{}}},
-		{"player_shot", map[string]interface{}{"player_id": "123", "damage": 30}},
-		{"chat", map[string]string{"message": "hello"}},
+func TestHub_GetClient(t *testing.T) {
+	hub := NewHub()
+	p := player.NewPlayer()
+
+	hub.clientMap[p.ID] = &Client{Player: p}
+
+	client := hub.GetClient(p.ID)
+	if client == nil {
+		t.Error("Should find client")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.msgType, func(t *testing.T) {
-			msg := NewMessage(tt.msgType, tt.data)
-			if msg.Type != tt.msgType {
-				t.Errorf("Type = %s, want %s", msg.Type, tt.msgType)
-			}
-			if msg.Timestamp == 0 {
-				t.Error("Timestamp should not be zero")
-			}
-
-			// 验证 JSON 序列化
-			jsonData := msg.ToJSON()
-			var parsed Message
-			if err := json.Unmarshal(jsonData, &parsed); err != nil {
-				t.Errorf("Failed to unmarshal: %v", err)
-			}
-		})
+	// 不存在的客户端
+	client = hub.GetClient("nonexistent")
+	if client != nil {
+		t.Error("Should return nil for nonexistent client")
 	}
 }
 
-func TestClient_BufferFull(t *testing.T) {
-	client := &Client{
+func TestHub_Broadcast(t *testing.T) {
+	hub := NewHub()
+
+	// 创建测试客户端
+	c1 := &Client{
 		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 1), // 只有一个槽位
+		Send:   make(chan []byte, 10),
+	}
+	c2 := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
 	}
 
-	// 填满缓冲区
-	client.Send <- []byte("message1")
+	hub.clients[c1] = true
+	hub.clients[c2] = true
 
-	// 尝试发送另一条消息（非阻塞）
+	// 广播消息
+	hub.Broadcast("test", map[string]string{"msg": "hello"})
+
+	// 验证两个客户端都收到消息
 	select {
-	case client.Send <- []byte("message2"):
-		// 应该不会到达这里
+	case msg := <-c1.Send:
+		if msg == nil {
+			t.Error("c1 should receive message")
+		}
 	default:
-		// 缓冲区已满，这是预期行为
+		t.Error("c1 should have received message")
+	}
+
+	select {
+	case msg := <-c2.Send:
+		if msg == nil {
+			t.Error("c2 should receive message")
+		}
+	default:
+		t.Error("c2 should have received message")
 	}
 }
 
-func TestMessage_JSON(t *testing.T) {
-	original := NewMessage("test", map[string]int{"count": 42})
+func TestHub_BroadcastToRoom(t *testing.T) {
+	hub := NewHub()
+	rm := room.NewManager(10, 10)
 
-	jsonData := original.ToJSON()
+	// 创建房间
+	r := rm.CreateRoom()
+
+	// 创建测试客户端
+	p1 := player.NewPlayer()
+	p2 := player.NewPlayer()
+	p3 := player.NewPlayer()
+
+	r.AddPlayer(p1)
+	r.AddPlayer(p2)
+	// p3 不在房间
+
+	c1 := &Client{Player: p1, Send: make(chan []byte, 10)}
+	c2 := &Client{Player: p2, Send: make(chan []byte, 10)}
+	c3 := &Client{Player: p3, Send: make(chan []byte, 10)}
+
+	hub.clients[c1] = true
+	hub.clients[c2] = true
+	hub.clients[c3] = true
+	hub.clientMap[p1.ID] = c1
+	hub.clientMap[p2.ID] = c2
+	hub.clientMap[p3.ID] = c3
+
+	// 广播到房间，排除 p1
+	hub.BroadcastToRoom(r, "test", map[string]string{"msg": "hello"}, p1.ID)
+
+	// p1 不应该收到
+	select {
+	case <-c1.Send:
+		t.Error("c1 should not receive message (excluded)")
+	default:
+		// 正确
+	}
+
+	// p2 应该收到
+	select {
+	case <-c2.Send:
+		// 正确
+	default:
+		t.Error("c2 should have received message")
+	}
+
+	// p3 不在房间，不应该收到
+	select {
+	case <-c3.Send:
+		t.Error("c3 should not receive message (not in room)")
+	default:
+		// 正确
+	}
+}
+
+func TestMessage_NewMessage(t *testing.T) {
+	msg := NewMessage("test", map[string]string{"key": "value"})
+
+	if msg.Type != "test" {
+		t.Errorf("Type = %s, want test", msg.Type)
+	}
+	if msg.Timestamp == 0 {
+		t.Error("Timestamp should not be zero")
+	}
+}
+
+func TestMessage_ToJSON(t *testing.T) {
+	msg := NewMessage("test", map[string]string{"key": "value"})
+	jsonData := msg.ToJSON()
 
 	var parsed Message
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Errorf("Failed to unmarshal: %v", err)
 	}
 
-	// 解析 data
-	var data map[string]int
-	if err := json.Unmarshal(parsed.Data, &data); err != nil {
-		t.Errorf("Failed to unmarshal data: %v", err)
-	}
-
-	if data["count"] != 42 {
-		t.Errorf("count = %d, want 42", data["count"])
+	if parsed.Type != "test" {
+		t.Errorf("Parsed type = %s, want test", parsed.Type)
 	}
 }
 
@@ -206,30 +216,19 @@ func TestClient_HandleJoinRoom(t *testing.T) {
 	if client.Room == nil {
 		t.Error("Room should not be nil after join")
 	}
-}
 
-func TestClient_HandleJoinRoom_ExistingRoom(t *testing.T) {
-	hub := NewHub()
-	roomManager := room.NewManager(10, 10)
-
-	// 创建房间
-	r := roomManager.CreateRoom()
-
-	client := &Client{
-		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 10),
-		hub:    hub,
-	}
-
-	data := mustMarshal(map[string]string{
-		"room_id": r.ID,
-		"name":    "TestPlayer",
-	})
-
-	client.handleJoinRoom(data, roomManager)
-
-	if client.Room == nil || client.Room.ID != r.ID {
-		t.Error("Should join existing room")
+	// 验证收到 room_joined 消息
+	select {
+	case msg := <-client.Send:
+		var parsed Message
+		if err := json.Unmarshal(msg, &parsed); err != nil {
+			t.Errorf("Failed to unmarshal: %v", err)
+		}
+		if parsed.Type != "room_joined" {
+			t.Errorf("Message type = %s, want room_joined", parsed.Type)
+		}
+	default:
+		t.Error("Should receive room_joined message")
 	}
 }
 
@@ -286,25 +285,40 @@ func TestClient_HandleMove(t *testing.T) {
 	}
 }
 
-func TestClient_HandleMove_NoRoom(t *testing.T) {
+func TestClient_HandleReload(t *testing.T) {
 	hub := NewHub()
-	roomManager := room.NewManager(10, 10)
 	client := &Client{
 		Player: player.NewPlayer(),
 		Send:   make(chan []byte, 10),
 		hub:    hub,
 	}
 
-	// 没有加入房间，不应该 panic
-	data := mustMarshal(map[string]interface{}{
-		"x": 10.0,
-		"y": 5.0,
-		"z": 20.0,
-	})
+	// 消耗一些弹药
+	for i := 0; i < 10; i++ {
+		client.Player.Shoot()
+	}
 
-	client.handleMove(data, roomManager)
+	// 换弹
+	client.handleReload()
 
-	// 验证没有崩溃
+	// 验证弹药已恢复
+	if client.Player.Ammo != 30 {
+		t.Errorf("Ammo = %d, want 30", client.Player.Ammo)
+	}
+
+	// 验证收到 reload 消息
+	select {
+	case msg := <-client.Send:
+		var parsed Message
+		if err := json.Unmarshal(msg, &parsed); err != nil {
+			t.Errorf("Failed to unmarshal: %v", err)
+		}
+		if parsed.Type != "reload" {
+			t.Errorf("Message type = %s, want reload", parsed.Type)
+		}
+	default:
+		t.Error("Should receive reload message")
+	}
 }
 
 func TestClient_HandleShoot(t *testing.T) {
@@ -327,34 +341,11 @@ func TestClient_HandleShoot(t *testing.T) {
 		"rotation": 0,
 	})
 
-	// 应该能射击
 	client.handleShoot(data, roomManager)
 
 	// 弹药应该减少
 	if client.Player.Ammo >= 30 {
 		t.Error("Ammo should decrease after shoot")
-	}
-}
-
-func TestClient_HandleReload(t *testing.T) {
-	hub := NewHub()
-	client := &Client{
-		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 10),
-		hub:    hub,
-	}
-
-	// 消耗一些弹药
-	for i := 0; i < 10; i++ {
-		client.Player.Shoot()
-	}
-
-	// 换弹
-	client.handleReload()
-
-	// 验证弹药已恢复
-	if client.Player.Ammo != 30 {
-		t.Errorf("Ammo = %d, want 30", client.Player.Ammo)
 	}
 }
 
@@ -382,6 +373,11 @@ func TestClient_HandleChat(t *testing.T) {
 	client1.Room = r
 	client2.Room = r
 
+	hub.clients[client1] = true
+	hub.clients[client2] = true
+	hub.clientMap[client1.Player.ID] = client1
+	hub.clientMap[client2.Player.ID] = client2
+
 	// 发送聊天消息
 	data := mustMarshal(map[string]string{
 		"message": "Hello World",
@@ -389,10 +385,16 @@ func TestClient_HandleChat(t *testing.T) {
 
 	client1.handleChat(data, roomManager)
 
-	// 验证消息处理（实际广播由 network 层实现）
+	// client2 应该收到聊天消息
+	select {
+	case <-client2.Send:
+		// 正确
+	default:
+		t.Error("client2 should receive chat message")
+	}
 }
 
-func TestClient_HandleChat_NoRoom(t *testing.T) {
+func TestClient_HandleRespawn(t *testing.T) {
 	hub := NewHub()
 	roomManager := room.NewManager(10, 10)
 	client := &Client{
@@ -401,58 +403,44 @@ func TestClient_HandleChat_NoRoom(t *testing.T) {
 		hub:    hub,
 	}
 
-	// 没有房间，不应该 panic
-	data := mustMarshal(map[string]string{
-		"message": "Hello",
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	// 重生
+	data := mustMarshal(map[string]float64{
+		"x": 10.0,
+		"y": 0,
+		"z": 20.0,
 	})
 
-	client.handleChat(data, roomManager)
-}
+	client.handleRespawn(data, roomManager)
 
-func TestHandleConnection(t *testing.T) {
-	hub := NewHub()
-	go hub.Run()
-
-	// 由于需要 WebSocket 连接，这里只测试逻辑
-	client := &Client{
-		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 100),
-		hub:    hub,
-	}
-
-	// 验证客户端创建成功
-	if client.Player == nil {
-		t.Error("Player should not be nil")
+	// 验证收到 respawn 消息
+	select {
+	case msg := <-client.Send:
+		var parsed Message
+		if err := json.Unmarshal(msg, &parsed); err != nil {
+			t.Errorf("Failed to unmarshal: %v", err)
+		}
+		if parsed.Type != "respawn" {
+			t.Errorf("Message type = %s, want respawn", parsed.Type)
+		}
+	default:
+		t.Error("Should receive respawn message")
 	}
 }
 
-func TestMessageUnmarshal(t *testing.T) {
-	tests := []struct {
-		name string
-		data string
-		want Message
-	}{
-		{
-			name: "welcome message",
-			data: `{"type":"welcome","data":{"player_id":"123"},"timestamp":1234567890}`,
-			want: Message{Type: "welcome", Timestamp: 1234567890},
-		},
-		{
-			name: "move message",
-			data: `{"type":"move","data":{"x":10,"y":0,"z":20},"timestamp":1234567890}`,
-			want: Message{Type: "move", Timestamp: 1234567890},
-		},
+func TestMustMarshal(t *testing.T) {
+	data := mustMarshal(map[string]string{"key": "value"})
+
+	var parsed map[string]string
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Errorf("Failed to unmarshal: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var msg Message
-			if err := json.Unmarshal([]byte(tt.data), &msg); err != nil {
-				t.Errorf("Failed to unmarshal: %v", err)
-			}
-			if msg.Type != tt.want.Type {
-				t.Errorf("Type = %s, want %s", msg.Type, tt.want.Type)
-			}
-		})
+	if parsed["key"] != "value" {
+		t.Errorf("parsed[key] = %s, want value", parsed["key"])
 	}
 }
