@@ -432,67 +432,8 @@
     <script src="/js/audio.js"></script>
     <script src="/js/effects.js"></script>
     <script src="/js/ui.js"></script>
+    <script src="/js/lobby.js"></script>
     <script src="/js/game.js"></script>
-
-    <script>
-        // 初始化游戏
-        async function init() {
-            const loading = document.getElementById('loading');
-
-            try {
-                // 初始化音效
-                window.audioManager = new AudioManager();
-                await window.audioManager.init();
-
-                // 初始化 UI
-                window.uiManager = new UIManager();
-                window.screenEffects = new ScreenEffects();
-
-                // 初始化渲染器
-                window.renderer = new Renderer('game-container');
-
-                // 初始化网络
-                const wsUrl = `ws://${window.location.host}/ws`;
-                window.network = new Network(wsUrl);
-
-                // 等待连接
-                await new Promise((resolve, reject) => {
-                    window.network.onConnect = resolve;
-                    window.network.onError = reject;
-                    setTimeout(() => reject(new Error('连接超时')), 5000);
-                });
-
-                // 初始化游戏
-                window.game = new Game();
-                await window.game.init();
-
-                // 隐藏加载画面
-                loading.style.display = 'none';
-
-                // 自动加入游戏
-                window.network.send('join_room', {
-                    room_id: '',
-                    name: 'Player_' + Math.random().toString(36).substr(2, 4)
-                });
-
-                console.log('🎮 Game initialized successfully!');
-
-            } catch (error) {
-                console.error('初始化失败:', error);
-                loading.innerHTML = `
-                    <h1>❌ 连接失败</h1>
-                    <p>${error.message}</p>
-                    <p style="margin-top: 20px">
-                        <button onclick="location.reload()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-                            重试
-                        </button>
-                    </p>
-                `;
-            }
-        }
-
-        // 启动
-        init();
-    </script>
+    <script src="/js/main.js"></script>
 </body>
 </html>
