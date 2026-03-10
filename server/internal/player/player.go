@@ -1,0 +1,253 @@
+package player
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"sync"
+	"time"
+)
+
+// Position 3D 位置
+type Position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
+}
+
+// Player 玩家
+type Player struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Position   Position  `json:"position"`
+	Rotation   float64   `json:"rotation"` // Y 轴旋转
+	Velocity   Position  `json:"-"`
+	Health     int       `json:"health"`
+	MaxHealth  int       `json:"max_health"`
+	Score      int       `json:"score"`
+	Kills      int       `json:"kills"`
+	Deaths     int       `json:"deaths"`
+	Team       string    `json:"team"`
+	Weapon     string    `json:"weapon"`
+	Ammo       int       `json:"ammo"`
+	AmmoReserve int      `json:"ammo_reserve"`
+	LastShot   time.Time `json:"-"`
+	Connected  bool      `json:"-"`
+	mu         sync.RWMutex
+}
+
+// Config 玩家配置
+type Config struct {
+	DefaultHealth    int
+	DefaultAmmo      int
+	DefaultAmmoReserve int
+	Speed            float64
+	JumpForce        float64
+	ShootCooldown    time.Duration
+}
+
+// DefaultConfig 默认配置
+var DefaultConfig = Config{
+	DefaultHealth:      100,
+	DefaultAmmo:        30,
+	DefaultAmmoReserve: 90,
+	Speed:              5.0,
+	JumpForce:          8.0,
+	ShootCooldown:      100 * time.Millisecond,
+}
+
+// NewPlayer 创建玩家
+func NewPlayer() *Player {
+	return NewPlayerWithConfig(DefaultConfig)
+}
+
+// NewPlayerWithConfig 使用配置创建玩家
+func NewPlayerWithConfig(cfg Config) *Player {
+	return &Player{
+		ID:          generateID(),
+		Health:      cfg.DefaultHealth,
+		MaxHealth:   cfg.DefaultHealth,
+		Score:       0,
+		Kills:       0,
+		Deaths:      0,
+		Weapon:      "rifle",
+		Ammo:        cfg.DefaultAmmo,
+		AmmoReserve: cfg.DefaultAmmoReserve,
+		Connected:   true,
+	}
+}
+
+// SetName 设置名字
+func (p *Player) SetName(name string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Name = name
+}
+
+// SetPosition 设置位置
+func (p *Player) SetPosition(x, y, z float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Position.X = x
+	p.Position.Y = y
+	p.Position.Z = z
+}
+
+// SetRotation 设置旋转
+func (p *Player) SetRotation(rot float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Rotation = rot
+}
+
+// Move 移动
+func (p *Player) Move(dx, dz float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Position.X += dx
+	p.Position.Z += dz
+}
+
+// Jump 跳跃
+func (p *Player) Jump(force float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.Position.Y <= 0 {
+		p.Velocity.Y = force
+	}
+}
+
+// Update 更新状态
+func (p *Player) Update() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// 应用重力
+	p.Velocity.Y -= 0.5 // 简化重力
+	p.Position.Y += p.Velocity.Y
+
+	// 地面检测
+	if p.Position.Y <= 0 {
+		p.Position.Y = 0
+		p.Velocity.Y = 0
+	}
+}
+
+// TakeDamage 受伤
+func (p *Player) TakeDamage(damage int) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Health -= damage
+	if p.Health < 0 {
+		p.Health = 0
+	}
+	return p.Health
+}
+
+// Heal 治疗
+func (p *Player) Heal(amount int) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Health += amount
+	if p.Health > p.MaxHealth {
+		p.Health = p.MaxHealth
+	}
+	return p.Health
+}
+
+// IsAlive 是否存活
+func (p *Player) IsAlive() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Health > 0
+}
+
+// Die 死亡
+func (p *Player) Die() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Health = 0
+	p.Deaths++
+}
+
+// Respawn 重生
+func (p *Player) Respawn(x, y, z float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Health = p.MaxHealth
+	p.Ammo = DefaultConfig.DefaultAmmo
+	p.Position = Position{X: x, Y: y, Z: z}
+}
+
+// AddKill 添加击杀
+func (p *Player) AddKill(points int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Kills++
+	p.Score += points
+}
+
+// CanShoot 是否可以射击
+func (p *Player) CanShoot() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Ammo > 0 && time.Since(p.LastShot) >= DefaultConfig.ShootCooldown
+}
+
+// Shoot 射击
+func (p *Player) Shoot() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.Ammo <= 0 {
+		return false
+	}
+
+	p.Ammo--
+	p.LastShot = time.Now()
+	return true
+}
+
+// Reload 换弹
+func (p *Player) Reload() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	needed := DefaultConfig.DefaultAmmo - p.Ammo
+	if needed <= 0 || p.AmmoReserve <= 0 {
+		return
+	}
+
+	toReload := needed
+	if toReload > p.AmmoReserve {
+		toReload = p.AmmoReserve
+	}
+
+	p.Ammo += toReload
+	p.AmmoReserve -= toReload
+}
+
+// ToMap 转换为 map
+func (p *Player) ToMap() map[string]interface{} {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	return map[string]interface{}{
+		"id":       p.ID,
+		"name":     p.Name,
+		"position": p.Position,
+		"rotation": p.Rotation,
+		"health":   p.Health,
+		"score":    p.Score,
+		"kills":    p.Kills,
+		"deaths":   p.Deaths,
+		"team":     p.Team,
+		"weapon":   p.Weapon,
+		"ammo":     p.Ammo,
+	}
+}
+
+func generateID() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
