@@ -53,7 +53,9 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("Client connected: %s", client.Player.ID)
+			if client.Player != nil {
+				log.Printf("Client connected: %s", client.Player.ID)
+			}
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -62,7 +64,9 @@ func (h *Hub) Run() {
 				close(client.Send)
 			}
 			h.mu.Unlock()
-			log.Printf("Client disconnected: %s", client.Player.ID)
+			if client.Player != nil {
+				log.Printf("Client disconnected: %s", client.Player.ID)
+			}
 		}
 	}
 }
