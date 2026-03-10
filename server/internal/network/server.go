@@ -17,21 +17,23 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 1024
+	maxMessageSize = 4096
 )
 
 // Client 客户端连接
 type Client struct {
-	Conn     *websocket.Conn
-	Player   *player.Player
-	Room     *room.Room
-	Send     chan []byte
-	hub      *Hub
+	Conn   *websocket.Conn
+	Player *player.Player
+	Room   *room.Room
+	Send   chan []byte
+	hub    *Hub
+	mu     sync.Mutex
 }
 
 // Hub 连接中心
 type Hub struct {
 	clients    map[*Client]bool
+	clientMap  map[string]*Client // playerID -> Client
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
@@ -41,8 +43,9 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		clientMap:  make(map[string]*Client),
+		register:   make(chan *Client, 256),
+		unregister: make(chan *Client, 256),
 	}
 }
 
@@ -53,51 +56,84 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			h.clientMap[client.Player.ID] = client
 			h.mu.Unlock()
-			if client.Player != nil {
-				log.Printf("Client connected: %s", client.Player.ID)
-			}
+			log.Printf("Client connected: %s (total: %d)", client.Player.ID, len(h.clients))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
+				delete(h.clientMap, client.Player.ID)
 				close(client.Send)
 			}
 			h.mu.Unlock()
-			if client.Player != nil {
-				log.Printf("Client disconnected: %s", client.Player.ID)
+			log.Printf("Client disconnected: %s (total: %d)", client.Player.ID, len(h.clients))
+		}
+	}
+}
+
+// GetClient 获取客户端
+func (h *Hub) GetClient(playerID string) *Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.clientMap[playerID]
+}
+
+// Broadcast 广播消息给所有客户端
+func (h *Hub) Broadcast(msgType string, data interface{}) {
+	msg := NewMessage(msgType, data)
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for client := range h.clients {
+		select {
+		case client.Send <- msg.ToJSON():
+		default:
+			// 缓冲区满，跳过
+		}
+	}
+}
+
+// BroadcastToRoom 广播消息给房间内所有玩家
+func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
+	msg := NewMessage(msgType, data)
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for playerID := range r.Players {
+		if playerID == excludeID {
+			continue
+		}
+		if client, ok := h.clientMap[playerID]; ok {
+			select {
+			case client.Send <- msg.ToJSON():
+			default:
+				// 缓冲区满，跳过
 			}
 		}
 	}
 }
 
-// GetClientCount 获取客户端数量
-func (h *Hub) GetClientCount() int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.clients)
-}
-
-// Message 消息格式
+// Message 消息结构
 type Message struct {
 	Type      string          `json:"type"`
 	Data      json.RawMessage `json:"data"`
 	Timestamp int64           `json:"timestamp"`
-	Seq       int64           `json:"seq,omitempty"`
 }
 
 // NewMessage 创建消息
-func NewMessage(msgType string, data interface{}) Message {
-	return Message{
+func NewMessage(msgType string, data interface{}) *Message {
+	jsonData, _ := json.Marshal(data)
+	return &Message{
 		Type:      msgType,
-		Data:      mustMarshal(data),
+		Data:      jsonData,
 		Timestamp: time.Now().UnixMilli(),
 	}
 }
 
 // ToJSON 转换为 JSON
-func (m Message) ToJSON() []byte {
+func (m *Message) ToJSON() []byte {
 	data, _ := json.Marshal(m)
 	return data
 }
@@ -110,8 +146,8 @@ func mustMarshal(v interface{}) json.RawMessage {
 // ServeWS 处理 WebSocket 连接
 func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, w http.ResponseWriter, r *http.Request) {
 	var upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
 		CheckOrigin: func(r *http.Request) bool {
 			return true // 允许所有来源
 		},
@@ -152,10 +188,10 @@ func HandleConnection(conn *websocket.Conn, hub *Hub, roomManager *room.Manager)
 // readPump 读取消息
 func (c *Client) readPump(roomManager *room.Manager) {
 	defer func() {
-		c.hub.unregister <- c
 		if c.Room != nil {
-			c.Room.RemovePlayer(c.Player.ID)
+			c.handleLeaveRoom(roomManager)
 		}
+		c.hub.unregister <- c
 		c.Conn.Close()
 	}()
 
@@ -232,13 +268,15 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	case "leave_room":
 		c.handleLeaveRoom(roomManager)
 	case "move":
-		c.handleMove(msg.Data)
+		c.handleMove(msg.Data, roomManager)
 	case "shoot":
-		c.handleShoot(msg.Data)
+		c.handleShoot(msg.Data, roomManager)
 	case "reload":
 		c.handleReload()
 	case "chat":
-		c.handleChat(msg.Data)
+		c.handleChat(msg.Data, roomManager)
+	case "respawn":
+		c.handleRespawn(msg.Data, roomManager)
 	}
 }
 
@@ -271,21 +309,48 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	c.Room = r
 	roomManager.JoinRoom(c.Player.ID, r.ID)
 
+	// 发送房间信息给新玩家
 	c.Send <- NewMessage("room_joined", map[string]interface{}{
-		"room_id": r.ID,
-		"players": r.GetPlayerList(),
+		"room_id":       r.ID,
+		"player_id":     c.Player.ID,
+		"players":       r.GetPlayerList(),
+		"player_count":  r.GetPlayerCount(),
+		"max_size":      r.MaxSize,
 	}).ToJSON()
+
+	// 广播给房间内其他玩家
+	c.hub.BroadcastToRoom(r, "player_joined", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"name":      c.Player.Name,
+		"position":  c.Player.Position,
+	}, c.Player.ID)
 }
 
 func (c *Client) handleLeaveRoom(roomManager *room.Manager) {
-	if c.Room != nil {
-		c.Room.RemovePlayer(c.Player.ID)
-		roomManager.LeaveRoom(c.Player.ID)
-		c.Room = nil
+	if c.Room == nil {
+		return
 	}
+
+	r := c.Room
+
+	// 广播离开消息
+	c.hub.BroadcastToRoom(r, "player_left", map[string]string{
+		"player_id": c.Player.ID,
+	}, c.Player.ID)
+
+	// 移除玩家
+	r.RemovePlayer(c.Player.ID)
+	roomManager.LeaveRoom(c.Player.ID)
+
+	// 如果房间空了，移除房间
+	if r.GetPlayerCount() == 0 {
+		roomManager.RemoveRoom(r.ID)
+	}
+
+	c.Room = nil
 }
 
-func (c *Client) handleMove(data json.RawMessage) {
+func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil {
 		return
 	}
@@ -304,20 +369,37 @@ func (c *Client) handleMove(data json.RawMessage) {
 	c.Player.SetRotation(pos.Rotation)
 
 	// 广播给其他玩家
-	for _, p := range c.Room.Players {
-		if p.ID != c.Player.ID {
-			// TODO: 通过客户端连接发送
-		}
-	}
+	c.hub.BroadcastToRoom(c.Room, "player_moved", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position": map[string]float64{
+			"x": pos.X,
+			"y": pos.Y,
+			"z": pos.Z,
+		},
+		"rotation": pos.Rotation,
+	}, c.Player.ID)
 }
 
-func (c *Client) handleShoot(data json.RawMessage) {
+func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil || !c.Player.CanShoot() {
 		return
 	}
 
 	c.Player.Shoot()
+
+	var pos struct {
+		Position map[string]float64 `json:"position"`
+		Rotation float64            `json:"rotation"`
+	}
+	json.Unmarshal(data, &pos)
+
 	// 广播射击事件
+	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position":  pos.Position,
+		"rotation":  pos.Rotation,
+		"ammo":      c.Player.Ammo,
+	}, c.Player.ID)
 }
 
 func (c *Client) handleReload() {
@@ -328,7 +410,7 @@ func (c *Client) handleReload() {
 	}).ToJSON()
 }
 
-func (c *Client) handleChat(data json.RawMessage) {
+func (c *Client) handleChat(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil {
 		return
 	}
@@ -341,7 +423,36 @@ func (c *Client) handleChat(data json.RawMessage) {
 	}
 
 	// 广播聊天消息
-	for range c.Room.Players {
-		// TODO: 通过客户端连接发送
+	c.hub.BroadcastToRoom(c.Room, "chat", map[string]string{
+		"player_id": c.Player.ID,
+		"name":      c.Player.Name,
+		"message":   chat.Message,
+	}, "")
+}
+
+func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) {
+	var pos struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+		Z float64 `json:"z"`
 	}
+	json.Unmarshal(data, &pos)
+
+	c.Player.Respawn(pos.X, pos.Y, pos.Z)
+
+	c.Send <- NewMessage("respawn", map[string]interface{}{
+		"position": map[string]float64{
+			"x": pos.X,
+			"y": pos.Y,
+			"z": pos.Z,
+		},
+		"health": c.Player.Health,
+		"ammo":   c.Player.Ammo,
+	}).ToJSON()
+
+	// 广播重生
+	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position":  c.Player.Position,
+	}, c.Player.ID)
 }

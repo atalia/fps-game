@@ -276,7 +276,7 @@ func TestClient_HandleMove(t *testing.T) {
 		"rotation": 1.57,
 	})
 
-	client.handleMove(data)
+	client.handleMove(data, roomManager)
 
 	if client.Player.Position.X != 10.0 {
 		t.Errorf("Position X = %f, want 10.0", client.Player.Position.X)
@@ -288,6 +288,7 @@ func TestClient_HandleMove(t *testing.T) {
 
 func TestClient_HandleMove_NoRoom(t *testing.T) {
 	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
 	client := &Client{
 		Player: player.NewPlayer(),
 		Send:   make(chan []byte, 10),
@@ -301,7 +302,7 @@ func TestClient_HandleMove_NoRoom(t *testing.T) {
 		"z": 20.0,
 	})
 
-	client.handleMove(data)
+	client.handleMove(data, roomManager)
 
 	// 验证没有崩溃
 }
@@ -327,7 +328,7 @@ func TestClient_HandleShoot(t *testing.T) {
 	})
 
 	// 应该能射击
-	client.handleShoot(data)
+	client.handleShoot(data, roomManager)
 
 	// 弹药应该减少
 	if client.Player.Ammo >= 30 {
@@ -386,13 +387,14 @@ func TestClient_HandleChat(t *testing.T) {
 		"message": "Hello World",
 	})
 
-	client1.handleChat(data)
+	client1.handleChat(data, roomManager)
 
 	// 验证消息处理（实际广播由 network 层实现）
 }
 
 func TestClient_HandleChat_NoRoom(t *testing.T) {
 	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
 	client := &Client{
 		Player: player.NewPlayer(),
 		Send:   make(chan []byte, 10),
@@ -404,7 +406,7 @@ func TestClient_HandleChat_NoRoom(t *testing.T) {
 		"message": "Hello",
 	})
 
-	client.handleChat(data)
+	client.handleChat(data, roomManager)
 }
 
 func TestHandleConnection(t *testing.T) {
