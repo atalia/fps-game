@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPS Game - 多人对战</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            z-index: 100;
+        }
+        
+        .login-container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        .login-container h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #e94560, #0f3460);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .login-container p {
+            color: #888;
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #e94560, #0f3460);
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(233, 69, 96, 0.3);
+        }
+        
+        #game-screen {
+            display: none;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        #game-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* HUD */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .hud-top {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+        }
+        
+        .hud-item {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .hud-bottom {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+        }
+        
+        .health-bar {
+            width: 200px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .health-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            transition: width 0.3s;
+        }
+        
+        .ammo-display {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+        }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #fff;
+        }
+        
+        .crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        /* Scoreboard */
+        #scoreboard {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 20px;
+            display: none;
+            z-index: 20;
+        }
+        
+        #scoreboard.show {
+            display: block;
+        }
+        
+        #scoreboard h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        #scoreboard table {
+            width: 300px;
+            border-collapse: collapse;
+        }
+        
+        #scoreboard th,
+        #scoreboard td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        
+        /* Chat */
+        #chat {
+            position: absolute;
+            bottom: 80px;
+            left: 20px;
+            width: 300px;
+        }
+        
+        #chat-messages {
+            height: 150px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .chat-message {
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .chat-message .name {
+            color: #e94560;
+            font-weight: bold;
+        }
+        
+        #chat-input {
+            pointer-events: auto;
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+        }
+        
+        #chat-input:focus {
+            outline: none;
+        }
+        
+        /* Kill Feed */
+        #kill-feed {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            width: 250px;
+        }
+        
+        .kill-item {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* Connection Status */
+        #connection-status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            z-index: 100;
+        }
+        
+        .connected {
+            background: #10b981;
+        }
+        
+        .disconnected {
+            background: #ef4444;
+        }
+        
+        /* Instructions */
+        .instructions {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+            font-size: 0.8rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen">
+        <div class="login-container">
+            <h1>🎮 FPS GAME</h1>
+            <p>多人在线对战</p>
+            
+            <div class="input-group">
+                <input type="text" id="player-name" placeholder="输入你的名字" maxlength="20">
+            </div>
+            
+            <div class="input-group">
+                <input type="text" id="server-url" placeholder="服务器地址" value="ws://localhost:8080/ws">
+            </div>
+            
+            <button class="btn btn-primary" onclick="joinGame()">开始游戏</button>
+            
+            <div class="instructions">
+                <p>WASD - 移动 | 鼠标 - 视角</p>
+                <p>左键 - 射击 | R - 换弹</p>
+                <p>Tab - 记分板 | Enter - 聊天</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Game Screen -->
+    <div id="game-screen">
+        <div id="game-container"></div>
+        
+        <!-- HUD -->
+        <div id="hud">
+            <div id="connection-status" class="disconnected">已断开</div>
+            
+            <div class="hud-top">
+                <div class="hud-item">
+                    <div>房间: <span id="room-id">-</span></div>
+                    <div>玩家: <span id="player-count">0</span></div>
+                </div>
+            </div>
+            
+            <div class="crosshair"></div>
+            
+            <div class="hud-bottom">
+                <div class="health-bar">
+                    <div class="health-fill" id="health-fill"></div>
+                </div>
+                <div class="hud-item ammo-display">
+                    <span id="ammo">30</span> / <span id="ammo-reserve">90</span>
+                </div>
+                <div class="hud-item">
+                    <div>得分: <span id="score">0</span></div>
+                    <div>击杀: <span id="kills">0</span></div>
+                </div>
+            </div>
+            
+            <div id="kill-feed"></div>
+            
+            <div id="chat">
+                <div id="chat-messages"></div>
+                <input type="text" id="chat-input" placeholder="按 Enter 发送消息..." maxlength="100">
+            </div>
+        </div>
+        
+        <!-- Scoreboard -->
+        <div id="scoreboard">
+            <h2>记分板</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>玩家</th>
+                        <th>击杀</th>
+                        <th>死亡</th>
+                        <th>得分</th>
+                    </tr>
+                </thead>
+                <tbody id="scoreboard-body"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script src="js/network.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
