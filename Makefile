@@ -1,62 +1,56 @@
-.PHONY: all build run stop clean docker-up docker-down docker-logs test
+.PHONY: all build run test cover lint fmt clean
 
 # 默认目标
 all: build
 
-# 本地构建
+# 构建
 build:
 	cd server && go build -o bin/fps-server ./cmd/server
 
-# 本地运行
+# 运行
 run:
 	cd server && go run ./cmd/server
 
-# 运行测试
+# 测试
 test:
 	cd server && go test -v ./...
 
-# Docker 构建
-docker-build:
-	docker-compose build
+# 测试覆盖率
+cover:
+	cd server && go test ./... -coverprofile=coverage.out
+	cd server && go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: server/coverage.html"
 
-# 启动所有服务 (开发模式)
-docker-up:
-	docker-compose up -d
+# Lint 检查
+lint:
+	cd server && golangci-lint run
 
-# 启动所有服务 (生产模式)
-docker-up-prod:
-	docker-compose --profile production up -d
-
-# 启动所有服务 (带监控)
-docker-up-monitoring:
-	docker-compose --profile monitoring up -d
-
-# 停止所有服务
-docker-down:
-	docker-compose down
-
-# 查看日志
-docker-logs:
-	docker-compose logs -f
+# 格式化
+fmt:
+	cd server && gofmt -w .
+	cd server && goimports -w .
 
 # 清理
 clean:
 	rm -rf server/bin
-	docker-compose down -v
+	rm -f server/coverage.out server/coverage.html
 
-# 开发环境一键启动
+# Docker
+docker-build:
+	docker-compose build
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+docker-logs:
+	docker-compose logs -f
+
+# 开发
 dev: docker-up docker-logs
 
-# 生产环境一键启动
-prod: docker-up-prod docker-logs
-
-# 重启服务
-restart: docker-down docker-up
-
-# 检查状态
-status:
-	docker-compose ps
-
-# 进入容器
-shell:
-	docker-compose exec game-server sh
+# CI
+ci: fmt test lint
+	@echo "CI checks passed"
