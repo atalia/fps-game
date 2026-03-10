@@ -37,16 +37,28 @@ fps-game/
 │   ├── cmd/server/           # 入口
 │   ├── internal/
 │   │   ├── config/           # 配置管理
-│   │   ├── game/             # 游戏引擎
+│   │   ├── game/             # 游戏引擎 + 命中检测 + 排行榜
 │   │   ├── room/             # 房间管理
 │   │   ├── player/           # 玩家管理
 │   │   ├── weapon/           # 武器系统
+│   │   ├── match/            # 匹配系统
+│   │   ├── storage/          # 存储层
 │   │   └── network/          # WebSocket 服务
+│   ├── pkg/utils/            # 工具函数
 │   ├── configs/              # 配置文件
 │   └── go.mod
 ├── client/                   # 前端
 │   ├── index.html            # 游戏页面
-│   └── js/                   # Three.js 模块
+│   ├── js/                   # Three.js 模块
+│   │   ├── main.js           # 主逻辑
+│   │   ├── game.js           # 游戏逻辑
+│   │   ├── player.js         # 玩家控制
+│   │   ├── renderer.js       # 3D 渲染
+│   │   ├── network.js        # WebSocket
+│   │   ├── audio.js          # 音效
+│   │   ├── effects.js        # 视觉特效
+│   │   └── ui.js             # UI 管理
+│   └── tests/                # 前端测试
 ├── docker/
 │   ├── nginx/                # Nginx 配置
 │   ├── prometheus/           # Prometheus 配置
@@ -67,6 +79,7 @@ fps-game/
 | 鼠标移动 | 视角控制 |
 | 左键 | 射击 |
 | R | 换弹 |
+| 1-4 | 切换武器 |
 | Tab | 记分板 |
 | Enter | 聊天 |
 
@@ -76,14 +89,51 @@ fps-game/
 make build          # 本地构建
 make run            # 本地运行
 make test           # 运行测试
+make cover          # 测试覆盖率
+make lint           # Lint 检查
 make docker-up      # 启动服务
 make docker-down    # 停止服务
 make docker-logs    # 查看日志
-make status         # 查看状态
-make clean          # 清理
+make ci             # 完整 CI 检查
 ```
 
-## 📊 架构
+## 📊 测试覆盖率
+
+| 模块 | 覆盖率 | 状态 |
+|------|--------|------|
+| game | 87.8% | ✅ |
+| room | 83.3% | ✅ |
+| storage | 75.3% | ✅ |
+| weapon | 92.9% | ✅ |
+| player | 87.8% | ✅ |
+| match | 92.6% | ✅ |
+| network | 33.9% | ⬜ |
+| utils | 57.1% | ⬜ |
+
+## 🎯 游戏功能
+
+### 已完成 ✅
+
+- WebSocket 实时通信
+- 房间系统
+- 玩家移动/跳跃
+- 第一人称视角
+- 射击系统 + 命中检测
+- 武器系统（手枪/步枪/霰弹枪/狙击枪）
+- 聊天功能
+- 记分板
+- 排行榜
+- 匹配系统
+- 音效系统
+- 视觉特效
+- 小地图
+- Docker Compose
+
+### 进行中 🚧
+
+- 网络层测试完善
+
+## 📝 架构
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -91,20 +141,9 @@ make clean          # 清理
 
 - **后端**: Go 1.22, gorilla/websocket
 - **前端**: Three.js, WebSocket
-- **存储**: Redis
+- **存储**: Redis (可选)
 - **监控**: Prometheus, Grafana
 - **代理**: Nginx
-
-## 📝 开发状态
-
-### v1.0 (进行中)
-- [x] WebSocket 连接
-- [x] 房间系统
-- [x] 玩家移动
-- [x] 射击系统
-- [x] Docker Compose
-- [ ] 命中检测
-- [ ] 音效/特效
 
 ## 📄 License
 
