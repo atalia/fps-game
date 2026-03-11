@@ -285,4 +285,5 @@ class ScreenEffects {
 }
 
 window.EffectsManager = EffectsManager
-window.screenEffects = new ScreenEffects()
+// 不要自动创建实例，由 main.js 控制
+// window.screenEffects = new ScreenEffects()

@@ -424,6 +424,14 @@
 
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 确保 Three.js 加载
+        if (typeof THREE === 'undefined') {
+            document.getElementById('loading').innerHTML = '<h1>❌ Three.js 加载失败</h1><p>请检查网络连接</p>';
+            throw new Error('Three.js not loaded');
+        }
+        console.log('✅ Three.js loaded:', THREE.REVISION);
+    </script>
 
     <!-- 游戏模块 -->
     <script src="/js/renderer.js"></script>

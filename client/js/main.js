@@ -3,21 +3,34 @@ let gameStarted = false;
 
 async function init() {
     const loading = document.getElementById('loading');
+    const loadingText = loading.querySelector('p');
 
     try {
+        console.log('🚀 Starting game initialization...');
+        
+        // 更新加载状态
+        loadingText.textContent = '初始化音效系统...';
+        
         // 初始化音效
         window.audioManager = new AudioManager();
         await window.audioManager.init();
+        console.log('✅ Audio initialized');
 
         // 初始化 UI
+        loadingText.textContent = '初始化界面...';
         window.uiManager = new UIManager();
         window.screenEffects = new ScreenEffects();
+        console.log('✅ UI initialized');
 
         // 初始化渲染器
+        loadingText.textContent = '初始化渲染器...';
         window.renderer = new Renderer('game-container');
+        console.log('✅ Renderer initialized');
 
         // 初始化网络
+        loadingText.textContent = '连接服务器...';
         const wsUrl = `ws://${window.location.host}/ws`;
+        console.log('🔌 Connecting to:', wsUrl);
         window.network = new Network(wsUrl);
 
         // 设置网络事件处理
@@ -25,12 +38,19 @@ async function init() {
 
         // 等待连接
         await new Promise((resolve, reject) => {
-            window.network.onConnect = resolve;
-            window.network.onError = reject;
-            setTimeout(() => reject(new Error('连接超时')), 10000);
+            window.network.onConnect = () => {
+                console.log('✅ WebSocket connected');
+                resolve();
+            };
+            window.network.onError = (err) => {
+                console.error('❌ WebSocket error:', err);
+                reject(new Error('WebSocket 连接失败'));
+            };
+            setTimeout(() => reject(new Error('连接超时 (10秒)')), 10000);
         });
 
         // 初始化大厅
+        loadingText.textContent = '加载大厅...';
         window.lobby = new Lobby();
 
         // 隐藏加载画面
@@ -41,11 +61,22 @@ async function init() {
     } catch (error) {
         console.error('初始化失败:', error);
         loading.innerHTML = `
-            <h1>❌ 连接失败</h1>
-            <p>${error.message}</p>
+            <h1>❌ 初始化失败</h1>
+            <p style="color: #ff6b6b;">${error.message}</p>
+            <p style="color: #888; margin-top: 10px; font-size: 14px;">
+                请检查控制台 (F12) 获取详细信息
+            </p>
             <p style="margin-top: 20px">
-                <button onclick="location.reload()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-                    重试
+                <button onclick="location.reload()" style="
+                    padding: 12px 24px; 
+                    font-size: 16px; 
+                    cursor: pointer;
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                ">
+                    🔄 重试
                 </button>
             </p>
         `;

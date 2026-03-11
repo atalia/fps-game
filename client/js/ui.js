@@ -8,11 +8,10 @@ class UIManager {
   initElements() {
     this.elements = {
       healthFill: document.getElementById('health-fill'),
-      ammo: document.getElementById('ammo'),
+      healthText: document.getElementById('health-text'),
+      ammo: document.getElementById('ammo-count'),
       ammoReserve: document.getElementById('ammo-reserve'),
-      score: document.getElementById('score'),
-      kills: document.getElementById('kills'),
-      deaths: document.getElementById('deaths'),
+      currentWeapon: document.getElementById('current-weapon'),
       roomId: document.getElementById('room-id'),
       playerCount: document.getElementById('player-count'),
       connectionStatus: document.getElementById('connection-status'),
@@ -20,14 +19,15 @@ class UIManager {
       chatInput: document.getElementById('chat-input'),
       killFeed: document.getElementById('kill-feed'),
       scoreboard: document.getElementById('scoreboard'),
-      scoreboardBody: document.getElementById('scoreboard-body')
+      scoreboardBody: document.getElementById('scoreboard-rows')
     }
   }
 
   // 更新血量
   updateHealth(health, maxHealth = 100) {
+    const percentage = Math.max(0, Math.min(100, (health / maxHealth) * 100))
+    
     if (this.elements.healthFill) {
-      const percentage = Math.max(0, Math.min(100, (health / maxHealth) * 100))
       this.elements.healthFill.style.width = `${percentage}%`
       
       // 血量低于30%变红
@@ -36,6 +36,10 @@ class UIManager {
       } else {
         this.elements.healthFill.style.background = 'linear-gradient(90deg, #e94560, #ff6b6b)'
       }
+    }
+    
+    if (this.elements.healthText) {
+      this.elements.healthText.textContent = `${Math.round(health)} HP`
     }
   }
 
@@ -49,21 +53,21 @@ class UIManager {
     }
   }
 
-  // 更新得分
-  updateScore(score) {
-    if (this.elements.score) {
-      this.elements.score.textContent = score
+  // 更新当前武器
+  updateWeapon(weaponName) {
+    if (this.elements.currentWeapon) {
+      this.elements.currentWeapon.textContent = weaponName
     }
+  }
+
+  // 更新得分 (显示在房间信息中)
+  updateScore(score) {
+    console.log('Score:', score)
   }
 
   // 更新击杀/死亡
   updateKD(kills, deaths) {
-    if (this.elements.kills) {
-      this.elements.kills.textContent = kills
-    }
-    if (this.elements.deaths) {
-      this.elements.deaths.textContent = deaths
-    }
+    console.log('K/D:', kills, '/', deaths)
   }
 
   // 更新房间信息
@@ -259,4 +263,5 @@ class UIManager {
   }
 }
 
-window.uiManager = new UIManager()
+// 不要自动创建实例，由 main.js 控制
+// window.uiManager = new UIManager()
