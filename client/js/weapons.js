@@ -436,8 +436,7 @@ class WeaponShop {
                 const weaponId = card.dataset.id;
                 const weapon = this.weaponSystem.getWeapon(weaponId);
                 if (weapon) {
-                    console.log('Select weapon:', weapon.name);
-                    // TODO: 武器选择逻辑
+                    this.selectWeapon(weapon);
                 }
             });
         });
@@ -445,6 +444,50 @@ class WeaponShop {
         this.element.querySelector('#closeShop').addEventListener('click', () => {
             this.hide();
         });
+    }
+
+    selectWeapon(weapon) {
+        // 检查等级限制
+        if (weapon.unlockLevel && this.playerLevel < weapon.unlockLevel) {
+            this.showMessage(`需要等级 ${weapon.unlockLevel} 解锁`, 'error');
+            return;
+        }
+
+        // 检查金币（如果有价格）
+        if (weapon.price && this.playerCoins < weapon.price) {
+            this.showMessage('金币不足', 'error');
+            return;
+        }
+
+        // 通知游戏切换武器
+        if (window.game) {
+            window.game.switchWeaponById(weapon.id);
+        }
+
+        // 更新 UI
+        this.showMessage(`已装备: ${weapon.name}`, 'success');
+        this.hide();
+    }
+
+    showMessage(text, type = 'info') {
+        const msg = document.createElement('div');
+        msg.style.cssText = `
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#2196F3'};
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 10000;
+            animation: fadeInOut 2s forwards;
+        `;
+        msg.textContent = text;
+        document.body.appendChild(msg);
+
+        setTimeout(() => msg.remove(), 2000);
     }
 
     hide() {

@@ -82,6 +82,27 @@ class Network {
         this.ws.send(message);
     }
 
+    // 设置语音处理器
+    setupVoiceHandlers(voiceSystem) {
+        this.on('voice_start', (data) => {
+            if (voiceSystem && window.speakingIndicator) {
+                window.speakingIndicator.setSpeaking(data.playerId, true);
+            }
+        });
+
+        this.on('voice_stop', (data) => {
+            if (voiceSystem && window.speakingIndicator) {
+                window.speakingIndicator.setSpeaking(data.playerId, false);
+            }
+        });
+
+        this.on('voice_data', (data) => {
+            if (voiceSystem) {
+                voiceSystem.receiveAudio(data.playerId, data.audio);
+            }
+        });
+    }
+
     close() {
         if (this.ws) {
             this.ws.close();

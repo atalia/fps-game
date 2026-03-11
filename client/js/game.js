@@ -133,6 +133,39 @@ class Game {
     window.uiManager.updateAmmo(config.ammo, config.reserve)
   }
 
+  // 通过武器 ID 切换武器（支持扩展武器系统）
+  switchWeaponById(weaponId) {
+    // 尝试从 WeaponSystem 获取武器配置
+    if (window.weaponSystem) {
+      const weapon = window.weaponSystem.getWeapon(weaponId)
+      if (weapon) {
+        this.player.weapon = weapon.id
+        this.player.weaponConfig = weapon
+        document.getElementById('current-weapon').textContent = weapon.name
+        
+        // 更新弹药显示
+        this.player.ammo = weapon.magSize
+        this.player.ammoReserve = weapon.magSize * 4
+        window.uiManager.updateAmmo(weapon.magSize, weapon.magSize * 4)
+        
+        // 通知服务器
+        if (window.network.connected) {
+          window.network.send('weapon_change', { weapon: weaponId })
+        }
+        
+        // 播放音效
+        if (window.audioManager) {
+          window.audioManager.play('weapon_switch')
+        }
+        
+        return true
+      }
+    }
+    
+    // 回退到基础武器
+    return this.switchWeapon(weaponId)
+  }
+
   setupMinimap() {
     this.minimapCanvas = document.getElementById('minimap-canvas')
     if (this.minimapCanvas) {

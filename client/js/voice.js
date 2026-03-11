@@ -71,12 +71,117 @@ class VoiceSystem {
     startTransmission() {
         if (!this.enabled || this.muted || this.deafened) return;
         this.transmissionEnabled = true;
-        // TODO: 实际音频传输逻辑
+        
+        // 通过 WebSocket 通知服务器开始语音
+        if (window.network && window.network.connected) {
+            window.network.send('voice_start', {
+                playerId: window.network.playerId
+            });
+        }
+        
+        // 开始音频采集和传输
+        this.startAudioCapture();
     }
 
     // 停止传输
     stopTransmission() {
         this.transmissionEnabled = false;
+        
+        // 通过 WebSocket 通知服务器停止语音
+        if (window.network && window.network.connected) {
+            window.network.send('voice_stop', {
+                playerId: window.network.playerId
+            });
+        }
+        
+        this.stopAudioCapture();
+    }
+
+    // 开始音频采集
+    startAudioCapture() {
+        if (!this.inputStream || !this.audioContext) return;
+        
+        // 创建音频处理器
+        if (!this.scriptProcessor) {
+            this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+            
+            const source = this.audioContext.createMediaStreamSource(this.inputStream);
+            source.connect(this.scriptProcessor);
+            this.scriptProcessor.connect(this.audioContext.destination);
+            
+            this.scriptProcessor.onaudioprocess = (e) => {
+                if (!this.transmissionEnabled) return;
+                
+                const inputData = e.inputBuffer.getChannelData(0);
+                
+                // 降低采样率以减少带宽 (48000 -> 16000)
+                const downsampled = this.downsample(inputData, 48000, 16000);
+                
+                // 转换为 Base64 发送
+                const encoded = this.encodeAudio(downsampled);
+                
+                // 通过 WebSocket 发送
+                if (window.network && window.network.connected) {
+                    window.network.send('voice_data', {
+                        playerId: window.network.playerId,
+                        audio: encoded
+                    });
+                }
+            };
+        }
+    }
+
+    // 停止音频采集
+    stopAudioCapture() {
+        if (this.scriptProcessor) {
+            this.scriptProcessor.disconnect();
+        }
+    }
+
+    // 降采样
+    downsample(buffer, fromRate, toRate) {
+        const ratio = fromRate / toRate;
+        const newLength = Math.floor(buffer.length / ratio);
+        const result = new Float32Array(newLength);
+        
+        for (let i = 0; i < newLength; i++) {
+            result[i] = buffer[Math.floor(i * ratio)];
+        }
+        
+        return result;
+    }
+
+    // 编码音频为 Base64
+    encodeAudio(float32Array) {
+        const buffer = new ArrayBuffer(float32Array.length * 2);
+        const view = new DataView(buffer);
+        
+        for (let i = 0; i < float32Array.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32Array[i]));
+            view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+        
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    }
+
+    // 解码 Base64 音频
+    decodeAudio(base64) {
+        const binary = atob(base64);
+        const buffer = new ArrayBuffer(binary.length);
+        const view = new Uint8Array(buffer);
+        
+        for (let i = 0; i < binary.length; i++) {
+            view[i] = binary.charCodeAt(i);
+        }
+        
+        const int16Array = new Int16Array(buffer);
+        const float32Array = new Float32Array(int16Array.length);
+        
+        for (let i = 0; i < int16Array.length; i++) {
+            float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7FFF);
+        }
+        
+        return float32Array;
     }
 
     // 切换静音
@@ -121,7 +226,43 @@ class VoiceSystem {
     // 接收远端音频
     receiveAudio(peerId, audioData) {
         if (this.deafened) return;
-        // TODO: 播放远端音频
+        
+        // 获取或创建该玩家的音频源
+        let peerAudio = this.peers.get(peerId);
+        if (!peerAudio) {
+            this.addPeer(peerId);
+            peerAudio = this.peers.get(peerId);
+        }
+        
+        // 解码音频
+        const float32Data = this.decodeAudio(audioData);
+        
+        // 播放音频
+        this.playAudio(float32Data, peerAudio.volume);
+    }
+
+    // 播放音频
+    playAudio(float32Data, volume = 1.0) {
+        if (!this.audioContext) return;
+        
+        // 创建音频缓冲区
+        const audioBuffer = this.audioContext.createBuffer(1, float32Data.length, 16000);
+        audioBuffer.getChannelData(0).set(float32Data);
+        
+        // 创建音频源
+        const source = this.audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        
+        // 创建增益节点控制音量
+        const gainNode = this.audioContext.createGain();
+        gainNode.gain.value = volume * this.outputVolume;
+        
+        // 连接节点
+        source.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+        
+        // 播放
+        source.start();
     }
 
     // 添加玩家语音
