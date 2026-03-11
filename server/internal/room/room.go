@@ -11,13 +11,19 @@ import (
 
 // Room 游戏房间
 type Room struct {
-	ID        string
-	Name      string
-	MaxSize   int
-	Players   map[string]*player.Player
-	CreatedAt time.Time
-	StartedAt time.Time
-	mu        sync.RWMutex
+	ID           string
+	Name         string
+	MaxSize      int
+	Players      map[string]*player.Player
+	CreatedAt    time.Time
+	StartedAt    time.Time
+	// C4 爆破模式
+	C4Planted    bool
+	C4Planter    string
+	C4Position   player.Position
+	C4PlantedAt  time.Time
+	GameMode     string
+	mu           sync.RWMutex
 }
 
 // NewRoom 创建房间
@@ -262,4 +268,67 @@ func generateID() string {
 	b := make([]byte, 4)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// SetC4Planted 设置 C4 放置状态
+func (r *Room) SetC4Planted(planted bool, planter string, pos player.Position) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.C4Planted = planted
+	r.C4Planter = planter
+	r.C4Position = pos
+	r.C4PlantedAt = time.Now()
+}
+
+// IsC4Planted C4 是否已放置
+func (r *Room) IsC4Planted() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.C4Planted
+}
+
+// GetC4Position 获取 C4 位置
+func (r *Room) GetC4Position() player.Position {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.C4Position
+}
+
+// GetC4Planter 获取放置 C4 的玩家
+func (r *Room) GetC4Planter() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.C4Planter
+}
+
+// GetC4TimeRemaining 获取 C4 剩余时间（秒）
+func (r *Room) GetC4TimeRemaining() float64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.C4Planted {
+		return 0
+	}
+
+	// C4 40 秒爆炸
+	elapsed := time.Since(r.C4PlantedAt).Seconds()
+	remaining := 40.0 - elapsed
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+// SetGameMode 设置游戏模式
+func (r *Room) SetGameMode(mode string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.GameMode = mode
+}
+
+// GetGameMode 获取游戏模式
+func (r *Room) GetGameMode() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.GameMode
 }

@@ -139,10 +139,9 @@ func TestClient_handleMove_NoRoom(t *testing.T) {
 	}
 
 	data := mustMarshal(map[string]float64{
-		"x": 10.0,
-		"y": 5.0,
-		"" +
-			"z": 20.0,
+		"x":        10.0,
+		"y":        5.0,
+		"z":        20.0,
 		"rotation": 1.57,
 	})
 
@@ -357,5 +356,263 @@ func TestMessage_JSON(t *testing.T) {
 
 	if parsed.Type != "test" {
 		t.Errorf("Type = %s, want test", parsed.Type)
+	}
+}
+
+func TestClient_handleWeaponChange(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]string{
+		"weapon": "sniper",
+	})
+
+	client.handleWeaponChange(data)
+
+	if client.Player.Weapon != "sniper" {
+		t.Errorf("Weapon = %s, want sniper", client.Player.Weapon)
+	}
+}
+
+func TestClient_handleTeamJoin(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]string{
+		"team": "red",
+	})
+
+	client.handleTeamJoin(data, roomManager)
+
+	if client.Player.Team != "red" {
+		t.Errorf("Team = %s, want red", client.Player.Team)
+	}
+}
+
+func TestClient_handleVoiceStart(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 没有房间时不应 panic
+	client.handleVoiceStart()
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	client.handleVoiceStart()
+}
+
+func TestClient_handleVoiceStop(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 没有房间时不应 panic
+	client.handleVoiceStop()
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	client.handleVoiceStop()
+}
+
+func TestClient_handleGrenadeThrow(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]interface{}{
+		"type": "frag",
+		"position": map[string]float64{
+			"x": 10.0,
+			"y": 5.0,
+			"z": 20.0,
+		},
+		"velocity": map[string]float64{
+			"x": 1.0,
+			"y": 2.0,
+			"z": 3.0,
+		},
+	})
+
+	client.handleGrenadeThrow(data, roomManager)
+}
+
+func TestClient_handleEmote(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]string{
+		"emote_id": "wave",
+	})
+
+	client.handleEmote(data, roomManager)
+}
+
+func TestClient_handlePing(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]interface{}{
+		"type":    "enemy",
+		"message": "Enemy spotted!",
+		"x":       100.0,
+		"y":       0.0,
+		"z":       50.0,
+	})
+
+	client.handlePing(data, roomManager)
+}
+
+func TestClient_handleSkillUse(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]interface{}{
+		"skill_id":  "heal",
+		"target_id": "",
+		"x":         10.0,
+		"y":         5.0,
+		"z":         20.0,
+	})
+
+	client.handleSkillUse(data, roomManager)
+
+	// 再次使用应该失败（冷却中）
+	client.handleSkillUse(data, roomManager)
+}
+
+func TestClient_handleC4Plant(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	data := mustMarshal(map[string]interface{}{
+		"position": map[string]float64{
+			"x": 10.0,
+			"y": 5.0,
+			"z": 20.0,
+		},
+	})
+
+	client.handleC4Plant(data, roomManager)
+
+	if !r.IsC4Planted() {
+		t.Error("C4 should be planted")
+	}
+}
+
+func TestClient_handleC4Defuse(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 10)
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+	}
+
+	// 创建房间
+	r := roomManager.CreateRoom()
+	r.AddPlayer(client.Player)
+	client.Room = r
+
+	// 先放置 C4
+	r.SetC4Planted(true, client.Player.ID, player.Position{X: 10, Y: 5, Z: 20})
+
+	client.handleC4Defuse(roomManager)
+
+	if r.IsC4Planted() {
+		t.Error("C4 should be defused")
 	}
 }

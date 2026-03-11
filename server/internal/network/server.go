@@ -277,6 +277,36 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 		c.handleChat(msg.Data, roomManager)
 	case "respawn":
 		c.handleRespawn(msg.Data, roomManager)
+	// 武器系统
+	case "weapon_change":
+		c.handleWeaponChange(msg.Data)
+	// 语音系统
+	case "voice_start":
+		c.handleVoiceStart()
+	case "voice_stop":
+		c.handleVoiceStop()
+	case "voice_data":
+		c.handleVoiceData(msg.Data)
+	// 队伍系统
+	case "team_join":
+		c.handleTeamJoin(msg.Data, roomManager)
+	// 投掷物
+	case "grenade_throw":
+		c.handleGrenadeThrow(msg.Data, roomManager)
+	// C4 爆破模式
+	case "c4_plant":
+		c.handleC4Plant(msg.Data, roomManager)
+	case "c4_defuse":
+		c.handleC4Defuse(roomManager)
+	// 技能系统
+	case "skill_use":
+		c.handleSkillUse(msg.Data, roomManager)
+	// 表情系统
+	case "emote":
+		c.handleEmote(msg.Data, roomManager)
+	// 标记系统
+	case "ping":
+		c.handlePing(msg.Data, roomManager)
 	}
 }
 
@@ -455,4 +485,257 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		"player_id": c.Player.ID,
 		"position":  c.Player.Position,
 	}, c.Player.ID)
+}
+
+// handleWeaponChange 处理武器切换
+func (c *Client) handleWeaponChange(data json.RawMessage) {
+	var req struct {
+		Weapon string `json:"weapon"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	c.Player.SetWeapon(req.Weapon)
+
+	// 广播武器切换
+	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"weapon":    req.Weapon,
+	}, "")
+}
+
+// handleVoiceStart 处理语音开始
+func (c *Client) handleVoiceStart() {
+	if c.Room == nil {
+		return
+	}
+
+	c.hub.BroadcastToRoom(c.Room, "voice_start", map[string]string{
+		"player_id": c.Player.ID,
+	}, c.Player.ID)
+}
+
+// handleVoiceStop 处理语音停止
+func (c *Client) handleVoiceStop() {
+	if c.Room == nil {
+		return
+	}
+
+	c.hub.BroadcastToRoom(c.Room, "voice_stop", map[string]string{
+		"player_id": c.Player.ID,
+	}, c.Player.ID)
+}
+
+// handleVoiceData 处理语音数据
+func (c *Client) handleVoiceData(data json.RawMessage) {
+	if c.Room == nil {
+		return
+	}
+
+	// 直接转发语音数据给房间内其他玩家
+	c.hub.BroadcastToRoom(c.Room, "voice_data", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"audio":     data,
+	}, c.Player.ID)
+}
+
+// handleTeamJoin 处理队伍加入
+func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Team string `json:"team"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	c.Player.SetTeam(req.Team)
+
+	c.hub.BroadcastToRoom(c.Room, "team_changed", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"team":      req.Team,
+	}, "")
+}
+
+// handleGrenadeThrow 处理投掷物
+func (c *Client) handleGrenadeThrow(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Type string `json:"type"`
+		Pos  struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+		Vel struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"velocity"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 广播投掷物
+	c.hub.BroadcastToRoom(c.Room, "grenade_thrown", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"type":      req.Type,
+		"position": map[string]float64{
+			"x": req.Pos.X,
+			"y": req.Pos.Y,
+			"z": req.Pos.Z,
+		},
+		"velocity": map[string]float64{
+			"x": req.Vel.X,
+			"y": req.Vel.Y,
+			"z": req.Vel.Z,
+		},
+	}, "")
+}
+
+// handleC4Plant 处理 C4 放置
+func (c *Client) handleC4Plant(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Position struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 转换为 player.Position
+	pos := player.Position{
+		X: req.Position.X,
+		Y: req.Position.Y,
+		Z: req.Position.Z,
+	}
+
+	// 设置房间 C4 状态
+	c.Room.SetC4Planted(true, c.Player.ID, pos)
+
+	c.hub.BroadcastToRoom(c.Room, "c4_planted", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position":  pos,
+		"team":      c.Player.Team,
+	}, "")
+}
+
+// handleC4Defuse 处理 C4 拆除
+func (c *Client) handleC4Defuse(roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	if !c.Room.IsC4Planted() {
+		return
+	}
+
+	c.Room.SetC4Planted(false, "", player.Position{})
+
+	c.hub.BroadcastToRoom(c.Room, "c4_defused", map[string]string{
+		"player_id": c.Player.ID,
+		"team":      c.Player.Team,
+	}, "")
+}
+
+// handleSkillUse 处理技能使用
+func (c *Client) handleSkillUse(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		SkillID  string `json:"skill_id"`
+		TargetID string `json:"target_id"`
+		X        float64 `json:"x"`
+		Y        float64 `json:"y"`
+		Z        float64 `json:"z"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 检查技能冷却
+	if !c.Player.CanUseSkill(req.SkillID) {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Skill on cooldown",
+		}).ToJSON()
+		return
+	}
+
+	c.Player.UseSkill(req.SkillID)
+
+	c.hub.BroadcastToRoom(c.Room, "skill_used", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"skill_id":  req.SkillID,
+		"position": map[string]float64{
+			"x": req.X,
+			"y": req.Y,
+			"z": req.Z,
+		},
+		"target_id": req.TargetID,
+	}, "")
+}
+
+// handleEmote 处理表情
+func (c *Client) handleEmote(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		EmoteID string `json:"emote_id"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	c.hub.BroadcastToRoom(c.Room, "emote", map[string]string{
+		"player_id": c.Player.ID,
+		"emote_id":  req.EmoteID,
+	}, "")
+}
+
+// handlePing 处理标记
+func (c *Client) handlePing(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+		X       float64 `json:"x"`
+		Y       float64 `json:"y"`
+		Z       float64 `json:"z"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	c.hub.BroadcastToRoom(c.Room, "ping", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"type":      req.Type,
+		"position": map[string]float64{
+			"x": req.X,
+			"y": req.Y,
+			"z": req.Z,
+		},
+		"message": req.Message,
+	}, "")
 }

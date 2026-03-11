@@ -16,23 +16,24 @@ type Position struct {
 
 // Player 玩家
 type Player struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Position    Position  `json:"position"`
-	Rotation    float64   `json:"rotation"` // Y 轴旋转
-	Velocity    Position  `json:"-"`
-	Health      int       `json:"health"`
-	MaxHealth   int       `json:"max_health"`
-	Score       int       `json:"score"`
-	Kills       int       `json:"kills"`
-	Deaths      int       `json:"deaths"`
-	Team        string    `json:"team"`
-	Weapon      string    `json:"weapon"`
-	Ammo        int       `json:"ammo"`
-	AmmoReserve int       `json:"ammo_reserve"`
-	LastShot    time.Time `json:"-"`
-	Connected   bool      `json:"-"`
-	mu          sync.RWMutex
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Position     Position          `json:"position"`
+	Rotation     float64           `json:"rotation"` // Y 轴旋转
+	Velocity     Position          `json:"-"`
+	Health       int               `json:"health"`
+	MaxHealth    int               `json:"max_health"`
+	Score        int               `json:"score"`
+	Kills        int               `json:"kills"`
+	Deaths       int               `json:"deaths"`
+	Team         string            `json:"team"`
+	Weapon       string            `json:"weapon"`
+	Ammo         int               `json:"ammo"`
+	AmmoReserve  int               `json:"ammo_reserve"`
+	LastShot     time.Time         `json:"-"`
+	SkillCooldowns map[string]time.Time `json:"-"`
+	Connected    bool              `json:"-"`
+	mu           sync.RWMutex
 }
 
 // Config 玩家配置
@@ -63,16 +64,17 @@ func NewPlayer() *Player {
 // NewPlayerWithConfig 使用配置创建玩家
 func NewPlayerWithConfig(cfg Config) *Player {
 	return &Player{
-		ID:          generateID(),
-		Health:      cfg.DefaultHealth,
-		MaxHealth:   cfg.DefaultHealth,
-		Score:       0,
-		Kills:       0,
-		Deaths:      0,
-		Weapon:      "rifle",
-		Ammo:        cfg.DefaultAmmo,
-		AmmoReserve: cfg.DefaultAmmoReserve,
-		Connected:   true,
+		ID:            generateID(),
+		Health:        cfg.DefaultHealth,
+		MaxHealth:     cfg.DefaultHealth,
+		Score:         0,
+		Kills:         0,
+		Deaths:        0,
+		Weapon:        "rifle",
+		Ammo:          cfg.DefaultAmmo,
+		AmmoReserve:   cfg.DefaultAmmoReserve,
+		SkillCooldowns: make(map[string]time.Time),
+		Connected:     true,
 	}
 }
 
@@ -250,4 +252,77 @@ func generateID() string {
 	b := make([]byte, 4)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// SetWeapon 设置武器
+func (p *Player) SetWeapon(weapon string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Weapon = weapon
+}
+
+// SetTeam 设置队伍
+func (p *Player) SetTeam(team string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Team = team
+}
+
+// SkillConfig 技能配置
+var SkillCooldowns = map[string]time.Duration{
+	"heal":      30 * time.Second,
+	"speed":     20 * time.Second,
+	"shield":    45 * time.Second,
+	"teleport":  60 * time.Second,
+	"scan":      25 * time.Second,
+	"drone":     40 * time.Second,
+	"smoke":     15 * time.Second,
+	"flash":     20 * time.Second,
+}
+
+// CanUseSkill 是否可以使用技能
+func (p *Player) CanUseSkill(skillID string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	cooldown, exists := SkillCooldowns[skillID]
+	if !exists {
+		return false
+	}
+
+	lastUsed, used := p.SkillCooldowns[skillID]
+	if !used {
+		return true
+	}
+
+	return time.Since(lastUsed) >= cooldown
+}
+
+// UseSkill 使用技能
+func (p *Player) UseSkill(skillID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.SkillCooldowns[skillID] = time.Now()
+}
+
+// GetSkillCooldown 获取技能剩余冷却时间
+func (p *Player) GetSkillCooldown(skillID string) time.Duration {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	cooldown, exists := SkillCooldowns[skillID]
+	if !exists {
+		return 0
+	}
+
+	lastUsed, used := p.SkillCooldowns[skillID]
+	if !used {
+		return 0
+	}
+
+	remaining := cooldown - time.Since(lastUsed)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
