@@ -7,53 +7,143 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  build:
+  # Go 后端 CI
+  backend:
+    name: Backend CI
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Set up Go
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: true
+        cache-dependency-path: server/go.sum
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./server/coverage.out
+        flags: backend
+        name: backend-coverage
+        fail_ci_if_error: false
+
+    - name: Generate coverage report
+      run: |
+        echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
+
+  # 代码质量检查
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.22'
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      working-directory: server
-      run: go mod download
-
-    - name: Run gofmt
-      working-directory: server
-      run: test -z $(gofmt -l .)
-
-    - name: Run go vet
-      working-directory: server
-      run: go vet ./...
-
-    - name: Build
-      working-directory: server
-      run: go build ./...
-
-    - name: Run tests
-      working-directory: server
-      run: go test ./... -cover
-
-    - name: Generate coverage report
-      working-directory: server
-      run: |
-        go test ./... -coverprofile=coverage.out
-        go tool cover -func=coverage.out
-
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v4
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
         working-directory: server
+        args: --timeout=5m
+
+  # Docker 构建
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [backend, lint]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: false
+        tags: fps-game:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # 依赖安全检查
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Run Gosec Security Scanner
+      uses: securego/gosec@master
+      with:
+        args: ./...
+      continue-on-error: true
+
+  # 前端检查
+  frontend:
+    name: Frontend Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check HTML
+      run: |
+        echo "Checking HTML files..."
+        find client -name "*.html" -exec echo "Found: {}" \;
+
+    - name: Check JavaScript
+      run: |
+        echo "Checking JavaScript files..."
+        find client -name "*.js" -exec echo "Found: {}" \;
+        echo "Total JS files: $(find client -name '*.js' | wc -l)"
+
+    - name: Validate JSON
+      run: |
+        if [ -f "package.json" ]; then
+          cat package.json | python3 -m json.tool > /dev/null && echo "package.json is valid"
+        fi

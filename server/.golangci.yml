@@ -12,15 +12,31 @@ linters:
     - gosec
     - gofmt
     - goimports
+    - misspell
+    - revive
 
 linters-settings:
   gofmt:
     simplify: true
   goimports:
     local-prefixes: fps-game
+  govet:
+    check-shadowing: true
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
+        - errcheck
         - gosec
+    - path: internal/game/
+      linters:
+        - gosec G101
+      text: "weak random number generator"
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

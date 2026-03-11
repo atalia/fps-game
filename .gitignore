@@ -1,21 +1,19 @@
+# FPS Game - Gitignore
+
 # Binaries
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-fps-server
+bin/
+dist/
 
-# Test binary
+# Go
 *.test
-
-# Output of the go coverage tool
 *.out
-
-# Dependency directories
-vendor/
-
-# Go workspace file
+coverage.out
+coverage.html
 go.work
 
 # IDE
@@ -23,13 +21,33 @@ go.work
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
+# Env
+.env
+.env.local
+*.env
+
 # Logs
 *.log
+logs/
 
-# Environment
-.env
+# Temp
+tmp/
+temp/
+
+# Docker
+.docker/
+
+# Coverage
+coverage/
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+server/bin/
