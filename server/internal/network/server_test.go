@@ -139,10 +139,10 @@ func TestClient_handleMove_NoRoom(t *testing.T) {
 	}
 
 	data := mustMarshal(map[string]float64{
-		"x":        10.0,
-		"y":        5.0,
+		"x": 10.0,
+		"y": 5.0,
 		"" +
-			"z":        20.0,
+			"z": 20.0,
 		"rotation": 1.57,
 	})
 

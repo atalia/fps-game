@@ -111,11 +111,11 @@ func TestGetAll(t *testing.T) {
 
 func TestWeaponStats(t *testing.T) {
 	tests := []struct {
-		name      string
-		weapon    Weapon
-		maxRange  float64
-		recoil    float64
-		spread    float64
+		name     string
+		weapon   Weapon
+		maxRange float64
+		recoil   float64
+		spread   float64
 	}{
 		{"Pistol", NewPistol(), 50, 0.1, 0.02},
 		{"Rifle", NewRifle(), 100, 0.15, 0.03},

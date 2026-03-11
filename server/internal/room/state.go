@@ -16,11 +16,11 @@ const (
 // RoomWithState 带状态的房间
 type RoomWithState struct {
 	*Room
-	state       GameState
-	matchTime   time.Duration
+	state        GameState
+	matchTime    time.Duration
 	maxMatchTime time.Duration
-	scoreTeam1  int
-	scoreTeam2  int
+	scoreTeam1   int
+	scoreTeam2   int
 }
 
 // NewRoomWithState 创建带状态的房间

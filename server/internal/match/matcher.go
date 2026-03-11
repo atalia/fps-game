@@ -9,19 +9,19 @@ import (
 
 // PlayerInfo 玩家匹配信息
 type PlayerInfo struct {
-	ID         string
-	Rating     int       // 玩家评分（MMR）
-	JoinedAt   time.Time // 加入时间
-	Region     string    // 地区
+	ID          string
+	Rating      int       // 玩家评分（MMR）
+	JoinedAt    time.Time // 加入时间
+	Region      string    // 地区
 	Preferences MatchPreferences
 }
 
 // MatchPreferences 匹配偏好
 type MatchPreferences struct {
-	GameMode   string   // 游戏模式
-	MaxPing    int      // 最大延迟 ms
-	TeamSize   int      // 队伍大小
-	Excluded   []string // 排除的玩家
+	GameMode string   // 游戏模式
+	MaxPing  int      // 最大延迟 ms
+	TeamSize int      // 队伍大小
+	Excluded []string // 排除的玩家
 }
 
 // Match 匹配结果

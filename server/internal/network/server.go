@@ -311,11 +311,11 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 
 	// 发送房间信息给新玩家
 	c.Send <- NewMessage("room_joined", map[string]interface{}{
-		"room_id":       r.ID,
-		"player_id":     c.Player.ID,
-		"players":       r.GetPlayerList(),
-		"player_count":  r.GetPlayerCount(),
-		"max_size":      r.MaxSize,
+		"room_id":      r.ID,
+		"player_id":    c.Player.ID,
+		"players":      r.GetPlayerList(),
+		"player_count": r.GetPlayerCount(),
+		"max_size":     r.MaxSize,
 	}).ToJSON()
 
 	// 广播给房间内其他玩家

@@ -8,15 +8,15 @@ import (
 
 // LeaderboardEntry 排行榜条目
 type LeaderboardEntry struct {
-	PlayerID    string  `json:"player_id"`
-	PlayerName  string  `json:"player_name"`
-	Score       int     `json:"score"`
-	Kills       int     `json:"kills"`
-	Deaths      int     `json:"deaths"`
-	KD          float64 `json:"kd"`
-	WinRate     float64 `json:"win_rate"`
-	PlayTime    int     `json:"play_time"` // 秒
-	Rank        int     `json:"rank"`
+	PlayerID   string  `json:"player_id"`
+	PlayerName string  `json:"player_name"`
+	Score      int     `json:"score"`
+	Kills      int     `json:"kills"`
+	Deaths     int     `json:"deaths"`
+	KD         float64 `json:"kd"`
+	WinRate    float64 `json:"win_rate"`
+	PlayTime   int     `json:"play_time"` // 秒
+	Rank       int     `json:"rank"`
 }
 
 // Leaderboard 排行榜
@@ -153,10 +153,10 @@ func (l *Leaderboard) GetStats() map[string]interface{} {
 
 // MatchLeaderboard 比赛排行榜
 type MatchLeaderboard struct {
-	roomID     string
-	entries    map[string]*LeaderboardEntry
-	startTime  time.Time
-	mu         sync.RWMutex
+	roomID    string
+	entries   map[string]*LeaderboardEntry
+	startTime time.Time
+	mu        sync.RWMutex
 }
 
 // NewMatchLeaderboard 创建比赛排行榜

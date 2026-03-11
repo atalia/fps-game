@@ -20,18 +20,18 @@ const (
 
 // Skill 技能定义
 type Skill struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	Type            SkillType `json:"type"`
-	Cooldown        int       `json:"cooldown"`         // 毫秒
-	EnergyCost      int       `json:"energy_cost"`
-	Distance        float64   `json:"distance"`         // 冲刺距离
-	HealAmount      int       `json:"heal_amount"`      // 治疗量
-	ShieldAmount    int       `json:"shield_amount"`    // 护盾量
-	DamageMultiplier float64  `json:"damage_multiplier"` // 伤害倍率
-	SpeedMultiplier  float64  `json:"speed_multiplier"`  // 速度倍率
-	Duration        int       `json:"duration"`         // 持续时间(毫秒)
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	Type             SkillType `json:"type"`
+	Cooldown         int       `json:"cooldown"` // 毫秒
+	EnergyCost       int       `json:"energy_cost"`
+	Distance         float64   `json:"distance"`          // 冲刺距离
+	HealAmount       int       `json:"heal_amount"`       // 治疗量
+	ShieldAmount     int       `json:"shield_amount"`     // 护盾量
+	DamageMultiplier float64   `json:"damage_multiplier"` // 伤害倍率
+	SpeedMultiplier  float64   `json:"speed_multiplier"`  // 速度倍率
+	Duration         int       `json:"duration"`          // 持续时间(毫秒)
 }
 
 // SkillEffect 激活的技能效果
@@ -45,17 +45,17 @@ type SkillEffect struct {
 
 // SkillManager 技能管理器
 type SkillManager struct {
-	skills       map[string]*Skill
-	cooldowns    map[string]map[string]time.Time // playerID -> skillID -> endTime
-	activeEffects map[string][]*SkillEffect      // playerID -> effects
-	mu           sync.RWMutex
+	skills        map[string]*Skill
+	cooldowns     map[string]map[string]time.Time // playerID -> skillID -> endTime
+	activeEffects map[string][]*SkillEffect       // playerID -> effects
+	mu            sync.RWMutex
 }
 
 // NewSkillManager 创建技能管理器
 func NewSkillManager() *SkillManager {
 	sm := &SkillManager{
-		skills:       make(map[string]*Skill),
-		cooldowns:    make(map[string]map[string]time.Time),
+		skills:        make(map[string]*Skill),
+		cooldowns:     make(map[string]map[string]time.Time),
 		activeEffects: make(map[string][]*SkillEffect),
 	}
 

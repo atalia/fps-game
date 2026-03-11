@@ -19,21 +19,21 @@ const (
 
 // Skin 武器皮肤
 type Skin struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	WeaponType  string  `json:"weapon_type"`
-	Rarity      Rarity  `json:"rarity"`
-	Color       string  `json:"color"`
-	Pattern     string  `json:"pattern"`
-	Price       int     `json:"price"`
-	Description string  `json:"description"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	WeaponType  string `json:"weapon_type"`
+	Rarity      Rarity `json:"rarity"`
+	Color       string `json:"color"`
+	Pattern     string `json:"pattern"`
+	Price       int    `json:"price"`
+	Description string `json:"description"`
 }
 
 // SkinManager 皮肤管理器
 type SkinManager struct {
-	skins     map[string]*Skin
+	skins       map[string]*Skin
 	playerSkins map[string][]string // playerID -> skinIDs
-	mu        sync.RWMutex
+	mu          sync.RWMutex
 }
 
 // NewSkinManager 创建皮肤管理器

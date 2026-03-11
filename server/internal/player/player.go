@@ -16,33 +16,33 @@ type Position struct {
 
 // Player 玩家
 type Player struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Position   Position  `json:"position"`
-	Rotation   float64   `json:"rotation"` // Y 轴旋转
-	Velocity   Position  `json:"-"`
-	Health     int       `json:"health"`
-	MaxHealth  int       `json:"max_health"`
-	Score      int       `json:"score"`
-	Kills      int       `json:"kills"`
-	Deaths     int       `json:"deaths"`
-	Team       string    `json:"team"`
-	Weapon     string    `json:"weapon"`
-	Ammo       int       `json:"ammo"`
-	AmmoReserve int      `json:"ammo_reserve"`
-	LastShot   time.Time `json:"-"`
-	Connected  bool      `json:"-"`
-	mu         sync.RWMutex
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Position    Position  `json:"position"`
+	Rotation    float64   `json:"rotation"` // Y 轴旋转
+	Velocity    Position  `json:"-"`
+	Health      int       `json:"health"`
+	MaxHealth   int       `json:"max_health"`
+	Score       int       `json:"score"`
+	Kills       int       `json:"kills"`
+	Deaths      int       `json:"deaths"`
+	Team        string    `json:"team"`
+	Weapon      string    `json:"weapon"`
+	Ammo        int       `json:"ammo"`
+	AmmoReserve int       `json:"ammo_reserve"`
+	LastShot    time.Time `json:"-"`
+	Connected   bool      `json:"-"`
+	mu          sync.RWMutex
 }
 
 // Config 玩家配置
 type Config struct {
-	DefaultHealth    int
-	DefaultAmmo      int
+	DefaultHealth      int
+	DefaultAmmo        int
 	DefaultAmmoReserve int
-	Speed            float64
-	JumpForce        float64
-	ShootCooldown    time.Duration
+	Speed              float64
+	JumpForce          float64
+	ShootCooldown      time.Duration
 }
 
 // DefaultConfig 默认配置

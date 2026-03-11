@@ -10,8 +10,8 @@ func TestCollision_CheckBoundary(t *testing.T) {
 	c := NewCollision(100) // 100x100 地图
 
 	tests := []struct {
-		name     string
-		x, z     float64
+		name         string
+		x, z         float64
 		wantX, wantZ float64
 	}{
 		{"inside", 10, 20, 10, 20},

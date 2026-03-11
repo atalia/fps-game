@@ -11,11 +11,11 @@ import (
 
 // HitResult 命中结果
 type HitResult struct {
-	Hit       bool    `json:"hit"`
-	TargetID  string  `json:"target_id,omitempty"`
-	Damage    int     `json:"damage,omitempty"`
-	Distance  float64 `json:"distance,omitempty"`
-	Headshot  bool    `json:"headshot,omitempty"`
+	Hit      bool    `json:"hit"`
+	TargetID string  `json:"target_id,omitempty"`
+	Damage   int     `json:"damage,omitempty"`
+	Distance float64 `json:"distance,omitempty"`
+	Headshot bool    `json:"headshot,omitempty"`
 }
 
 // HitDetector 命中检测器

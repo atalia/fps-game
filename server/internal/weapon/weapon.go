@@ -26,24 +26,24 @@ type Weapon interface {
 
 // BaseWeapon 基础武器
 type BaseWeapon struct {
-	weaponType    Type
-	damage        int
-	fireRate      time.Duration
-	magazineSize  int
-	maxAmmo       int
-	maxRange      float64
-	recoil        float64
-	spread        float64
+	weaponType   Type
+	damage       int
+	fireRate     time.Duration
+	magazineSize int
+	maxAmmo      int
+	maxRange     float64
+	recoil       float64
+	spread       float64
 }
 
-func (w *BaseWeapon) Type() Type            { return w.weaponType }
-func (w *BaseWeapon) Damage() int           { return w.damage }
+func (w *BaseWeapon) Type() Type              { return w.weaponType }
+func (w *BaseWeapon) Damage() int             { return w.damage }
 func (w *BaseWeapon) FireRate() time.Duration { return w.fireRate }
-func (w *BaseWeapon) MagazineSize() int     { return w.magazineSize }
-func (w *BaseWeapon) MaxAmmo() int          { return w.maxAmmo }
-func (w *BaseWeapon) Range() float64        { return w.maxRange }
-func (w *BaseWeapon) Recoil() float64       { return w.recoil }
-func (w *BaseWeapon) Spread() float64       { return w.spread }
+func (w *BaseWeapon) MagazineSize() int       { return w.magazineSize }
+func (w *BaseWeapon) MaxAmmo() int            { return w.maxAmmo }
+func (w *BaseWeapon) Range() float64          { return w.maxRange }
+func (w *BaseWeapon) Recoil() float64         { return w.recoil }
+func (w *BaseWeapon) Spread() float64         { return w.spread }
 
 // NewPistol 创建手枪
 func NewPistol() Weapon {

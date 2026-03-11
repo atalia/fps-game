@@ -26,12 +26,12 @@ type ServerConfig struct {
 
 // GameConfig 游戏配置
 type GameConfig struct {
-	TickRate        int           // 服务端帧率
-	MaxPlayers      int           // 最大玩家数
-	MaxRooms        int           // 最大房间数
-	DefaultRoomSize int           // 默认房间人数
-	MapSize         float64       // 地图大小
-	SpawnDistance   float64       // 出生点距离
+	TickRate        int     // 服务端帧率
+	MaxPlayers      int     // 最大玩家数
+	MaxRooms        int     // 最大房间数
+	DefaultRoomSize int     // 默认房间人数
+	MapSize         float64 // 地图大小
+	SpawnDistance   float64 // 出生点距离
 }
 
 // RedisConfig Redis 配置

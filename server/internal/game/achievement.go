@@ -23,10 +23,10 @@ type Achievement struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Type        AchievementType `json:"type"`
-	Target      int             `json:"target"`      // 目标值
-	Reward      int             `json:"reward"`      // 奖励金币
+	Target      int             `json:"target"` // 目标值
+	Reward      int             `json:"reward"` // 奖励金币
 	Icon        string          `json:"icon"`
-	Hidden      bool            `json:"hidden"`      // 隐藏成就
+	Hidden      bool            `json:"hidden"` // 隐藏成就
 }
 
 // PlayerAchievement 玩家成就进度
@@ -39,15 +39,15 @@ type PlayerAchievement struct {
 
 // AchievementManager 成就管理器
 type AchievementManager struct {
-	achievements map[string]*Achievement
+	achievements   map[string]*Achievement
 	playerProgress map[string]map[string]*PlayerAchievement // playerID -> achievementID -> progress
-	mu sync.RWMutex
+	mu             sync.RWMutex
 }
 
 // NewAchievementManager 创建成就管理器
 func NewAchievementManager() *AchievementManager {
 	am := &AchievementManager{
-		achievements: make(map[string]*Achievement),
+		achievements:   make(map[string]*Achievement),
 		playerProgress: make(map[string]map[string]*PlayerAchievement),
 	}
 

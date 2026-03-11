@@ -18,12 +18,12 @@ type Achievement struct {
 
 // PlayerAchievements 玩家成就
 type PlayerAchievements struct {
-	PlayerID      string         `json:"player_id"`
-	Unlocked      []string       `json:"unlocked"`
-	Progress      map[string]int `json:"progress"`
-	TotalPoints   int            `json:"total_points"`
-	LastUnlocked  time.Time      `json:"last_unlocked"`
-	mu            sync.RWMutex
+	PlayerID     string         `json:"player_id"`
+	Unlocked     []string       `json:"unlocked"`
+	Progress     map[string]int `json:"progress"`
+	TotalPoints  int            `json:"total_points"`
+	LastUnlocked time.Time      `json:"last_unlocked"`
+	mu           sync.RWMutex
 }
 
 // AchievementSystem 成就系统
@@ -254,21 +254,21 @@ func (pa *PlayerAchievements) GetUnlocked() []string {
 
 // Stats 玩家统计
 type Stats struct {
-	PlayerID         string         `json:"player_id"`
-	Kills            int            `json:"kills"`
-	Deaths           int            `json:"deaths"`
-	Headshots        int            `json:"headshots"`
-	Wins             int            `json:"wins"`
-	Losses           int            `json:"losses"`
-	MVPCount         int            `json:"mvp_count"`
-	WinStreak        int            `json:"win_streak"`
-	MaxWinStreak     int            `json:"max_win_streak"`
-	MaxKillStreak    int            `json:"max_kill_streak"`
-	PowerupsCollected int           `json:"powerups_collected"`
-	PlayTime         time.Duration  `json:"play_time"`
-	WeaponKills      map[string]int `json:"weapon_kills"`
-	Matches          int            `json:"matches"`
-	mu               sync.RWMutex
+	PlayerID          string         `json:"player_id"`
+	Kills             int            `json:"kills"`
+	Deaths            int            `json:"deaths"`
+	Headshots         int            `json:"headshots"`
+	Wins              int            `json:"wins"`
+	Losses            int            `json:"losses"`
+	MVPCount          int            `json:"mvp_count"`
+	WinStreak         int            `json:"win_streak"`
+	MaxWinStreak      int            `json:"max_win_streak"`
+	MaxKillStreak     int            `json:"max_kill_streak"`
+	PowerupsCollected int            `json:"powerups_collected"`
+	PlayTime          time.Duration  `json:"play_time"`
+	WeaponKills       map[string]int `json:"weapon_kills"`
+	Matches           int            `json:"matches"`
+	mu                sync.RWMutex
 }
 
 // NewStats 创建统计

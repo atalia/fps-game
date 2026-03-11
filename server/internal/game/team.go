@@ -16,9 +16,9 @@ type Team struct {
 
 // TeamManager 队伍管理器
 type TeamManager struct {
-	teams    map[string]*Team
-	balance  bool // 是否自动平衡
-	mu       sync.RWMutex
+	teams   map[string]*Team
+	balance bool // 是否自动平衡
+	mu      sync.RWMutex
 }
 
 // NewTeamManager 创建队伍管理器

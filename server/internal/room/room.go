@@ -236,10 +236,10 @@ func (m *Manager) ListRooms() []map[string]interface{} {
 	result := make([]map[string]interface{}, 0, len(m.rooms))
 	for _, r := range m.rooms {
 		result = append(result, map[string]interface{}{
-			"id":          r.ID,
-			"name":        r.Name,
+			"id":           r.ID,
+			"name":         r.Name,
 			"player_count": r.GetPlayerCount(),
-			"max_size":    r.MaxSize,
+			"max_size":     r.MaxSize,
 		})
 	}
 	return result

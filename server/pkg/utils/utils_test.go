@@ -349,7 +349,7 @@ func TestLogFunctions(t *testing.T) {
 	// 这些函数只测试不会 panic
 	LogInfo("test info %s", "message")
 	LogError("test error %s", "message")
-	
+
 	// Debug 需要 DEBUG 环境变量
 	os.Setenv("DEBUG", "true")
 	LogDebug("test debug %s", "message")
@@ -369,7 +369,7 @@ func TestRecover(t *testing.T) {
 
 func TestSafeGo(t *testing.T) {
 	done := make(chan bool, 1)
-	
+
 	SafeGo(func() {
 		done <- true
 	})

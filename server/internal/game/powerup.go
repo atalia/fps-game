@@ -156,11 +156,11 @@ func (pm *PowerupManager) respawnPowerup(oldID string, pos Position) {
 // GetEffect 获取道具效果
 func (pm *PowerupManager) GetEffect(t PowerupType) *PowerupEffect {
 	effects := map[PowerupType]*PowerupEffect{
-		PowerupHealth:  {Type: PowerupHealth, Health: 50, Duration: 0},
-		PowerupAmmo:    {Type: PowerupAmmo, Ammo: 30, Duration: 0},
-		PowerupSpeed:   {Type: PowerupSpeed, SpeedMultiplier: 1.5, Duration: 10000},
-		PowerupDamage:  {Type: PowerupDamage, DamageMultiplier: 2, Duration: 15000},
-		PowerupShield:  {Type: PowerupShield, Shield: 100, Duration: 20000},
+		PowerupHealth: {Type: PowerupHealth, Health: 50, Duration: 0},
+		PowerupAmmo:   {Type: PowerupAmmo, Ammo: 30, Duration: 0},
+		PowerupSpeed:  {Type: PowerupSpeed, SpeedMultiplier: 1.5, Duration: 10000},
+		PowerupDamage: {Type: PowerupDamage, DamageMultiplier: 2, Duration: 15000},
+		PowerupShield: {Type: PowerupShield, Shield: 100, Duration: 20000},
 	}
 
 	return effects[t]
@@ -169,11 +169,11 @@ func (pm *PowerupManager) GetEffect(t PowerupType) *PowerupEffect {
 // TypeName 获取道具类型名称
 func (t PowerupType) String() string {
 	names := map[PowerupType]string{
-		PowerupHealth:  "health",
-		PowerupAmmo:    "ammo",
-		PowerupSpeed:   "speed",
-		PowerupDamage:  "damage",
-		PowerupShield:  "shield",
+		PowerupHealth: "health",
+		PowerupAmmo:   "ammo",
+		PowerupSpeed:  "speed",
+		PowerupDamage: "damage",
+		PowerupShield: "shield",
 	}
 	return names[t]
 }

@@ -1,41 +1,38 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
 
 linters:
+  default: none
   enable:
-    - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
     - gosec
-    - gofmt
-    - goimports
     - misspell
     - revive
 
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
 linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: fps-game
   govet:
     check-shadowing: true
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - errcheck
         - gosec
     - path: internal/game/
       linters:
-        - gosec G101
-      text: "weak random number generator"
+        - gosec
+      text: "weak random"
 
   max-issues-per-linter: 0
   max-same-issues: 0

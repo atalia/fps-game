@@ -68,21 +68,25 @@ func main() {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().Unix(),
 		"version":   "1.0.0",
-	})
+	}); err != nil {
+		log.Printf("Error encoding health response: %v", err)
+	}
 }
 
 func statsHandler(engine *game.Engine, rm *room.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"players": engine.GetPlayerCount(),
 			"rooms":   rm.GetRoomCount(),
 			"uptime":  time.Now().Unix(),
-		})
+		}); err != nil {
+			log.Printf("Error encoding stats response: %v", err)
+		}
 	}
 }
 
@@ -90,10 +94,12 @@ func listRoomsHandler(rm *room.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		rooms := rm.ListRooms()
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"rooms": rooms,
 			"count": len(rooms),
-		})
+		}); err != nil {
+			log.Printf("Error encoding rooms response: %v", err)
+		}
 	}
 }
 

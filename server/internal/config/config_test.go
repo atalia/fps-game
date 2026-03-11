@@ -31,7 +31,9 @@ func TestGetEnv(t *testing.T) {
 	}
 
 	// 测试环境变量
-	os.Setenv("TEST_VAR", "test_value")
+	if err := os.Setenv("TEST_VAR", "test_value"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_VAR")
 
 	val = getEnv("TEST_VAR", "default")
@@ -48,7 +50,9 @@ func TestGetIntEnv(t *testing.T) {
 	}
 
 	// 测试环境变量
-	os.Setenv("TEST_INT", "100")
+	if err := os.Setenv("TEST_INT", "100"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_INT")
 
 	val = getIntEnv("TEST_INT", 42)
@@ -57,7 +61,9 @@ func TestGetIntEnv(t *testing.T) {
 	}
 
 	// 测试无效值
-	os.Setenv("TEST_INT_INVALID", "not_a_number")
+	if err := os.Setenv("TEST_INT_INVALID", "not_a_number"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_INT_INVALID")
 
 	val = getIntEnv("TEST_INT_INVALID", 42)
@@ -74,7 +80,9 @@ func TestGetFloatEnv(t *testing.T) {
 	}
 
 	// 测试环境变量
-	os.Setenv("TEST_FLOAT", "2.5")
+	if err := os.Setenv("TEST_FLOAT", "2.5"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_FLOAT")
 
 	val = getFloatEnv("TEST_FLOAT", 3.14)
@@ -83,7 +91,9 @@ func TestGetFloatEnv(t *testing.T) {
 	}
 
 	// 测试无效值
-	os.Setenv("TEST_FLOAT_INVALID", "not_a_float")
+	if err := os.Setenv("TEST_FLOAT_INVALID", "not_a_float"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_FLOAT_INVALID")
 
 	val = getFloatEnv("TEST_FLOAT_INVALID", 3.14)
@@ -100,7 +110,9 @@ func TestGetBoolEnv(t *testing.T) {
 	}
 
 	// 测试环境变量
-	os.Setenv("TEST_BOOL", "false")
+	if err := os.Setenv("TEST_BOOL", "false"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_BOOL")
 
 	val = getBoolEnv("TEST_BOOL", true)
@@ -109,7 +121,9 @@ func TestGetBoolEnv(t *testing.T) {
 	}
 
 	// 测试无效值
-	os.Setenv("TEST_BOOL_INVALID", "not_a_bool")
+	if err := os.Setenv("TEST_BOOL_INVALID", "not_a_bool"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_BOOL_INVALID")
 
 	val = getBoolEnv("TEST_BOOL_INVALID", true)
@@ -126,7 +140,9 @@ func TestGetDurationEnv(t *testing.T) {
 	}
 
 	// 测试环境变量
-	os.Setenv("TEST_DURATION", "5s")
+	if err := os.Setenv("TEST_DURATION", "5s"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_DURATION")
 
 	val = getDurationEnv("TEST_DURATION", 10*time.Second)
@@ -135,7 +151,9 @@ func TestGetDurationEnv(t *testing.T) {
 	}
 
 	// 测试无效值
-	os.Setenv("TEST_DURATION_INVALID", "not_a_duration")
+	if err := os.Setenv("TEST_DURATION_INVALID", "not_a_duration"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 	defer os.Unsetenv("TEST_DURATION_INVALID")
 
 	val = getDurationEnv("TEST_DURATION_INVALID", 10*time.Second)
@@ -167,11 +185,21 @@ func TestConfigDefaults(t *testing.T) {
 
 func TestConfigWithEnvVars(t *testing.T) {
 	// 设置环境变量
-	os.Setenv("SERVER_HOST", "127.0.0.1")
-	os.Setenv("SERVER_PORT", "3000")
-	os.Setenv("GAME_TICK_RATE", "30")
-	os.Setenv("REDIS_ENABLED", "false")
-	os.Setenv("LOG_LEVEL", "debug")
+	if err := os.Setenv("SERVER_HOST", "127.0.0.1"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
+	if err := os.Setenv("SERVER_PORT", "3000"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
+	if err := os.Setenv("GAME_TICK_RATE", "30"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
+	if err := os.Setenv("REDIS_ENABLED", "false"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatalf("Setenv failed: %v", err)
+	}
 
 	defer func() {
 		os.Unsetenv("SERVER_HOST")
@@ -199,4 +227,3 @@ func TestConfigWithEnvVars(t *testing.T) {
 		t.Errorf("Log.Level = %s, want debug", cfg.Log.Level)
 	}
 }
-
