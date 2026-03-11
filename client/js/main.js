@@ -3,32 +3,67 @@ let gameStarted = false;
 
 async function init() {
     const loading = document.getElementById('loading');
-    const loadingText = loading.querySelector('p');
+    const loadingText = loading ? loading.querySelector('p') : null;
 
     try {
         console.log('🚀 Starting game initialization...');
+        console.log('📍 DOM Elements:', {
+            loading: !!loading,
+            loadingText: !!loadingText,
+            gameContainer: !!document.getElementById('game-container')
+        });
+
+        if (!loading || !loadingText) {
+            throw new Error('DOM 元素未找到，请检查 HTML 结构');
+        }
         
         // 更新加载状态
         loadingText.textContent = '初始化音效系统...';
         
+        // 检查类是否存在
+        console.log('📦 Checking required classes:', {
+            AudioManager: typeof AudioManager !== 'undefined',
+            UIManager: typeof UIManager !== 'undefined',
+            ScreenEffects: typeof ScreenEffects !== 'undefined',
+            Renderer: typeof Renderer !== 'undefined',
+            Network: typeof Network !== 'undefined',
+            Lobby: typeof Lobby !== 'undefined',
+            Game: typeof Game !== 'undefined'
+        });
+
         // 初始化音效
+        if (typeof AudioManager === 'undefined') {
+            throw new Error('AudioManager 类未定义，请检查 audio.js 加载');
+        }
         window.audioManager = new AudioManager();
         await window.audioManager.init();
         console.log('✅ Audio initialized');
 
         // 初始化 UI
         loadingText.textContent = '初始化界面...';
+        if (typeof UIManager === 'undefined') {
+            throw new Error('UIManager 类未定义，请检查 ui.js 加载');
+        }
+        if (typeof ScreenEffects === 'undefined') {
+            throw new Error('ScreenEffects 类未定义，请检查 effects.js 加载');
+        }
         window.uiManager = new UIManager();
         window.screenEffects = new ScreenEffects();
         console.log('✅ UI initialized');
 
         // 初始化渲染器
         loadingText.textContent = '初始化渲染器...';
+        if (typeof Renderer === 'undefined') {
+            throw new Error('Renderer 类未定义，请检查 renderer.js 加载');
+        }
         window.renderer = new Renderer('game-container');
         console.log('✅ Renderer initialized');
 
         // 初始化网络
         loadingText.textContent = '连接服务器...';
+        if (typeof Network === 'undefined') {
+            throw new Error('Network 类未定义，请检查 network.js 加载');
+        }
         const wsUrl = `ws://${window.location.host}/ws`;
         console.log('🔌 Connecting to:', wsUrl);
         window.network = new Network(wsUrl);
@@ -51,6 +86,9 @@ async function init() {
 
         // 初始化大厅
         loadingText.textContent = '加载大厅...';
+        if (typeof Lobby === 'undefined') {
+            throw new Error('Lobby 类未定义，请检查 lobby.js 加载');
+        }
         window.lobby = new Lobby();
 
         // 隐藏加载画面
@@ -60,26 +98,28 @@ async function init() {
 
     } catch (error) {
         console.error('初始化失败:', error);
-        loading.innerHTML = `
-            <h1>❌ 初始化失败</h1>
-            <p style="color: #ff6b6b;">${error.message}</p>
-            <p style="color: #888; margin-top: 10px; font-size: 14px;">
-                请检查控制台 (F12) 获取详细信息
-            </p>
-            <p style="margin-top: 20px">
-                <button onclick="location.reload()" style="
-                    padding: 12px 24px; 
-                    font-size: 16px; 
-                    cursor: pointer;
-                    background: #4CAF50;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                ">
-                    🔄 重试
-                </button>
-            </p>
-        `;
+        if (loading) {
+            loading.innerHTML = `
+                <h1>❌ 初始化失败</h1>
+                <p style="color: #ff6b6b;">${error.message}</p>
+                <p style="color: #888; margin-top: 10px; font-size: 14px;">
+                    请检查控制台 (F12) 获取详细信息
+                </p>
+                <p style="margin-top: 20px">
+                    <button onclick="location.reload()" style="
+                        padding: 12px 24px; 
+                        font-size: 16px; 
+                        cursor: pointer;
+                        background: #4CAF50;
+                        color: white;
+                        border: none;
+                        border-radius: 5px;
+                    ">
+                        🔄 重试
+                    </button>
+                </p>
+            `;
+        }
     }
 }
 

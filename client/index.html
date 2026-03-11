@@ -471,5 +471,56 @@
     <script src="/js/lobby.js"></script>
     <script src="/js/game.js"></script>
     <script src="/js/main.js"></script>
+
+    <!-- 全局错误处理 -->
+    <script>
+        // 捕获全局错误
+        window.onerror = function(msg, url, line, col, error) {
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.innerHTML = `
+                    <h1>❌ JavaScript 错误</h1>
+                    <p style="color: #ff6b6b; margin: 10px 0;">${msg}</p>
+                    <p style="color: #888; font-size: 12px;">${url}:${line}:${col}</p>
+                    <p style="margin-top: 20px">
+                        <button onclick="location.reload()" style="
+                            padding: 12px 24px; 
+                            font-size: 16px; 
+                            cursor: pointer;
+                            background: #4CAF50;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                        ">🔄 重试</button>
+                    </p>
+                `;
+            }
+            console.error('Global error:', msg, url, line, col, error);
+            return true;
+        };
+
+        // 捕获未处理的 Promise 拒绝
+        window.onunhandledrejection = function(event) {
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.innerHTML = `
+                    <h1>❌ 异步错误</h1>
+                    <p style="color: #ff6b6b; margin: 10px 0;">${event.reason}</p>
+                    <p style="margin-top: 20px">
+                        <button onclick="location.reload()" style="
+                            padding: 12px 24px; 
+                            font-size: 16px; 
+                            cursor: pointer;
+                            background: #4CAF50;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                        ">🔄 重试</button>
+                    </p>
+                `;
+            }
+            console.error('Unhandled rejection:', event.reason);
+        };
+    </script>
 </body>
 </html>
