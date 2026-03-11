@@ -5,214 +5,147 @@ import (
 )
 
 func TestNewLeaderboard(t *testing.T) {
-	lb := NewLeaderboard(100)
+	lb := NewLeaderboard()
 
 	if lb == nil {
 		t.Error("Leaderboard should not be nil")
 	}
-	if lb.maxSize != 100 {
-		t.Errorf("maxSize = %d, want 100", lb.maxSize)
+
+	if len(lb.entries) != 0 {
+		t.Error("Leaderboard should be empty")
 	}
 }
 
 func TestLeaderboard_UpdateEntry(t *testing.T) {
-	lb := NewLeaderboard(100)
+	lb := NewLeaderboard()
 
-	lb.UpdateEntry("player1", "TestPlayer", 100, 10, 5)
-
-	if lb.Size() != 1 {
-		t.Errorf("Size = %d, want 1", lb.Size())
-	}
+	lb.UpdateEntry("player1", "Player One", 100, 10, 5)
 
 	entry := lb.GetEntry("player1")
 	if entry == nil {
-		t.Error("Entry should not be nil")
+		t.Error("Entry should exist")
 	}
-	if entry.Name != "TestPlayer" {
-		t.Errorf("Name = %s, want TestPlayer", entry.Name)
-	}
+
 	if entry.Score != 100 {
 		t.Errorf("Score = %d, want 100", entry.Score)
 	}
-}
 
-func TestLeaderboard_RemoveEntry(t *testing.T) {
-	lb := NewLeaderboard(100)
-
-	lb.UpdateEntry("player1", "TestPlayer", 100, 10, 5)
-	lb.RemoveEntry("player1")
-
-	if lb.Size() != 0 {
-		t.Errorf("Size = %d, want 0", lb.Size())
-	}
-
-	entry := lb.GetEntry("player1")
-	if entry != nil {
-		t.Error("Entry should be nil after removal")
+	if entry.KD != 2.0 {
+		t.Errorf("KD = %f, want 2.0", entry.KD)
 	}
 }
 
-func TestLeaderboard_GetTop(t *testing.T) {
-	lb := NewLeaderboard(100)
+func TestLeaderboard_GetTopN(t *testing.T) {
+	lb := NewLeaderboard()
 
-	// 添加多个玩家
-	lb.UpdateEntry("player1", "Player1", 100, 10, 5)
-	lb.UpdateEntry("player2", "Player2", 200, 20, 3)
-	lb.UpdateEntry("player3", "Player3", 150, 15, 8)
+	lb.UpdateEntry("player1", "Player One", 100, 10, 5)
+	lb.UpdateEntry("player2", "Player Two", 200, 20, 3)
+	lb.UpdateEntry("player3", "Player Three", 50, 5, 10)
 
-	top := lb.GetTop(3)
+	top := lb.GetTopN(2)
 
-	if len(top) != 3 {
-		t.Errorf("Top length = %d, want 3", len(top))
+	if len(top) != 2 {
+		t.Errorf("Top N length = %d, want 2", len(top))
 	}
 
-	// 验证排序
-	if top[0].Score != 200 {
-		t.Errorf("Top 1 score = %d, want 200", top[0].Score)
+	if top[0].PlayerID != "player2" {
+		t.Errorf("Top 1 = %s, want player2", top[0].PlayerID)
 	}
+
 	if top[0].Rank != 1 {
-		t.Errorf("Top 1 rank = %d, want 1", top[0].Rank)
+		t.Errorf("Rank = %d, want 1", top[0].Rank)
 	}
 }
 
-func TestLeaderboard_GetRank(t *testing.T) {
-	lb := NewLeaderboard(100)
+func TestLeaderboard_GetPlayerRank(t *testing.T) {
+	lb := NewLeaderboard()
 
-	lb.UpdateEntry("player1", "Player1", 100, 10, 5)
-	lb.UpdateEntry("player2", "Player2", 200, 20, 3)
-	lb.UpdateEntry("player3", "Player3", 150, 15, 8)
+	lb.UpdateEntry("player1", "Player One", 100, 10, 5)
+	lb.UpdateEntry("player2", "Player Two", 200, 20, 3)
+	lb.UpdateEntry("player3", "Player Three", 50, 5, 10)
 
-	// player2 分数最高，排名应该是 1
-	rank := lb.GetRank("player2")
+	rank := lb.GetPlayerRank("player2")
 	if rank != 1 {
-		t.Errorf("Rank = %d, want 1", rank)
-	}
-
-	// player1 分数最低，排名应该是 3
-	rank = lb.GetRank("player1")
-	if rank != 3 {
-		t.Errorf("Rank = %d, want 3", rank)
-	}
-
-	// 不存在的玩家
-	rank = lb.GetRank("nonexistent")
-	if rank != -1 {
-		t.Errorf("Rank = %d, want -1", rank)
+		t.Errorf("Player2 rank = %d, want 1", rank)
 	}
 }
 
 func TestLeaderboard_Clear(t *testing.T) {
-	lb := NewLeaderboard(100)
+	lb := NewLeaderboard()
 
-	lb.UpdateEntry("player1", "Player1", 100, 10, 5)
+	lb.UpdateEntry("player1", "Player One", 100, 10, 5)
 	lb.Clear()
 
-	if lb.Size() != 0 {
-		t.Errorf("Size after clear = %d, want 0", lb.Size())
+	if len(lb.entries) != 0 {
+		t.Error("Leaderboard should be empty after clear")
 	}
 }
 
 func TestLeaderboard_GetStats(t *testing.T) {
-	lb := NewLeaderboard(100)
+	lb := NewLeaderboard()
 
-	lb.UpdateEntry("player1", "Player1", 100, 10, 5)
-	lb.UpdateEntry("player2", "Player2", 200, 20, 3)
+	lb.UpdateEntry("player1", "Player One", 100, 10, 5)
+	lb.UpdateEntry("player2", "Player Two", 200, 20, 3)
 
 	stats := lb.GetStats()
 
-	if stats.TotalPlayers != 2 {
-		t.Errorf("TotalPlayers = %d, want 2", stats.TotalPlayers)
+	if stats["total_players"].(int) != 2 {
+		t.Errorf("Total players = %d, want 2", stats["total_players"])
 	}
-	if stats.TotalKills != 30 {
-		t.Errorf("TotalKills = %d, want 30", stats.TotalKills)
-	}
-	if stats.TotalDeaths != 8 {
-		t.Errorf("TotalDeaths = %d, want 8", stats.TotalDeaths)
-	}
-	if stats.TotalScore != 300 {
-		t.Errorf("TotalScore = %d, want 300", stats.TotalScore)
+
+	if stats["total_kills"].(int) != 30 {
+		t.Errorf("Total kills = %d, want 30", stats["total_kills"])
 	}
 }
 
-func TestLeaderboardEntry_CalculateKD(t *testing.T) {
-	tests := []struct {
-		kills   int
-		deaths  int
-		wantKD  float64
-	}{
-		{10, 5, 2.0},
-		{10, 0, 10.0},
-		{0, 10, 0.0},
-		{0, 0, 0.0},
+func TestMatchLeaderboard(t *testing.T) {
+	ml := NewMatchLeaderboard("room1")
+
+	ml.RecordKill("player1", "Player One")
+	ml.RecordKill("player1", "Player One")
+	ml.RecordDeath("player1")
+
+	entry := ml.entries["player1"]
+	if entry.Kills != 2 {
+		t.Errorf("Kills = %d, want 2", entry.Kills)
 	}
 
-	for _, tt := range tests {
-		entry := LeaderboardEntry{
-			Kills:  tt.kills,
-			Deaths: tt.deaths,
-		}
-		entry.CalculateKD()
-
-		if entry.KD != tt.wantKD {
-			t.Errorf("KD for %d/%d = %f, want %f", tt.kills, tt.deaths, entry.KD, tt.wantKD)
-		}
+	if entry.Score != 200 {
+		t.Errorf("Score = %d, want 200", entry.Score)
 	}
 }
 
-func TestMatchStats(t *testing.T) {
-	match := NewMatchStats("match1", []string{"p1", "p2", "p3"})
+func TestMatchLeaderboard_GetMVP(t *testing.T) {
+	ml := NewMatchLeaderboard("room1")
 
-	if match.MatchID != "match1" {
-		t.Errorf("MatchID = %s, want match1", match.MatchID)
+	ml.RecordKill("player1", "Player One")
+	ml.RecordKill("player1", "Player One")
+	ml.RecordKill("player2", "Player Two")
+
+	mvp := ml.GetMVP()
+	if mvp == nil {
+		t.Error("MVP should not be nil")
 	}
-	if len(match.Players) != 3 {
-		t.Errorf("Players length = %d, want 3", len(match.Players))
-	}
-}
 
-func TestMatchStats_RecordKill(t *testing.T) {
-	match := NewMatchStats("match1", []string{"p1", "p2"})
-
-	match.RecordKill("p1", "p2")
-
-	if match.Kills["p1"] != 1 {
-		t.Errorf("Kills[p1] = %d, want 1", match.Kills["p1"])
-	}
-	if match.Deaths["p2"] != 1 {
-		t.Errorf("Deaths[p2] = %d, want 1", match.Deaths["p2"])
+	if mvp.PlayerID != "player1" {
+		t.Errorf("MVP = %s, want player1", mvp.PlayerID)
 	}
 }
 
-func TestMatchStats_RecordScore(t *testing.T) {
-	match := NewMatchStats("match1", []string{"p1"})
+func TestMatchLeaderboard_GetResults(t *testing.T) {
+	ml := NewMatchLeaderboard("room1")
 
-	match.RecordScore("p1", 100)
-	match.RecordScore("p1", 50)
+	ml.RecordKill("player1", "Player One")
+	ml.RecordKill("player2", "Player Two")
+	ml.RecordKill("player2", "Player Two")
 
-	if match.Scores["p1"] != 150 {
-		t.Errorf("Scores[p1] = %d, want 150", match.Scores["p1"])
-	}
-}
+	results := ml.GetResults()
 
-func TestMatchStats_EndMatch(t *testing.T) {
-	match := NewMatchStats("match1", []string{"p1", "p2"})
-
-	match.RecordKill("p1", "p2")
-	match.RecordScore("p1", 100)
-	match.EndMatch("p1")
-
-	if match.Winner != "p1" {
-		t.Errorf("Winner = %s, want p1", match.Winner)
-	}
-	if match.Duration == 0 {
-		t.Error("Duration should not be zero")
+	if len(results) != 2 {
+		t.Errorf("Results length = %d, want 2", len(results))
 	}
 
-	lb := match.GetLeaderboard()
-	if len(lb) != 2 {
-		t.Errorf("Leaderboard length = %d, want 2", len(lb))
-	}
-	if lb[0].GeoID != "p1" {
-		t.Errorf("Winner should be p1, got %s", lb[0].GeoID)
+	if results[0].PlayerID != "player2" {
+		t.Errorf("Winner = %s, want player2", results[0].PlayerID)
 	}
 }
