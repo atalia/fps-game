@@ -176,12 +176,12 @@ function setupNetworkHandlers() {
     });
 }
 
-function startGame(playerId) {
+async function startGame(playerId) {
     gameStarted = true;
 
     // 初始化游戏
     window.game = new Game();
-    window.game.init();
+    await window.game.init();
 
     // 隐藏大厅
     if (window.lobby) {

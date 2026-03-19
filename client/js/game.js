@@ -12,27 +12,49 @@ class Game {
   }
 
   async init() {
-    const container = document.getElementById('game-container')
-    this.renderer = new Renderer(container)
-    this.player = new PlayerController()
-    this.effects = new EffectsManager(this.renderer)
-    this.running = true
+    console.log("Game.init called");
+    
+    // 使用已有的渲染器
+    if (window.renderer) {
+      this.renderer = window.renderer;
+    } else {
+      const container = document.getElementById('game-container');
+      this.renderer = new Renderer(container);
+      window.renderer = this.renderer;
+    }
+    
+    // 初始化玩家控制器
+    if (typeof PlayerController !== 'undefined') {
+      this.player = new PlayerController();
+    } else {
+      console.error('PlayerController not defined');
+      this.player = { update: () => ({ position: { x: 0, y: 2, z: 0 }, rotation: 0 }) };
+    }
+    
+    // 初始化特效
+    if (typeof EffectsManager !== 'undefined') {
+      this.effects = new EffectsManager(this.renderer);
+    }
+    
+    this.running = true;
 
     // 初始化音频
-    await window.audioManager.init()
-    window.audioManager.resume()
+    if (window.audioManager) {
+      await window.audioManager.init();
+      window.audioManager.resume();
+    }
 
     // 启动游戏循环
-    this.loop()
+    this.loop();
 
     // 设置聊天
-    this.setupChat()
+    this.setupChat();
 
     // 设置武器切换
-    this.setupWeaponSwitch()
+    this.setupWeaponSwitch();
 
     // 设置小地图
-    this.setupMinimap()
+    this.setupMinimap();
   }
 
   loop() {
