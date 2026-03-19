@@ -15,13 +15,18 @@ class Game {
     console.log("Game.init called");
     console.log("window.renderer exists:", !!window.renderer);
     
-    // 使用已有的渲染器
+    // 复用已有的渲染器，不要重新创建
     if (window.renderer) {
       console.log("Reusing existing renderer");
       this.renderer = window.renderer;
     } else {
+      // 只有在没有渲染器时才创建
       console.log("Creating new renderer");
-      // 传入容器 ID 字符串，而不是元素
+      const container = document.getElementById('game-container');
+      if (!container) {
+        console.error('game-container not found!');
+        return;
+      }
       this.renderer = new Renderer('game-container');
       window.renderer = this.renderer;
     }
