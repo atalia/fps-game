@@ -18,8 +18,8 @@ class Game {
     if (window.renderer) {
       this.renderer = window.renderer;
     } else {
-      const container = document.getElementById('game-container');
-      this.renderer = new Renderer(container);
+      // 传入容器 ID 字符串，而不是元素
+      this.renderer = new Renderer('game-container');
       window.renderer = this.renderer;
     }
     
