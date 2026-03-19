@@ -13,17 +13,21 @@ class Game {
 
   async init() {
     console.log("Game.init called");
+    console.log("window.renderer exists:", !!window.renderer);
     
     // 使用已有的渲染器
     if (window.renderer) {
+      console.log("Reusing existing renderer");
       this.renderer = window.renderer;
     } else {
+      console.log("Creating new renderer");
       // 传入容器 ID 字符串，而不是元素
       this.renderer = new Renderer('game-container');
       window.renderer = this.renderer;
     }
     
     // 初始化玩家控制器
+    console.log("PlayerController exists:", typeof PlayerController !== 'undefined');
     if (typeof PlayerController !== 'undefined') {
       this.player = new PlayerController();
     } else {
@@ -32,6 +36,7 @@ class Game {
     }
     
     // 初始化特效
+    console.log("EffectsManager exists:", typeof EffectsManager !== 'undefined');
     if (typeof EffectsManager !== 'undefined') {
       this.effects = new EffectsManager(this.renderer);
     }
