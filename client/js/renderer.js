@@ -96,6 +96,17 @@ class Renderer {
         });
         const sky = new THREE.Mesh(skyGeo, skyMat);
         this.scene.add(sky);
+        
+        // 初始化完成，启动渲染循环
+        this.running = true;
+        this.animate();
+    }
+
+    animate() {
+        if (this.running) {
+            this.render();
+            requestAnimationFrame(() => this.animate());
+        }
     }
 
     addPlayer(id, position, isLocal = false) {
