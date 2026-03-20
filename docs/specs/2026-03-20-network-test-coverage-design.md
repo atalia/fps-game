@@ -4,74 +4,20 @@
 
 将 `server/internal/network/server.go` 的测试覆盖率从 33.9% 提升到 90%+。
 
-**覆盖率度量**：`go test -coverprofile=cover.out ./server/internal/network/`，统计 `server.go` 的覆盖率。
-
-**范围决策**：
-- ✅ `ServeWS`：覆盖（HTTP upgrade 成功路径）
-- ✅ `HandleConnection`：覆盖
-- ✅ `readPump`：覆盖主要路径
-- ✅ `writePump`：覆盖主要路径
-- ✅ `handleMessage` 及所有 `handle*`：覆盖
-- ❌ `ServeWS` upgrade 失败：不测（需模拟 HTTP 错误）
-- ❌ `room.Manager` maxRooms 耗尽：不测（非网络层职责）
+**覆盖率度量**：`go test -coverprofile=cover.out ./server/internal/network/`
 
 ---
 
-## 前置修复（必须先完成）
+## 前置修复（阻塞条件）
 
-在测试前需修复以下代码问题：
+**必须先完成以下修复才能开始测试：**
 
 | 函数 | 问题 | 修复 |
 |------|------|------|
-| `handleRespawn` | `c.Room == nil` 时调用 `BroadcastToRoom(nil, ...)` 会 panic | 添加 `if c.Room == nil { return }` |
+| `handleRespawn` | `c.Room == nil` 时 panic | 添加 `if c.Room == nil { return }` |
 | `handleWeaponChange` | 同上 | 添加 `if c.Room == nil { return }` |
 
----
-
-## 当前代码行为
-
-### 输入校验
-
-| 错误类型 | 行为 |
-|----------|------|
-| 非法 JSON | `json.Unmarshal` 失败 → return |
-| 字段缺失 | Go 零值填充 |
-| 未知消息类型 | 无匹配 → return |
-
-### 房间容量
-
-- 来源：`room.Manager.defaultSize`
-- 默认值：10
-
-### 技能列表
-
-有效：`heal`, `speed`, `shield`, `teleport`, `scan`, `drone`, `smoke`, `flash`
-无效：静默忽略
-
----
-
-## 消息测试矩阵
-
-| 输入 | 需房间 | 发送者收到 | 其他收到 | 测试数据 | 断言字段 |
-|------|-------|-----------|---------|----------|----------|
-| `join_room` | 否 | `room_joined` | `player_joined` | `{"name":"test"}` | `room_id`, `player_id` |
-| `leave_room` | 是 | ❌ | `player_left` | `{}` | `player_id` |
-| `move` | 是 | ❌ | `player_moved` | `{"x":1,"y":2,"z":3,"rotation":0}` | `position`, `rotation` |
-| `chat` | 是 | ✅ | ✅ | `{"message":"hello"}` | `message`, `player_id` |
-| `shoot` | 是 | ❌ | `player_shot` | `{"position":{"x":0,"y":0,"z":0},"rotation":0}` | `position`, `ammo` |
-| `reload` | 否 | `reload` | ❌ | `{}` | `ammo`, `ammo_reserve` |
-| `respawn` | 是 | `respawn` | `player_respawned` | `{"x":0,"y":0,"z":0}` | `position`, `health` |
-| `weapon_change` | 是 | ✅ | ✅ | `{"weapon":"rifle"}` | `weapon`, `player_id` |
-| `voice_start` | 是 | ❌ | ✅ | `{}` | `player_id` |
-| `voice_stop` | 是 | ❌ | ✅ | `{}` | `player_id` |
-| `voice_data` | 是 | ❌ | ✅ | `{}` | `player_id`, `audio` |
-| `team_join` | 是 | ✅ | ✅ | `{"team":"red"}` | `team`, `player_id` |
-| `grenade_throw` | 是 | ✅ | ✅ | `{"type":"frag","position":{"x":0,"y":0,"z":0},"velocity":{"x":0,"y":0,"z":0}}` | `type`, `position` |
-| `c4_plant` | 是 | ✅ | ✅ | `{"position":{"x":0,"y":0,"z":0}}` | `position`, `player_id` |
-| `c4_defuse` | 是 | ✅ | ✅ | `{}` | `player_id` |
-| `skill_use` | 是 | ✅ | ✅ | `{"skill_id":"heal"}` | `skill_id`, `player_id` |
-| `emote` | 是 | ✅ | ✅ | `{"emote_id":"wave"}` | `emote_id`, `player_id` |
-| `ping` | 是 | ✅ | ✅ | `{"position":{"x":0,"y":0,"z":0},"type":"enemy"}` | `position`, `type` |
+未修复前：`TestWS_NoRoom_Operations` 会 panic，无法执行。
 
 ---
 
@@ -80,34 +26,40 @@
 ### TestServer
 
 ```go
+type TestServer struct {
+    Server      *httptest.Server
+    Hub         *Hub
+    RoomManager *room.Manager
+    URL         string
+}
+
 // NewTestServer 创建独立测试服务器
+// 每个测试独立创建，不复用
 func NewTestServer(t *testing.T) *TestServer
 
-// Close 关闭服务器（Hub goroutine 常驻）
+// Close 关闭服务器
+// Hub goroutine 常驻，测试进程退出时清理
 func (s *TestServer) Close()
 ```
+
+**隔离策略**：每个测试独立 TestServer，禁止并行测试（`t.Parallel()`）。
 
 ### Helper 函数
 
 ```go
-const (
-    defaultTimeout = 2 * time.Second
-    drainTimeout   = 500 * time.Millisecond
-)
-
-// Connect 连接，已消费 welcome
+// Connect 连接，消费 welcome，返回 (conn, playerID)
 func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 
-// CreateRoom 创建房间，已消费 welcome + room_joined
+// CreateRoom 创建房间，消费 welcome+room_joined，返回 (conn, playerID, roomID)
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 
-// JoinRoom 加入房间，已消费 welcome + room_joined
+// JoinRoom 加入房间，消费 welcome+room_joined，返回 (conn, playerID)
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
 
-// FillRoom 填满房间（count + 创建者 <= 10）
+// FillRoom 填满房间，返回 []conn（count + 创建者 <= 10）
 func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 
-// Drain 清空消息，等待 drainTimeout 无新消息
+// Drain 清空消息（500ms 无新消息）
 func Drain(t *testing.T, conn *websocket.Conn)
 
 // CloseConn 关闭连接
@@ -119,16 +71,45 @@ func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 // RecvType 接收并验证类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 
-// RecvAll 接收所有消息，直到 defaultTimeout 无新消息
-// 处理换行分隔的多条 JSON
+// RecvAll 接收所有消息（按换行分隔解析多条 JSON）
+// 返回解析后的消息列表（按条数统计，非 frame 数）
 func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
 
-// NoMessage 验证 drainTimeout 内无消息
+// NoMessage 验证 500ms 内无消息
 func NoMessage(t *testing.T, conn *websocket.Conn)
 
 // CountType 统计消息类型数量
 func CountType(msgs []*Message, msgType string) int
 ```
+
+---
+
+## 消息测试矩阵
+
+| 输入 | 需房间 | 发送者 | 其他 | 测试数据 | 断言字段 |
+|------|-------|-------|------|----------|----------|
+| `join_room` | 否 | `room_joined` | `player_joined` | `{"name":"test"}` | `room_id` |
+| `leave_room` | 是 | ❌ | `player_left` | `{}` | `player_id` |
+| `move` | 是 | ❌ | `player_moved` | `{"x":1,"y":2,"z":3,"rotation":0}` | `position` |
+| `chat` | 是 | ✅ | ✅ | `{"message":"hello"}` | `message` |
+| `shoot` | 是 | ❌ | `player_shot` | `{"position":{"x":0,"y":0,"z":0},"rotation":0}` | `player_id` |
+| `shoot_cant` | 是 | ❌ | ❌ | 连续发送耗尽弹药 | 无消息 |
+| `reload` | 否 | `reload` | ❌ | `{}` | `ammo` |
+| `respawn` | 是 | `respawn` | `player_respawned` | `{"x":0,"y":0,"z":0}` | `health` |
+| `weapon_change` | 是 | ✅ | ✅ | `{"weapon":"rifle"}` | `weapon` |
+| `voice_start` | 是 | ❌ | ✅ | `{}` | `player_id` |
+| `voice_stop` | 是 | ❌ | ✅ | `{}` | `player_id` |
+| `voice_data` | 是 | ❌ | ✅ | `{"audio":"base64data"}` | `audio` |
+| `team_join` | 是 | ✅ | ✅ | `{"team":"red"}` | `team` |
+| `grenade_throw` | 是 | ✅ | ✅ | `{"type":"frag","position":{"x":0,"y":0,"z":0},"velocity":{"x":0,"y":0,"z":0}}` | `type` |
+| `c4_plant` | 是 | ✅ | ✅ | `{"position":{"x":0,"y":0,"z":0}}` | `position` |
+| `c4_defuse` | 是 | ✅ | ✅ | `{}` | `player_id` |
+| `skill_use` | 是 | ✅ | ✅ | `{"skill_id":"heal"}` | `skill_id` |
+| `skill_invalid` | 是 | ❌ | ❌ | `{"skill_id":"unknown"}` | 无消息 |
+| `emote` | 是 | ✅ | ✅ | `{"emote_id":"wave"}` | `emote_id` |
+| `ping` | 是 | ✅ | ✅ | `{"type":"enemy","x":0,"y":0,"z":0,"message":""}` | `type` |
+
+**注意**：`ping` 使用顶层 `x/y/z`，不是嵌套 `position`。
 
 ---
 
@@ -144,83 +125,80 @@ func CountType(msgs []*Message, msgType string) int
 
 #### TestWS_Disconnect_InRoom
 ```
-前置：A=CreateRoom, B=JoinRoom, Drain(A), Drain(B)
+前置：A=CreateRoom, B=JoinRoom, Drain
 步骤：CloseConn(A)
-断言：B 收到 player_left，player_id == A.playerID
+断言：B 收到 player_left
 ```
 
 #### TestWS_UnknownType
 ```
-前置：A=CreateRoom, Drain(A)
+前置：A=Connect (不加入房间)
 步骤：Send("unknown", {})
-断言：NoMessage，连接存活（能 join_room）
+断言：NoMessage
+验证：Send("join_room", {"name":"test"}) → 收到 room_joined
+```
+
+#### TestWS_InvalidJSON
+```
+前置：A=Connect (不加入房间)
+步骤：Send raw '{"invalid'
+断言：NoMessage
+验证：Send("join_room", {"name":"test"}) → 收到 room_joined
 ```
 
 ### 2. 房间测试
 
 #### TestWS_JoinRoom_Full
 ```
-前置：A=CreateRoom, FillRoom(9), Drain(A)
+前置：A=CreateRoom, FillRoom(9), Drain
 步骤：第 11 人 JoinRoom
 断言：收到 error "Room is full"
 ```
 
 #### TestWS_LeaveRoom
 ```
-前置：A=CreateRoom, B=JoinRoom, Drain(A), Drain(B)
+前置：A=CreateRoom, B=JoinRoom, Drain
 步骤：A 发送 leave_room
 断言：B 收到 player_left
 ```
 
 ### 3. 消息分发测试
 
-完整表驱动测试，覆盖消息矩阵中所有消息类型。
+完整表驱动，覆盖所有消息类型（见矩阵）。
 
-### 4. 异常测试
-
-#### TestWS_InvalidJSON
-```
-前置：A=CreateRoom, Drain(A)
-步骤：Send raw '{"invalid'
-断言：NoMessage，连接存活
-```
+### 4. 异常分支测试
 
 #### TestWS_SkillOnCooldown
 ```
-前置：A=CreateRoom, Drain(A)
-步骤：
-  1. Send("skill_use", {"skill_id":"heal"})
-  2. RecvType("skill_used")
-  3. Send("skill_use", {"skill_id":"heal"})
-断言：收到 error "Skill on cooldown"
+前置：A=CreateRoom, Drain
+步骤：连续两次 Send("skill_use", {"skill_id":"heal"})
+断言：第一次 skill_used，第二次 error
 ```
 
 #### TestWS_InvalidSkill
 ```
-前置：A=CreateRoom, Drain(A)
-步骤：Send("skill_use", {"skill_id":"invalid"})
+前置：A=CreateRoom, Drain
+步骤：Send("skill_use", {"skill_id":"unknown"})
 断言：NoMessage
 ```
 
-#### TestWS_NoRoom_Operations
-需要房间的消息列表：
-```go
-needRoom := []string{
-    "leave_room", "move", "chat", "shoot",
-    "respawn", "weapon_change",
-    "voice_start", "voice_stop", "voice_data",
-    "team_join", "grenade_throw", "c4_plant", "c4_defuse",
-    "skill_use", "emote", "ping",
-}
+#### TestWS_Shoot_CannotShoot
+```
+前置：A=CreateRoom, B=JoinRoom, Drain
+步骤：A 连续发送 100 次 shoot
+断言：前几次 B 收到 player_shot，后续静默（弹药耗尽）
 ```
 
-测试逻辑：
+#### TestWS_NoRoom_Operations
+需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
+
 ```
-for each msgType in needRoom:
-    A = Connect(ts)
+for each msgType:
+    A = Connect(ts)  // 不加入房间
     Drain(A)
     Send(A, msgType, validData)
     NoMessage(A)
+    
     // 验证连接存活
     Send(A, "join_room", {"name":"test"})
     RecvType(A, "room_joined")
@@ -235,7 +213,7 @@ for each msgType in needRoom:
 步骤：每人发送 5 条 chat
 断言：
   - 无 panic、无死锁
-  - 总消息数 >= 100（理论 125）
+  - 总消息数 >= 100（理论 125，按消息条数统计）
   - 所有连接存活
 ```
 
@@ -245,24 +223,11 @@ for each msgType in needRoom:
 
 | 内容 | 原因 |
 |------|------|
-| `ServeWS` upgrade 失败 | 需模拟 HTTP 错误 |
+| `ServeWS` upgrade 失败 | 非 websocket 层职责 |
 | `pongWait`/`writeWait` 超时 | 需特殊客户端 |
 | Ping 周期 | 60s 太长 |
 | `room.Manager` maxRooms 耗尽 | 非 network 职责 |
-| 日志输出 | 非功能 |
-
----
-
-## 实施步骤
-
-1. **修复代码**：添加 nil Room 检查
-2. **测试工具**：TestServer, Helper
-3. **连接测试**
-4. **房间测试**
-5. **消息分发测试**
-6. **异常测试**
-7. **并发测试**
-8. **覆盖率验证**
+| `player.Player` 内部状态 | 依赖跨层契约 |
 
 ---
 
