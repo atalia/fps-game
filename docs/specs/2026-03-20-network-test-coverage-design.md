@@ -13,16 +13,28 @@ go test -race ./server/internal/network/...
 
 ---
 
-## 前置修复（阻塞条件）
+## 前置修复（阻塞条件，先独立提交）
 
 以下 handler 缺少 `c.Room == nil` 检查，会导致 panic：
 
 | 函数 | 修复 |
 |------|------|
-| `handleRespawn` (line 472) | 添加 `if c.Room == nil { return }` |
-| `handleWeaponChange` (line 493) | 添加 `if c.Room == nil { return }` |
+| `handleRespawn` (line 472) | 添加 `if c.Room == nil { return }` 在 `json.Unmarshal` 前 |
+| `handleWeaponChange` (line 493) | 添加 `if c.Room == nil { return }` 在 `json.Unmarshal` 前 |
 
-其他 handler 已有 nil 检查：`handleMove`, `handleChat`, `handleShoot`, `handleVoiceStart/Stop/Data`, `handleTeamJoin`, `handleGrenadeThrow`, `handleC4Plant/Defuse`, `handleSkillUse`, `handleEmote`, `handlePing`。
+**执行顺序**：先提交修复，再编写测试。
+
+---
+
+## BroadcastToRoom 契约
+
+```go
+func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string)
+```
+
+- `r == nil`：不遍历任何玩家，静默返回（无 panic）
+- `excludeID == ""`：所有房间玩家（含发送者）都收到
+- `excludeID == c.Player.ID`：排除发送者
 
 ---
 
@@ -39,12 +51,12 @@ type TestServer struct {
 }
 
 // NewTestServer 创建独立测试服务器
-// 每个测试独立创建，不复用
+// Hub goroutine 在后台运行，测试进程级共享
+// 不纳入泄漏判定
 func NewTestServer(t *testing.T) *TestServer
 
-// Close 关闭服务器
-// Hub goroutine 常驻，测试进程退出时清理
-// 接受 goroutine 泄漏（Hub 无 stop 机制）
+// Close 关闭 httptest.Server
+// Hub goroutine 常驻（Hub 无 stop 机制）
 func (s *TestServer) Close()
 ```
 
@@ -77,7 +89,8 @@ func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 // RecvType 接收并验证类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 
-// RecvAll 接收所有消息（按换行分隔解析）
+// RecvAll 接收所有消息
+// 兼容批量写入：按换行分隔解析多条 JSON，超时 2s
 func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
 
 // NoMessage 验证 500ms 内无消息
@@ -91,31 +104,52 @@ func CountType(msgs []*Message, msgType string) int
 
 ## 消息测试矩阵
 
-| 发送类型 | 接收类型 | 需房间 | 发送者 | 其他 | 测试数据 | 无房间 | 非法data |
-|----------|----------|-------|-------|------|----------|-------|---------|
-| `join_room` | `room_joined`/`player_joined` | 否 | ✅ | ✅ | `{"name":"test"}` | 正常 | 静默 |
-| `leave_room` | `player_left` | 是 | ❌ | ✅ | `{}` | 静默 | - |
-| `move` | `player_moved` | 是 | ❌ | ✅ | `{"x":1,"y":2,"z":3,"rotation":0}` | 静默 | 静默 |
-| `chat` | `chat` | 是 | ✅ | ✅ | `{"message":"hello"}` | 静默 | 静默 |
-| `shoot` | `player_shot` | 是 | ❌ | ✅ | `{"position":{"x":0,"y":0,"z":0},"rotation":0}` | 静默 | 静默 |
-| `reload` | `reload` | 否 | ✅ | ❌ | `{}` | 正常 | - |
-| `respawn` | `respawn`/`player_respawned` | 是 | ✅ | ✅ | `{"x":0,"y":0,"z":0}` | **需修复** | 静默 |
-| `weapon_change` | `weapon_changed` | 是 | ✅ | ✅ | `{"weapon":"rifle"}` | **需修复** | 静默 |
-| `voice_start` | `voice_start` | 是 | ❌ | ✅ | `{}` | 静默 | - |
-| `voice_stop` | `voice_stop` | 是 | ❌ | ✅ | `{}` | 静默 | - |
-| `voice_data` | `voice_data` | 是 | ❌ | ✅ | `{"audio":"base64"}` | 静默 | - |
-| `team_join` | `team_changed` | 是 | ✅ | ✅ | `{"team":"red"}` | 静默 | 静默 |
-| `grenade_throw` | `grenade_thrown` | 是 | ✅ | ✅ | `{"type":"frag","position":{"x":0,"y":0,"z":0},"velocity":{"x":0,"y":0,"z":0}}` | 静默 | 静默 |
-| `c4_plant` | `c4_planted` | 是 | ✅ | ✅ | `{"position":{"x":0,"y":0,"z":0}}` | 静默 | 静默 |
-| `c4_defuse` | `c4_defused` | 是 | ✅ | ✅ | `{}` | 静默 | - |
-| `skill_use` | `skill_used` | 是 | ✅ | ✅ | `{"skill_id":"heal"}` | 静默 | 静默 |
-| `emote` | `emote` | 是 | ✅ | ✅ | `{"emote_id":"wave"}` | 静默 | 静默 |
-| `ping` | `ping` | 是 | ✅ | ✅ | `{"type":"enemy","x":0,"y":0,"z":0,"message":""}` | 静默 | 静默 |
+| 发送类型 | 接收类型 | 需房间 | 发送者 | 其他 | 无房间 | 非法JSON | 无效值 |
+|----------|----------|-------|-------|------|-------|---------|-------|
+| `join_room` | `room_joined`/`player_joined` | 否 | ✅ | ✅ | 正常 | 静默 | - |
+| `leave_room` | `player_left` | 是 | ❌ | ✅ | 静默 | - | - |
+| `move` | `player_moved` | 是 | ❌ | ✅ | 静默 | 静默 | 零值广播 |
+| `chat` | `chat` | 是 | ✅ | ✅ | 静默 | 静默 | 空消息广播 |
+| `shoot` | `player_shot` | 是 | ❌ | ✅ | 静默 | 静默 | 零值广播 |
+| `reload` | `reload` | 否 | ✅ | ❌ | 正常 | - | - |
+| `respawn` | `respawn`/`player_respawned` | 是 | ✅ | ✅ | **修复后静默** | 静默 | 零值广播 |
+| `weapon_change` | `weapon_changed` | 是 | ✅ | ✅ | **修复后静默** | 静默 | 空武器广播 |
+| `voice_start` | `voice_start` | 是 | ❌ | ✅ | 静默 | - | - |
+| `voice_stop` | `voice_stop` | 是 | ❌ | ✅ | 静默 | - | - |
+| `voice_data` | `voice_data` | 是 | ❌ | ✅ | 静默 | - | 嵌套转发 |
+| `team_join` | `team_changed` | 是 | ✅ | ✅ | 静默 | 静默 | 空队伍广播 |
+| `grenade_throw` | `grenade_thrown` | 是 | ✅ | ✅ | 静默 | 静默 | 零值广播 |
+| `c4_plant` | `c4_planted` | 是 | ✅ | ✅ | 静默 | 静默 | 零值广播 |
+| `c4_defuse` | `c4_defused` | 是 | ✅ | ✅ | 静默 | - | - |
+| `skill_use` | `skill_used`/`error` | 是 | ✅ | ✅ | 静默 | 静默 | **无效ID→error** |
+| `emote` | `emote` | 是 | ✅ | ✅ | 静默 | 静默 | 空表情广播 |
+| `ping` | `ping` | 是 | ✅ | ✅ | 静默 | 静默 | 零值广播 |
 
-**说明**：
-- 发送者 ✅ = 发送者收到广播
-- 发送者 ❌ = 发送者不收到（excludeID 排除）
-- `voice_data` 的 `audio` 字段：代码会将原始 data 直接塞入 `audio`，所以发送 `{"audio":"base64"}` 会收到 `{"audio":{"audio":"base64"}}`（嵌套）
+**异常分类**：
+- 非法JSON：顶层或 `data` 字段 JSON 解析失败 → 静默
+- 无效值：结构合法但语义无效（如无效技能ID）→ 可能返回 error
+- 零值广播：JSON 解析成功但字段缺失，Go 零值填充后继续广播
+
+---
+
+## 最小断言合同
+
+| 消息 | 必验字段 | 精确值 | 说明 |
+|------|----------|-------|------|
+| `room_joined` | `room_id`, `player_id` | - | room_id 非空 |
+| `player_joined` | `player_id` | - | - |
+| `player_left` | `player_id` | == 发送者ID | - |
+| `player_moved` | `player_id`, `position` | - | - |
+| `chat` | `player_id`, `message` | message == 发送值 | - |
+| `player_shot` | `player_id` | - | - |
+| `reload` | `ammo`, `ammo_reserve` | - | - |
+| `respawn` | `health`, `ammo` | - | 发送者收到 |
+| `player_respawned` | `player_id` | - | 其他人收到 |
+| `weapon_changed` | `player_id`, `weapon` | weapon == 发送值 | - |
+| `voice_data` | `audio` | 嵌套结构存在 | audio 字段嵌套 |
+| `team_changed` | `player_id`, `team` | team == 发送值 | - |
+| `skill_used` | `player_id`, `skill_id` | skill_id == 发送值 | - |
+| `error` | `message` | 特定文本 | "Skill on cooldown" 等 |
 
 ---
 
@@ -144,12 +178,12 @@ func CountType(msgs []*Message, msgType string) int
 验证：Send("join_room", {"name":"test"}) → 收到 room_joined
 ```
 
-#### TestWS_InvalidJSON
+#### TestWS_InvalidTopLevelJSON
 ```
 前置：A=Connect (不加入房间)
 步骤：Send raw '{"invalid'
 断言：NoMessage
-验证：Send("join_room", {"name":"test"}) → 收到 room_joined
+验证：连接存活
 ```
 
 ### 2. 房间测试
@@ -186,7 +220,7 @@ func CountType(msgs []*Message, msgType string) int
 完整表驱动，每条消息验证：
 - 接收类型正确
 - 发送者/其他人接收符合预期
-- 必要字段存在
+- 必验字段存在且值正确
 
 ### 4. JSON 解析失败测试（表驱动）
 
@@ -201,7 +235,7 @@ for _, msgType := range handlers {
     Drain(A)
     Send(A, msgType, json.RawMessage(`{invalid`))
     NoMessage(A)
-    // 验证连接存活
+    CloseConn(A)
 }
 ```
 
@@ -221,14 +255,14 @@ for _, msgType := range handlers {
 ```
 前置：A=CreateRoom, Drain
 步骤：Send("skill_use", {"skill_id":"unknown"})
-断言：NoMessage（无效技能静默忽略）
+断言：收到 error "Skill on cooldown"（无效技能也报这个错）
 ```
 
 #### TestWS_Shoot_Cooldown
 ```
 前置：A=CreateRoom, B=JoinRoom, Drain
-步骤：A 快速连续发送 5 次 shoot
-断言：B 收到至少 1 次 player_shot（cooldown 限制后续）
+步骤：A 等待 100ms 后快速发送 2 次 shoot（间隔 < 100ms）
+断言：B 收到 1 次 player_shot（cooldown 限制第二次）
 ```
 
 #### TestWS_NoRoom_Operations
@@ -254,7 +288,8 @@ for each msgType:
 步骤：每人发送 5 条 chat
 断言：
   - 无 panic、无死锁
-  - 总消息数 >= 100（理论 125，chat 含发送者）
+  - 统计方式：Drain 后只统计 chat 消息
+  - 总消息数 >= 100（理论 5×5×5=125，chat 含发送者）
   - 所有连接存活
 ```
 
@@ -268,7 +303,6 @@ for each msgType:
 | `pongWait`/`writeWait` 超时 | 需特殊客户端 |
 | Ping 周期 | 60s 太长 |
 | `room.Manager` maxRooms 耗尽 | 非 network 职责 |
-| `player.Player` 内部状态 | 跨层契约 |
 
 ---
 
