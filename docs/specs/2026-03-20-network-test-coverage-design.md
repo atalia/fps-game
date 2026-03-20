@@ -11,18 +11,20 @@ go tool cover -func=cover.out | grep server.go
 go test -race ./server/internal/network/...
 ```
 
+**执行顺序**：先完成单元 1（生产修复），再依次完成单元 2-6（测试）。
+
 ---
 
 ## 单元划分
 
-| 单元 | 内容 | 可独立提交 |
-|------|------|----------|
-| 单元 1 | 生产修复：`BroadcastToRoom` nil 检查 | ✅ |
-| 单元 2 | 测试基础设施：TestServer + helpers | ✅ |
-| 单元 3 | 连接与房间测试 | ✅ |
-| 单元 4 | 消息分发测试 | ✅ |
-| 单元 5 | 异常测试 | ✅ |
-| 单元 6 | 并发测试 | ✅ |
+| 单元 | 内容 | 前置依赖 |
+|------|------|---------|
+| 单元 1 | 生产修复：`BroadcastToRoom` nil 检查 | 无 |
+| 单元 2 | 测试基础设施 | 单元 1 |
+| 单元 3 | 连接与房间测试 | 单元 2 |
+| 单元 4 | 消息分发测试 | 单元 2 |
+| 单元 5 | 异常测试 | 单元 2 |
+| 单元 6 | 并发测试 | 单元 2 |
 
 ---
 
@@ -51,8 +53,8 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 
 ```go
 const (
-    readTimeout   = 2 * time.Second      // 单次读取超时
-    drainWindow   = 200 * time.Millisecond // drain 停止窗口
+    readTimeout   = 2 * time.Second       // 单次读取超时
+    drainWindow   = 200 * time.Millisecond // 连续静默窗口
     noMessageWait = 100 * time.Millisecond // 静默判定窗口
 )
 ```
@@ -75,27 +77,48 @@ func (s *TestServer) Close()
 
 ```go
 // 连接管理
-func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)  // 返回 (conn, playerID)
-func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)  // 返回 (conn, playerID, roomID)
+// Connect：建立连接，自动读取并丢弃 welcome，返回 (conn, playerID)
+func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
+
+// CreateRoom：创建房间，自动读取并丢弃 welcome/room_joined，返回 (conn, playerID, roomID)
+func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
+
+// JoinRoom：加入房间，自动读取并丢弃 welcome/room_joined，返回 (conn, playerID)
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
+
+// CloseConn：关闭连接
 func CloseConn(t *testing.T, conn *websocket.Conn)
 
 // 消息收发
-// Send 编码规则：构造 {"type":msgType,"data":data}，data 直接 JSON 编码
+// Send：编码为 {"type":msgType,"data":data}，data 直接 JSON 编码
 func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
-func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message  // 只读期望类型
-func RecvAll(t *testing.T, conn *websocket.Conn) []*Message  // 持续读取直到 drainWindow 无新消息
-func Drain(t *testing.T, conn *websocket.Conn)  // 丢弃所有消息直到 drainWindow 无新消息
-func NoMessage(t *testing.T, conn *websocket.Conn)  // 验证 noMessageWait 内无消息
 
-// 辅助
+// RecvType：读取一条消息，验证 type==wantType，否则 t.Fatalf
+func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
+
+// RecvAll：持续读取直到 drainWindow 内无新消息
+// 停止条件：连续 drainWindow 时间内无新消息到达
+func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
+
+// Drain：持续读取并丢弃，直到 drainWindow 内无新消息
+// 停止条件：连续 drainWindow 时间内无新消息到达
+func Drain(t *testing.T, conn *websocket.Conn)
+
+// NoMessage：等待 noMessageWait，若期间有消息则 t.Fatalf
+func NoMessage(t *testing.T, conn *websocket.Conn)
+
+// FillRoom：创建 count 个连接并加入房间
 func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
+
+// CountType：统计消息类型数量
 func CountType(msgs []*Message, msgType string) int
 ```
 
 ### 存活验证
 
-发送 `join_room{"name":"probe"}` 并收到 `room_joined`。
+**使用场景**：仅在连接未加入任何房间时使用。
+
+**操作**：发送 `join_room{"name":"probe"}` 并收到 `room_joined`。
 
 ---
 
@@ -106,6 +129,8 @@ func CountType(msgs []*Message, msgType string) int
 | 房间容量 | `room.MaxSize` | 10 |
 | 技能冷却 | `player.SkillCooldowns["heal"]` | 30s |
 | 射击冷却 | 代码常量 | 100ms |
+| 初始弹药 | `player.Ammo` | 30 |
+| 初始血量 | `player.Health` | 100 |
 
 ---
 
@@ -136,6 +161,10 @@ func CountType(msgs []*Message, msgType string) int
 ### TestWS_JoinRoom_Full
 - 前置：创建房间，`FillRoom(9)`（共 10 人）
 - 断言：第 11 人收到 `error` 包含 "full"
+
+### TestWS_JoinRoom_MissingName
+- 步骤：发送 `join_room{}`（无 name 字段）
+- 断言：收到 `room_joined`（name 为空字符串）
 
 ### TestWS_LeaveRoom
 - 前置：A、B 在同一房间
@@ -168,18 +197,33 @@ func CountType(msgs []*Message, msgType string) int
 | `emote` | `emote` | `emote` | 静默 | 零值广播 |
 | `ping` | `ping` | `ping` | 静默 | 零值广播 |
 
+### 特殊消息说明
+
+#### reload
+- **无房间**：正常执行，发送者收到 `reload`
+- **前置条件**：无（初始弹药 30，reload 后填充到 30）
+
+#### respawn
+- **无房间**：发送者收到 `respawn`，广播部分静默（`BroadcastToRoom(nil)` 被拦截）
+- **归类**：需要房间才能完成完整功能（广播给其他人）
+
+#### ping
+- **字段说明**：消息顶层 `type` 为 `"ping"`，payload 内也有 `type` 字段（表示 ping 类型如 "enemy"/"help"）
+- **断言**：验证 payload 内的 `type` 字段（data.type）
+
 ### 零值断言规则
 
 | 消息 | 零值时断言 |
 |------|-----------|
 | `player_moved` | `player_id` 存在，`position` 为 `{}` |
 | `player_shot` | `player_id` 存在，`position` 为 `null` |
+| `player_respawned` | `player_id` 存在，`position` 为零值 |
 | `team_changed` | `player_id` 存在，`team` 为 `""` |
 | `grenade_thrown` | `player_id` 存在，`type` 为 `""` |
 | `c4_planted` | `player_id` 存在，`position` 为 `{}` |
 | `emote` | `player_id` 存在，`emote_id` 为 `""` |
-| `ping` | `player_id` 存在，`type` 为 `""` |
-| `respawn` | `player_id` 存在，`health`=0，`ammo`=0 |
+| `ping` | `player_id` 存在，payload 内 `type` 为 `""` |
+| `respawn`（发送者） | `player_id` 存在，`health`=0，`ammo`=0 |
 
 ---
 
@@ -209,7 +253,7 @@ func CountType(msgs []*Message, msgType string) int
 | `move` | 是 | 其他人收到零值 `player_moved` |
 | `chat` | 是 | 静默 |
 | `shoot` | 是 | 其他人收到零值 `player_shot` |
-| `respawn` | 是 | 发送者收到零值 `respawn`，其他人收到 `player_respawned` |
+| `respawn` | 是 | 发送者收到零值 `respawn`，其他人收到零值 `player_respawned` |
 | `weapon_change` | 是 | 静默 |
 | `team_join` | 是 | 广播零值 `team_changed` |
 | `grenade_throw` | 是 | 广播零值 `grenade_thrown` |
@@ -240,32 +284,48 @@ func CountType(msgs []*Message, msgType string) int
 4. 等待 2s
 5. 每客户端 RecvAll
 6. 统计 chat 消息
-7. 每客户端存活验证
+7. 新连接存活验证
 ```
+
+**chat 回显说明**：`chat` 消息广播给全房间含发送者，所以每条 chat 会被 5 人收到。
+
+**统计口径**：
+- 理论值：5 客户端 × 5 条 × 5 接收者 = 125 条
+- 只统计 `type="chat"` 消息
+- 每客户端分别统计后汇总
 
 **断言**：
 - 无 panic、无死锁
-- 总 chat 数 >= 100（理论 125）
-- 每客户端至少收到 15 条
-- 存活验证通过
+- 总 chat 数 >= 100（理论 125，允许 20% 丢失）
+- 每客户端至少收到 15 条（理论 25）
+- 存活验证：新连接创建房间成功
 
 ---
 
-## 最小断言合同
+## 最小断言合同（完整）
 
 | 消息 | 必验字段 | 断言方式 |
 |------|----------|----------|
 | `room_joined` | `room_id`, `player_id` | room_id 非空 |
 | `player_joined` | `player_id` | 存在 |
 | `player_left` | `player_id` | 精确等于发送者ID |
-| `player_moved` | `player_id` | 存在 |
+| `player_moved` | `player_id`, `position` | position 为对象 |
 | `chat` | `player_id`, `message` | message 精确匹配 |
-| `player_shot` | `player_id` | 存在 |
-| `reload` | `ammo` | ammo > 0 |
+| `player_shot` | `player_id`, `ammo` | 存在 |
+| `reload` | `ammo`, `ammo_reserve` | ammo > 0 |
 | `respawn` | `health`, `ammo` | health=100, ammo>0 |
+| `player_respawned` | `player_id`, `position` | position 为对象 |
 | `weapon_changed` | `player_id`, `weapon` | weapon 精确匹配 |
+| `voice_start` | `player_id` | 存在 |
+| `voice_stop` | `player_id` | 存在 |
+| `voice_data` | `player_id`, `audio` | 存在 |
 | `team_changed` | `player_id`, `team` | team 精确匹配 |
+| `grenade_thrown` | `player_id`, `type`, `position` | type 精确匹配 |
+| `c4_planted` | `player_id`, `position` | position 为对象 |
+| `c4_defused` | `player_id` | 存在 |
 | `skill_used` | `player_id`, `skill_id` | skill_id 精确匹配 |
+| `emote` | `player_id`, `emote_id` | emote_id 精确匹配 |
+| `ping` | `player_id`, payload 内 `type`, `position` | type 精确匹配 |
 | `error` | `message` | 包含关键字 |
 
 ---
