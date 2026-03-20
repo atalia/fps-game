@@ -13,6 +13,8 @@ go test -race ./server/internal/network/...
 
 **执行顺序**：先完成单元 1（生产修复），再依次完成单元 2-6（测试）。
 
+**覆盖率可达性**：`server.go` 约 740 行，未测分支（upgrade 失败、pump 超时、ping 周期）占比 < 10%，90% 目标可达。
+
 ---
 
 ## 单元划分
@@ -30,6 +32,8 @@ go test -race ./server/internal/network/...
 
 ## 单元 1：生产修复
 
+**目标行为**：修复后 `BroadcastToRoom(nil, ...)` 静默返回，不 panic。
+
 ```go
 func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
     if r == nil {
@@ -38,6 +42,8 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
     // ... 原有逻辑
 }
 ```
+
+**respawn 无房间行为**：修复后，`respawn` 在无房间时发送者收到 `respawn`，广播部分被 nil 检查拦截（静默）。
 
 ---
 
@@ -59,6 +65,15 @@ const (
 )
 ```
 
+### JSON 断言口径
+
+| 术语 | Go 值 | JSON 编码 |
+|------|-------|----------|
+| `{}` | `map[string]interface{}{}` | `{}` |
+| `null` | `nil` | `null` |
+| 零值字符串 | `""` | `""` |
+| 零值数字 | `0` | `0` |
+
 ### TestServer 接口
 
 ```go
@@ -73,41 +88,58 @@ func NewTestServer(t *testing.T) *TestServer
 func (s *TestServer) Close()
 ```
 
-### Helper 函数
+### Helper 协议合同
 
 ```go
-// 连接管理
-// Connect：建立连接，自动读取并丢弃 welcome，返回 (conn, playerID)
+// Connect：建立 WebSocket 连接
+// 协议：读取 1 条 welcome 消息，验证 type=="welcome"，提取 playerID
+// 异常：若收到的不是 welcome，t.Fatalf
+// 返回：(conn, playerID)
 func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 
-// CreateRoom：创建房间，自动读取并丢弃 welcome/room_joined，返回 (conn, playerID, roomID)
+// CreateRoom：创建房间
+// 协议：读取 welcome + room_joined，验证类型，提取 playerID 和 roomID
+// 异常：若顺序不对或类型不对，t.Fatalf
+// 返回：(conn, playerID, roomID)
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 
-// JoinRoom：加入房间，自动读取并丢弃 welcome/room_joined，返回 (conn, playerID)
+// JoinRoom：加入已存在房间
+// 协议：读取 welcome + room_joined，验证类型
+// 异常：若顺序不对或类型不对，t.Fatalf
+// 返回：(conn, playerID)
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
 
 // CloseConn：关闭连接
 func CloseConn(t *testing.T, conn *websocket.Conn)
 
-// 消息收发
-// Send：编码为 {"type":msgType,"data":data}，data 直接 JSON 编码
+// Send：发送消息
+// 编码规则：构造 {"type":msgType,"data":data}
+// - 若 data 是 json.RawMessage，原样嵌入 data 字段（不二次编码）
+// - 否则 JSON 编码 data
 func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 
-// RecvType：读取一条消息，验证 type==wantType，否则 t.Fatalf
+// RecvType：读取期望类型的消息
+// 协议：读取 1 条消息，验证 type==wantType
+// 异常：若类型不匹配，t.Fatalf
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 
-// RecvAll：持续读取直到 drainWindow 内无新消息
+// RecvAll：读取所有消息
 // 停止条件：连续 drainWindow 时间内无新消息到达
+// 返回：所有收到的消息（按到达顺序）
 func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
 
-// Drain：持续读取并丢弃，直到 drainWindow 内无新消息
+// Drain：丢弃所有消息
 // 停止条件：连续 drainWindow 时间内无新消息到达
 func Drain(t *testing.T, conn *websocket.Conn)
 
-// NoMessage：等待 noMessageWait，若期间有消息则 t.Fatalf
+// NoMessage：验证静默
+// 协议：等待 noMessageWait，若期间有消息到达，t.Fatalf
 func NoMessage(t *testing.T, conn *websocket.Conn)
 
-// FillRoom：创建 count 个连接并加入房间
+// FillRoom：填满房间
+// 协议：创建 count 个连接，全部加入 roomID
+// 返回：所有连接（调用方负责关闭）
+// 异常：若任一加入失败，清理已建连接后 t.Fatalf
 func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 
 // CountType：统计消息类型数量
@@ -116,9 +148,9 @@ func CountType(msgs []*Message, msgType string) int
 
 ### 存活验证
 
-**使用场景**：仅在连接未加入任何房间时使用。
+**适用场景**：验证连接仍能正常通信。
 
-**操作**：发送 `join_room{"name":"probe"}` 并收到 `room_joined`。
+**操作**：新建连接，发送 `join_room{"name":"probe"}`，验证收到 `room_joined`。
 
 ---
 
@@ -174,6 +206,12 @@ func CountType(msgs []*Message, msgType string) int
 
 ## 单元 4：消息分发测试
 
+### 测试范围
+
+每个消息验证：
+1. 在房间内正常行为（发送者 + 其他人）
+2. 无房间行为（按规范表）
+
 ### 消息行为规范
 
 | 消息 | 发送者 | 其他人 | 无房间 | Payload非法 |
@@ -201,15 +239,36 @@ func CountType(msgs []*Message, msgType string) int
 
 #### reload
 - **无房间**：正常执行，发送者收到 `reload`
-- **前置条件**：无（初始弹药 30，reload 后填充到 30）
+- **有房间**：发送者收到 `reload`，其他人不收（断言不收到）
 
 #### respawn
 - **无房间**：发送者收到 `respawn`，广播部分静默（`BroadcastToRoom(nil)` 被拦截）
-- **归类**：需要房间才能完成完整功能（广播给其他人）
+- **归类**：需要房间才能完成完整功能
 
 #### ping
-- **字段说明**：消息顶层 `type` 为 `"ping"`，payload 内也有 `type` 字段（表示 ping 类型如 "enemy"/"help"）
+- **字段说明**：消息顶层 `type` 为 `"ping"`，payload 内也有 `type` 字段
 - **断言**：验证 payload 内的 `type` 字段（data.type）
+
+### 成功路径测试清单
+
+| 消息 | 测试名称 |
+|------|---------|
+| `move` | TestWS_Move_InRoom |
+| `chat` | TestWS_Chat_InRoom |
+| `shoot` | TestWS_Shoot_InRoom |
+| `reload` | TestWS_Reload_InRoom |
+| `respawn` | TestWS_Respawn_InRoom |
+| `weapon_change` | TestWS_WeaponChange_InRoom |
+| `voice_start` | TestWS_VoiceStart_InRoom |
+| `voice_stop` | TestWS_VoiceStop_InRoom |
+| `voice_data` | TestWS_VoiceData_InRoom |
+| `team_join` | TestWS_TeamJoin_InRoom |
+| `grenade_throw` | TestWS_GrenadeThrow_InRoom |
+| `c4_plant` | TestWS_C4Plant_InRoom |
+| `c4_defuse` | TestWS_C4Defuse_InRoom |
+| `skill_use` | TestWS_SkillUse_InRoom |
+| `emote` | TestWS_Emote_InRoom |
+| `ping` | TestWS_Ping_InRoom |
 
 ### 零值断言规则
 
@@ -217,7 +276,7 @@ func CountType(msgs []*Message, msgType string) int
 |------|-----------|
 | `player_moved` | `player_id` 存在，`position` 为 `{}` |
 | `player_shot` | `player_id` 存在，`position` 为 `null` |
-| `player_respawned` | `player_id` 存在，`position` 为零值 |
+| `player_respawned` | `player_id` 存在，`position` 为 `{}` |
 | `team_changed` | `player_id` 存在，`team` 为 `""` |
 | `grenade_thrown` | `player_id` 存在，`type` 为 `""` |
 | `c4_planted` | `player_id` 存在，`position` 为 `{}` |
@@ -236,7 +295,7 @@ func CountType(msgs []*Message, msgType string) int
 
 ### TestWS_Shoot_Cooldown
 - 前置：创建房间，第二人加入，Drain
-- 步骤：发送 `shoot`，等待 50ms，再发送 `shoot`
+- 步骤：发送 `shoot`，Drain，等待 50ms，发送 `shoot`
 - 断言：第二人只收到 1 次 `player_shot`
 
 ### TestWS_C4Defuse_NoC4
@@ -245,7 +304,9 @@ func CountType(msgs []*Message, msgType string) int
 
 ### TestWS_JSONParseFailure（表驱动）
 
-**payload**：`json.RawMessage("{invalid")`
+**输入构造**：`Send(conn, "move", json.RawMessage("{invalid"))`
+- `Send` 将 `json.RawMessage` 原样嵌入 data 字段
+- 顶层 `{"type":"move","data":{invalid}` 合法，data 内 `{invalid` 非法
 
 | Handler | 在房间内 | 预期 |
 |---------|---------|------|
@@ -276,18 +337,21 @@ func CountType(msgs []*Message, msgType string) int
 
 ### TestConcurrent_Broadcast
 
+**系统可靠性模型**：广播使用非阻塞发送（`select default`），缓冲区满时允许丢失。
+
 **时序**：
 ```
 1. 创建房间，5 客户端加入
 2. 全部 Drain
-3. 并发发送（每人 5 条 chat）
-4. 等待 2s
-5. 每客户端 RecvAll
-6. 统计 chat 消息
-7. 新连接存活验证
+3. 启动 5 个 goroutine，每人发送 5 条 chat
+4. 使用 sync.WaitGroup 等待所有发送完成
+5. 等待 2s
+6. 每客户端 RecvAll
+7. 统计 chat 消息
+8. 新建连接做存活验证
 ```
 
-**chat 回显说明**：`chat` 消息广播给全房间含发送者，所以每条 chat 会被 5 人收到。
+**chat 回显说明**：`chat` 消息广播给全房间含发送者，每条 chat 会被 5 人收到。
 
 **统计口径**：
 - 理论值：5 客户端 × 5 条 × 5 接收者 = 125 条
@@ -295,10 +359,13 @@ func CountType(msgs []*Message, msgType string) int
 - 每客户端分别统计后汇总
 
 **断言**：
-- 无 panic、无死锁
 - 总 chat 数 >= 100（理论 125，允许 20% 丢失）
 - 每客户端至少收到 15 条（理论 25）
 - 存活验证：新连接创建房间成功
+
+**不可验证项**：
+- "无 panic"：测试框架自动捕获
+- "无死锁"：超时后测试失败
 
 ---
 
@@ -332,11 +399,13 @@ func CountType(msgs []*Message, msgType string) int
 
 ## 不测范围
 
-| 内容 | 原因 |
-|------|------|
-| `ServeWS` upgrade 失败 | HTTP 错误分支 |
-| `readPump`/`writePump` 超时 | 需特殊客户端 |
-| Ping 周期 | 60s 太长 |
+| 内容 | 原因 | 影响评估 |
+|------|------|---------|
+| `ServeWS` upgrade 失败 | HTTP 错误分支 | < 5 行 |
+| `readPump`/`writePump` 超时 | 需特殊客户端 | < 10 行 |
+| Ping 周期 | 60s 太长 | < 5 行 |
+
+**总计未覆盖**：< 20 行，占比 < 3%，90% 目标可达。
 
 ---
 
@@ -357,7 +426,7 @@ func CountType(msgs []*Message, msgType string) int
 | 单元 1：生产修复 | 0.5h |
 | 单元 2：测试基础设施 | 0.5h |
 | 单元 3：连接与房间 | 0.5h |
-| 单元 4：消息分发 | 1h |
+| 单元 4：消息分发 | 1.5h |
 | 单元 5：异常测试 | 1h |
 | 单元 6：并发测试 | 0.5h |
-| **总计** | **4h** |
+| **总计** | **4.5h** |
