@@ -19,18 +19,18 @@
 | `Hub.Broadcast` | 有 | 维持 | |
 | `Hub.BroadcastToRoom` | 有 | 维持 | |
 
-### readPump/writePump 可测分支
+### readPump/writePump 测试映射
 
-| 分支 | 可测性 | 说明 |
-|------|--------|------|
-| 正常读取消息 | ✅ 可测 | 集成测试 |
-| 消息解析失败 | ✅ 可测 | 发送非法 JSON |
-| 连接关闭 | ✅ 可测 | 客户端断开 |
-| 正常写入消息 | ✅ 可测 | 广播消息 |
-| 批量写入 | ✅ 可测 | 发送多条消息 |
-| Ping 发送 | ✅ 可测 | 等待 ping 周期 |
-| `pongWait` 超时 | ❌ 不测 | 需禁用客户端自动 pong |
-| `writeWait` 超时 | ❌ 不测 | 需模拟慢客户端 |
+| 分支 | 测试用例 |
+|------|----------|
+| 正常读取消息 | `TestWS_MessageDispatch` |
+| 消息解析失败 | `TestWS_InvalidJSON` |
+| 连接关闭 | `TestWS_Disconnect_InRoom` |
+| 正常写入消息 | `TestWS_Broadcast_TwoClients` |
+| 批量写入 | `TestWS_HighVolume` |
+| Ping 发送 | `TestWS_KeepAlive` |
+| `pongWait` 超时 | ❌ 不测 |
+| `writeWait` 超时 | ❌ 不测 |
 
 **预期总覆盖率**：90%+
 
@@ -60,28 +60,20 @@ type TestServer struct {
 }
 
 // NewTestServer 创建测试服务器
-func NewTestServer(t *testing.T) *TestServer {
-    ts := &TestServer{
-        Hub:         NewHub(),
-        RoomManager: room.NewManager(10, 10),
-    }
-    go ts.Hub.Run()
-    // ... HTTP 服务器配置
-    return ts
-}
+func NewTestServer(t *testing.T) *TestServer
 
 // Close 关闭服务器
-// 注意：Hub goroutine 无法优雅退出，测试进程退出时清理
+// 契约：关闭 httptest.Server，Hub goroutine 会泄漏
 func (s *TestServer) Close()
 ```
 
 ### Helper 函数及消息消费契约
 
-| Helper | 消费的消息 | 返回值 | 状态变更 |
-|--------|-----------|--------|----------|
-| `Connect(ts)` | `welcome` | `conn, playerID` | 已注册到 Hub |
-| `CreateRoom(ts)` | `welcome`, `room_joined` | `conn, playerID, roomID` | 已加入房间 |
-| `JoinRoom(ts, roomID)` | `welcome`, `room_joined` | `conn, playerID` | 已加入房间 |
+| Helper | 消费的消息 | 返回值 | 副作用 |
+|--------|-----------|--------|--------|
+| `Connect(ts)` | `welcome` | `conn, playerID` | 注册到 Hub |
+| `CreateRoom(ts)` | `welcome`, `room_joined` | `conn, playerID, roomID` | 创建并加入房间 |
+| `JoinRoom(ts, roomID)` | `welcome`, `room_joined` | `conn, playerID` | 加入房间 |
 | `FillRoom(ts, roomID, n)` | 各自的 `welcome`, `room_joined` | `[]conn` | n 人加入房间 |
 
 ```go
@@ -91,64 +83,73 @@ const (
 )
 
 // Connect 连接并返回 playerID
-// 契约：消费 welcome 消息
 func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 
 // CreateRoom 创建房间并加入
-// 契约：消费 welcome + room_joined
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 
 // JoinRoom 加入已存在房间
-// 契约：消费 welcome + room_joined
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
+
+// FillRoom 填满房间
+func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 
 // CloseConn 关闭连接
 func CloseConn(t *testing.T, conn *websocket.Conn)
-```
 
-### 消息工具
-
-```go
 // Send 发送消息
 func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 
-// Recv 接收消息（带超时）
+// Recv 接收消息
 func Recv(t *testing.T, conn *websocket.Conn, timeout time.Duration) *Message
 
-// RecvType 接收并验证类型，返回消息
+// RecvType 接收并验证类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 
 // NoMessage 验证超时内无消息
 func NoMessage(t *testing.T, conn *websocket.Conn)
 
-// RecvAll 接收所有消息直到超时（用于并发测试）
+// RecvAll 接收所有消息直到超时
+// 契约：读到 noMsgTimeout 无消息为止
 func RecvAll(t *testing.T, conn *websocket.Conn, timeout time.Duration) []*Message
 ```
 
 ---
 
-## 消息类型矩阵
+## 消息类型矩阵（基于代码分析）
 
-| 消息类型 | 需要加入房间 | 发送者收到 | 其他玩家收到 | 验证内容 |
-|----------|-------------|-----------|-------------|----------|
-| `join_room` | 否 | `room_joined` | `player_joined` | 房间 ID、玩家列表 |
-| `leave_room` | 是 | 无 | `player_left` | player_id |
-| `move` | 是 | 无 | `player_moved` | 坐标、旋转 |
-| `chat` | 是 | 无 | `chat` | 消息内容 |
-| `shoot` | 是 | 无 | `player_shot` | 位置、弹药 |
-| `reload` | 是 | `reload` | 无 | 弹药值 |
-| `respawn` | 是 | `respawn` | `player_respawned` | 位置、血量 |
-| `weapon_change` | 是 | 无 | `weapon_changed` | 武器类型 |
-| `voice_start` | 是 | 无 | `voice_start` | player_id |
-| `voice_stop` | 是 | 无 | `voice_stop` | player_id |
-| `voice_data` | 是 | 无 | `voice_data` | audio 数据 |
-| `team_join` | 是 | 无 | `team_changed` | 队伍 |
-| `grenade_throw` | 是 | 无 | `grenade_thrown` | 类型、位置、速度 |
-| `c4_plant` | 是 | 无 | `c4_planted` | 位置 |
-| `c4_defuse` | 是 | 无 | `c4_defused` | player_id |
-| `skill_use` | 是 | 无 | `skill_used` | 技能 ID |
-| `emote` | 是 | 无 | `emote` | 表情 ID |
-| `ping` | 是 | 无 | `ping` | 位置、类型 |
+| 消息类型 | 需要房间 | excludeID | 发送者收到 | 其他玩家收到 |
+|----------|---------|-----------|-----------|-------------|
+| `join_room` | 否 | `c.Player.ID` | ❌ | ✅ `player_joined` |
+| `leave_room` | 是 | `c.Player.ID` | ❌ | ✅ `player_left` |
+| `move` | 是 | `c.Player.ID` | ❌ | ✅ `player_moved` |
+| `chat` | 是 | `""` | ✅ | ✅ |
+| `shoot` | 是 | `c.Player.ID` | ❌ | ✅ `player_shot` |
+| `reload` | 是 | N/A | ✅ 直接 Send | ❌ |
+| `respawn` | 是 | `c.Player.ID` | ✅ 直接 Send | ✅ `player_respawned` |
+| `weapon_change` | 是 | `""` | ✅ | ✅ |
+| `voice_start` | 是 | `c.Player.ID` | ❌ | ✅ |
+| `voice_stop` | 是 | `c.Player.ID` | ❌ | ✅ |
+| `voice_data` | 是 | `c.Player.ID` | ❌ | ✅ |
+| `team_join` | 是 | `""` | ✅ | ✅ |
+| `grenade_throw` | 是 | `""` | ✅ | ✅ |
+| `c4_plant` | 是 | `""` | ✅ | ✅ |
+| `c4_defuse` | 是 | `""` | ✅ | ✅ |
+| `skill_use` | 是 | `""` | ✅ | ✅ |
+| `emote` | 是 | `""` | ✅ | ✅ |
+| `ping` | 是 | `""` | ✅ | ✅ |
+
+**说明**：
+- `excludeID == c.Player.ID`：发送者不收到广播
+- `excludeID == ""`：发送者也收到广播
+- 直接 `Send`：只发给发送者
+
+### 错误分支
+
+| 消息类型 | 错误条件 | 发送者收到 |
+|----------|---------|-----------|
+| `join_room` | 房间满 | ✅ `error` "Room is full" |
+| `skill_use` | 技能冷却中 | ✅ `error` "Skill on cooldown" |
 
 ---
 
@@ -208,14 +209,23 @@ func RecvAll(t *testing.T, conn *websocket.Conn, timeout time.Duration) []*Messa
 
 ```go
 func TestWS_MessageDispatch(t *testing.T) {
-    // 所有消息类型的矩阵已在上方定义
+    // 根据消息矩阵验证每种消息类型
     // 测试逻辑：
     // 1. A、B 加入同一房间
     // 2. A 发送消息
     // 3. 根据矩阵验证：
-    //    - 如果"发送者收到"，A 应收到对应类型
-    //    - 如果"其他玩家收到"，B 应收到对应类型
+    //    - 如果"发送者收到"，验证 A 收到
+    //    - 如果"其他玩家收到"，验证 B 收到
 }
+```
+
+#### TestWS_SkillOnCooldown
+```
+前置：A 在房间内
+步骤：
+  1. A 发送 skill_use
+  2. A 立即再次发送 skill_use
+断言：第二次收到 error "Skill on cooldown"
 ```
 
 ### 4. 异常输入
@@ -229,7 +239,7 @@ func TestWS_MessageDispatch(t *testing.T) {
   3. A 发送正常消息（如 ping）
 断言：
   - 步骤 2 无消息
-  - 步骤 3 能正常处理（连接仍存活）
+  - 步骤 3 能正常处理
 ```
 
 #### TestWS_UnknownType
@@ -270,37 +280,37 @@ func TestWS_MessageDispatch(t *testing.T) {
   1. 每个客户端发送 5 条 chat
   2. 等待 2 秒收集所有消息
 断言：
-  - 每个客户端收到 20 条 chat（其他 4 人 * 5 条）
-  - 无自己发送的消息
+  - 每个客户端收到 25 条 chat（5 人 * 5 条，包含自己）
 ```
 
 #### TestConcurrent_Disconnect
 ```
-前置：10 个客户端加入同一房间
+前置：10 个客户端加入同一房间，编号 0-9
 步骤：
-  1. 随机关闭 5 个连接
+  1. 关闭客户端 0, 2, 4, 6, 8（固定编号）
   2. 剩余 5 个互相发消息
 断言：
   - 无崩溃
   - 消息正常收发
 ```
 
----
+### 6. writePump 分支
 
-## 成功标准
+#### TestWS_HighVolume
+```
+前置：A、B 在同一房间
+步骤：A 快速发送 100 条 chat
+断言：
+  - 连接不断开
+  - B 收到消息（允许部分丢失）
+```
 
-| 指标 | 目标 | 说明 |
-|------|------|------|
-| 整体覆盖率 | ≥ 90% | |
-| 单元测试 | 100% 通过 | |
-| 集成测试 | 100% 通过 | |
-| 并发测试 | 100% 通过 | 无死锁、无崩溃 |
-| 竞态检测 | 基本通过 | 排除 Hub goroutine 泄漏影响 |
-
-**竞态检测说明**：
-- Hub goroutine 泄漏可能导致 `-race` 报告
-- 解决方案：每个测试独立进程，或忽略残留 goroutine 的竞态报告
-- 未来改进：为 Hub 添加 stop 机制（不在本设计范围）
+#### TestWS_KeepAlive
+```
+前置：A 已连接
+步骤：等待 5 秒（超过 pingPeriod）
+断言：连接仍可用
+```
 
 ---
 
@@ -309,15 +319,26 @@ func TestWS_MessageDispatch(t *testing.T) {
 **现状**：`Hub.Run()` 是无限循环，无 stop 机制。
 
 **接受策略**：
-1. 每个测试创建独立 Hub
-2. 测试结束时 Hub goroutine 继续运行
-3. 依赖测试进程退出清理
-4. 不共享 Hub 状态
+- 每个测试创建独立 Hub
+- 测试结束时 Hub goroutine 继续运行
+- 依赖测试进程退出清理
 
-**影响**：
-- 并发测试仍可靠（独立 Hub）
-- `-race` 可能报告残留 goroutine
-- 生产代码无需修改
+**竞态检测**：
+- 默认运行 `go test -race`
+- 如果残留 goroutine 导致警告，记录但不阻塞
+- 验收标准：无确定性 panic/死锁
+
+---
+
+## 成功标准
+
+| 指标 | 目标 |
+|------|------|
+| 整体覆盖率 | ≥ 90% |
+| 单元测试 | 100% 通过 |
+| 集成测试 | 100% 通过 |
+| 并发测试 | 100% 通过（无死锁） |
+| 竞态检测 | 无确定性 panic |
 
 ---
 
