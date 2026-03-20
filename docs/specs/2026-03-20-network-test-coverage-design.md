@@ -4,23 +4,32 @@
 
 将 `server/internal/network` 包的测试覆盖率从 33.9% 提升到 90%+。
 
-## 当前可测性评估
+## 现状分析
 
-### 现状分析
+### 当前覆盖率基线
 
-`server.go` 当前直接依赖 `*websocket.Conn` 具体类型，未提取接口。这意味着：
+| 函数/路径 | 当前覆盖 | 说明 |
+|-----------|----------|------|
+| `Hub.Run()` | 部分 | 注册/注销有测试，循环体未完全覆盖 |
+| `Hub.Broadcast()` | 有 | `TestHub_Broadcast_Empty` |
+| `Hub.BroadcastToRoom()` | 有 | `TestHub_BroadcastToRoom_Empty` |
+| `Hub.GetClient()` | 有 | `TestHub_GetClient_NotFound` |
+| `ServeWS()` | 无 | 需要集成测试 |
+| `HandleConnection()` | 无 | 需要集成测试 |
+| `readPump()` | 无 | 需要集成测试 |
+| `writePump()` | 无 | 需要集成测试 |
+| `handleMessage()` | 部分 | 各 handler 有单测，分发逻辑未覆盖 |
+| 各 `handle*` 函数 | 有 | 现有单测覆盖 |
 
-1. **可独立测试的部分**：所有 `handle*` 函数、`Hub` 逻辑、`Message` 序列化
-2. **需要真实连接的部分**：`readPump`、`writePump`、`ServeWS`
-3. **是否需要修改生产代码**：否，采用真实 WebSocket 测试覆盖 IO 路径
+### 新增测试预期覆盖
 
-### 测试策略
-
-| 层次 | 方法 | 修改生产代码 |
-|------|------|-------------|
-| Handler 单元测试 | 直接调用 handle* 函数 | 否 |
-| 集成测试 | 真实 WebSocket 连接 | 否 |
-| 并发测试 | 真实 WebSocket 连接 | 否 |
+| 测试 | 预期覆盖函数/路径 |
+|------|------------------|
+| 连接测试 | `ServeWS`, `HandleConnection`, `readPump`, `writePump` |
+| 房间测试 | `handleJoinRoom`, `handleLeaveRoom` 的完整路径 |
+| 广播测试 | `Broadcast`, `BroadcastToRoom` 的真实连接路径 |
+| 异常测试 | 错误处理分支 |
+| 并发测试 | 并发安全路径 |
 
 ---
 
@@ -28,43 +37,24 @@
 
 ### 测试边界
 
-**本设计测试范围**：网络消息分发层
+**网络层职责**：消息分发与连接管理
 
 | 测试重点 | 说明 |
 |----------|------|
-| 消息是否正确分发 | 输入 X 类型消息，触发正确的 handler |
-| 消息是否正确广播 | 发送者之外的其他客户端收到消息 |
-| 连接生命周期 | 建立、注册、注销、断线清理 |
-| 异常输入处理 | 无效 JSON、未知类型、非法参数 |
+| 消息分发 | 输入 X 类型 → 触发正确 handler |
+| 消息广播 | 发送者之外的其他客户端收到消息 |
+| 连接管理 | 建立、注册、注销、断线清理 |
+| 异常处理 | 无效输入不崩溃 |
 
-**状态变更验证**：仅作为副作用确认，不深入验证业务语义
+**不测试的业务逻辑**（由 game/room/player 包负责）：
+- 武器伤害计算
+- 命中检测
+- 技能效果
+- C4 爆炸范围
 
-- ✅ 验证：`join_room` 后 `room_joined` 响应包含正确房间 ID
-- ✅ 验证：`shoot` 后 `player_shot` 广播到其他玩家
-- ❌ 不验证：武器伤害计算、命中检测（由 game 包负责）
-
-### 消息类型覆盖
-
-| 消息类型 | 测试方式 | 说明 |
-|----------|----------|------|
-| `join_room` | 集成测试 | 核心流程 |
-| `leave_room` | 集成测试 | 核心流程 |
-| `move` | 集成测试 | 核心流程 |
-| `chat` | 集成测试 | 核心流程 |
-| `shoot` | 集成测试 | 核心流程 |
-| `reload` | 集成测试 | 核心流程 |
-| `respawn` | 现有单测 | `TestClient_handleRespawn` 已覆盖 |
-| `weapon_change` | 现有单测 | `TestClient_handleWeaponChange` 已覆盖 |
-| `voice_start/stop` | 现有单测 | `TestClient_handleVoiceStart/Stop` 已覆盖 |
-| `voice_data` | 现有单测 | 无，但逻辑简单（直接转发） |
-| `team_join` | 现有单测 | `TestClient_handleTeamJoin` 已覆盖 |
-| `grenade_throw` | 现有单测 | `TestClient_handleGrenadeThrow` 已覆盖 |
-| `c4_plant/defuse` | 现有单测 | `TestClient_handleC4Plant/Defuse` 已覆盖 |
-| `skill_use` | 现有单测 | `TestClient_handleSkillUse` 已覆盖 |
-| `emote` | 现有单测 | `TestClient_handleEmote` 已覆盖 |
-| `ping` | 现有单测 | `TestClient_handlePing` 已覆盖 |
-
-**现有单测已覆盖大部分 handler**，集成测试重点补充 WebSocket 连接、广播、断线清理等需要真实连接的场景。
+**允许验证的业务副作用**（作为网络分发的确认）：
+- 房间满员时拒绝加入（这是网络层的路由逻辑）
+- 未在房间时忽略 move/shoot（这是前置条件检查）
 
 ---
 
@@ -80,11 +70,9 @@ server/internal/network/
 
 ---
 
-## 模块设计
+## 测试工具设计
 
-### 1. 集成测试 (`server_ws_test.go`)
-
-#### 测试工具
+### TestServer
 
 ```go
 // TestServer 测试服务器
@@ -93,23 +81,17 @@ type TestServer struct {
     Hub         *Hub
     RoomManager *room.Manager
     URL         string
-    done        chan struct{} // Hub.Run() 退出信号
 }
 
 // NewTestServer 创建测试服务器
-// 注意：Hub.Run() 是无限循环，无法优雅退出
-// 测试结束时通过关闭 Server 来中断连接
 func NewTestServer(t *testing.T) *TestServer {
     ts := &TestServer{
         Hub:         NewHub(),
-        RoomManager: room.NewManager(10, 10),
-        done:        make(chan struct{}),
+        RoomManager: room.NewManager(10, 10), // max 10 rooms, 10 players per room
     }
     
-    // 启动 Hub（后台 goroutine，无法等待退出）
     go ts.Hub.Run()
     
-    // 创建测试 HTTP 服务器
     mux := http.NewServeMux()
     mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
         ServeWS(ts.Hub, ts.RoomManager, nil, w, r)
@@ -121,187 +103,348 @@ func NewTestServer(t *testing.T) *TestServer {
 }
 
 // Close 关闭服务器
-// 注意：Hub goroutine 会泄漏，但测试进程退出时会清理
 func (s *TestServer) Close() {
     s.Server.Close()
 }
 
-// NewWSClient 创建 WebSocket 客户端连接
-func (s *TestServer) NewWSClient(t *testing.T) *websocket.Conn
+// NewClient 创建 WebSocket 客户端并返回连接和 player_id
+func (s *TestServer) NewClient(t *testing.T) (*websocket.Conn, string)
 
-// CloseClient 关闭客户端
-func CloseClient(t *testing.T, conn *websocket.Conn)
+// JoinRoom 创建客户端并加入房间，返回连接和房间 ID
+func (s *TestServer) JoinRoom(t *testing.T, roomID string) (*websocket.Conn, string, string)
+```
 
-// ReadMessageTimeout 读取消息（带超时）
-func ReadMessageTimeout(t *testing.T, conn *websocket.Conn, timeout time.Duration) (*Message, error)
+### 断言工具
+
+```go
+// 默认超时
+const defaultTimeout = 2 * time.Second
+
+// AssertMessageType 断言收到指定类型消息
+func AssertMessageType(t *testing.T, conn *websocket.Conn, wantType string) *Message
+
+// AssertNoMessage 断言超时内无消息（默认 500ms）
+func AssertNoMessage(t *testing.T, conn *websocket.Conn)
 
 // SendMessage 发送消息
 func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 ```
 
-#### 消息断言模板
+---
 
-```go
-// AssertMessageType 验证消息类型
-func AssertMessageType(t *testing.T, conn *websocket.Conn, wantType string, timeout time.Duration) *Message
+## 测试场景
 
-// AssertMessageContains 验证消息包含指定字段
-func AssertMessageContains(t *testing.T, conn *websocket.Conn, wantType string, fields map[string]interface{}, timeout time.Duration)
+### 1. 连接生命周期
 
-// AssertNoMessage 验证超时内无消息
-func AssertNoMessage(t *testing.T, conn *websocket.Conn, timeout time.Duration)
+#### TestWS_Connect
+
+```
+前置条件：无
+输入：建立 WebSocket 连接
+预期：
+  - 收到 welcome 消息
+  - 消息包含 player_id 字段
+断言：
+  - msg.Type == "welcome"
+  - msg.Data.player_id 非空
 ```
 
-#### 测试场景
+#### TestWS_Disconnect_WithRoom
 
-##### 连接生命周期
+```
+前置条件：
+  - 客户端 A、B 都加入同一房间
+输入：客户端 A 关闭连接
+预期：
+  - 客户端 B 收到 player_left 消息
+断言：
+  - 客户端 B 收到 type == "player_left"
+  - player_id == A 的 ID
+```
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_Connect` | 建立 WebSocket 连接 | `welcome` 消息含 `player_id` | 读取消息，断言 type==welcome |
-| `TestWS_Disconnect` | 客户端关闭连接 | 无（无法直接观测 Hub 内部状态） | 不崩溃即可 |
-| `TestWS_Disconnect_InRoom` | 客户端在房间内关闭连接 | 其他客户端收到 `player_left` | 用另一个客户端验证 |
+### 2. 房间操作
 
-##### 房间操作
+#### TestWS_JoinRoom_New
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_JoinRoom_New` | `join_room` 无 room_id | `room_joined` 含房间 ID | 断言 type==room_joined |
-| `TestWS_JoinRoom_Existing` | `join_room` 指定 room_id | `room_joined` 含指定 ID | 断言 room_id 正确 |
-| `TestWS_JoinRoom_Full` | 加入已满房间 | `error` 消息 | 断言 type==error |
-| `TestWS_LeaveRoom` | `leave_room` | 其他玩家收到 `player_left` | 用另一个客户端验证 |
+```
+前置条件：无
+输入：发送 join_room（无 room_id）
+预期：
+  - 收到 room_joined 消息
+  - 消息包含新生成的 room_id
+断言：
+  - msg.Type == "room_joined"
+  - msg.Data.room_id 非空
+```
 
-##### 消息广播
+#### TestWS_JoinRoom_Existing
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_Broadcast_TwoClients` | 2 客户端，1 个发 `chat` | 另 1 个收到 | 断言消息内容 |
-| `TestWS_Broadcast_TenClients` | 10 客户端，1 个发 `chat` | 其他 9 个收到 | 计数验证 |
-| `TestWS_Broadcast_ExcludeSender` | `shoot` 广播 | 发送者不收到自己消息 | 发送者无消息 |
+```
+前置条件：
+  - 客户端 A 创建房间，获取 room_id
+输入：客户端 B 使用该 room_id 加入
+预期：
+  - 客户端 B 收到 room_joined
+  - room_id 与 A 的房间相同
+  - 客户端 A 收到 player_joined
+断言：
+  - B 收到 msg.Data.room_id == A 的 room_id
+  - A 收到 msg.Type == "player_joined"
+```
 
-##### 核心消息类型（验证分发）
+#### TestWS_JoinRoom_Full
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_Move` | `move` x=10, y=5, z=20 | 其他玩家收到 `player_moved` | 断言坐标 |
-| `TestWS_Chat` | `chat` message="hello" | 房间所有玩家收到 | 断言消息内容 |
-| `TestWS_Shoot` | `shoot` 含位置 | 其他玩家收到 `player_shot` | 断言 type |
-| `TestWS_Reload` | `reload` | 收到 `reload` 响应 | 断言 type |
+```
+前置条件：
+  - 创建房间
+  - 用 10 个客户端填满房间（MaxSize=10）
+输入：第 11 个客户端尝试加入
+预期：
+  - 收到 error 消息
+断言：
+  - msg.Type == "error"
+  - msg.Data.message == "Room is full"
+```
 
-##### 异常输入
+#### TestWS_LeaveRoom
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_InvalidJSON` | `{"invalid` | 无响应，无崩溃 | 等待 500ms 无消息 |
-| `TestWS_UnknownType` | `{"type":"unknown"}` | 无响应，无崩溃 | 等待 500ms 无消息 |
-| `TestWS_Move_NotInRoom` | `move`（未加入房间） | 无响应，无崩溃 | 等待 500ms 无消息 |
-| `TestWS_Shoot_NotInRoom` | `shoot`（未加入房间） | 无响应，无崩溃 | 等待 500ms 无消息 |
-| `TestWS_JoinRoom_MissingName` | `join_room` 无 name | 使用默认值或忽略 | 取决于当前实现，先记录行为 |
+```
+前置条件：
+  - 客户端 A、B 都加入同一房间
+输入：客户端 A 发送 leave_room
+预期：
+  - 客户端 B 收到 player_left
+断言：
+  - B 收到 msg.Type == "player_left"
+```
 
-##### 连接稳定性
+### 3. 消息广播
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_KeepAlive` | 连接保持 5 秒 | 连接仍然可用 | 5 秒后发送消息成功 |
+#### TestWS_Broadcast_TwoClients
 
-**注意**：Ping/Pong 心跳由 gorilla/websocket 自动处理，无法在测试层直接观测。改用连接稳定性测试间接验证。
+```
+前置条件：
+  - 客户端 A、B 加入同一房间
+输入：A 发送 chat {"message": "hello"}
+预期：
+  - B 收到 chat 消息
+  - A 不收到自己的消息
+断言：
+  - B 收到 msg.Type == "chat"
+  - B 收到 msg.Data.message == "hello"
+  - A 在 500ms 内无消息
+```
 
-##### 缓冲区
+#### TestWS_Broadcast_TenClients
 
-| 测试 | 输入 | 预期输出 | 验证方式 |
-|------|------|----------|----------|
-| `TestWS_HighVolume` | 快速发送 100 条消息 | 连接不断开 | 最后一条消息后仍能收到响应 |
+```
+前置条件：
+  - 10 个客户端加入同一房间
+输入：客户端 1 发送 chat
+预期：
+  - 其他 9 个客户端收到消息
+断言：
+  - 9 个客户端各收到 1 条 chat 消息
+```
 
-**注意**：由于 `writePump` 会持续消费，难以稳定触发缓冲区满。此测试验证高负载下连接稳定。
+### 4. 核心消息分发
+
+#### TestWS_Move
+
+```
+前置条件：
+  - 客户端 A、B 加入同一房间
+输入：A 发送 move {"x":10,"y":5,"z":20,"rotation":1.57}
+预期：
+  - B 收到 player_moved
+断言：
+  - msg.Type == "player_moved"
+  - msg.Data.position.x == 10
+```
+
+#### TestWS_Chat
+
+```
+前置条件：
+  - 客户端 A、B 加入同一房间
+输入：A 发送 chat {"message":"hello"}
+预期：
+  - B 收到 chat
+断言：
+  - msg.Type == "chat"
+  - msg.Data.message == "hello"
+```
+
+#### TestWS_Shoot
+
+```
+前置条件：
+  - 客户端 A、B 加入同一房间
+输入：A 发送 shoot {"position":{"x":0,"y":0,"z":0},"rotation":0}
+预期：
+  - B 收到 player_shot
+断言：
+  - msg.Type == "player_shot"
+```
+
+#### TestWS_Reload
+
+```
+前置条件：
+  - 客户端 A 加入房间
+输入：A 发送 reload
+预期：
+  - A 收到 reload 响应
+断言：
+  - msg.Type == "reload"
+  - msg.Data.ammo == 30
+```
+
+#### TestWS_VoiceData
+
+```
+前置条件：
+  - 客户端 A、B 加入同一房间
+输入：A 发送 voice_data {"audio":"base64..."}
+预期：
+  - B 收到 voice_data
+断言：
+  - msg.Type == "voice_data"
+  - msg.Data.player_id == A 的 ID
+```
+
+### 5. 异常输入
+
+#### TestWS_InvalidJSON
+
+```
+前置条件：客户端已连接
+输入：发送 '{"invalid'
+预期：无响应，连接保持
+断言：
+  - 500ms 内无消息
+  - 后续消息仍可正常收发
+```
+
+#### TestWS_UnknownType
+
+```
+前置条件：客户端已连接
+输入：发送 {"type":"unknown","data":{}}
+预期：无响应，连接保持
+断言：
+  - 500ms 内无消息
+```
+
+#### TestWS_Move_NotInRoom
+
+```
+前置条件：客户端已连接但未加入房间
+输入：发送 move
+预期：无响应，连接保持
+断言：
+  - 500ms 内无消息
+```
+
+#### TestWS_JoinRoom_MissingName
+
+```
+前置条件：无
+输入：发送 join_room 无 name 字段
+预期：使用空字符串作为 name（当前实现行为）
+断言：
+  - 收到 room_joined
+  - 后续 player_joined 消息中 name 为空
+```
+
+### 6. 并发测试
+
+#### TestConcurrent_Connect10
+
+```
+前置条件：无
+输入：10 个客户端同时连接
+预期：全部收到 welcome
+断言：
+  - 10 个客户端各收到 1 条 welcome
+```
+
+#### TestConcurrent_JoinRoom10
+
+```
+前置条件：无
+输入：10 个客户端同时 join_room（无 room_id）
+预期：
+  - 全部成功加入（可能在不同房间）
+断言：
+  - 每个客户端收到 room_joined
+```
+
+#### TestConcurrent_Chat10
+
+```
+前置条件：
+  - 10 个客户端加入同一房间
+输入：每个客户端各发 10 条 chat
+预期：
+  - 无崩溃、无死锁
+  - 连接仍可通信
+断言：
+  - 所有发送完成
+  - 之后发送一条消息能收到响应
+```
+
+#### TestConcurrent_Disconnect5
+
+```
+前置条件：
+  - 10 个客户端加入同一房间
+输入：随机断开 5 个客户端
+预期：
+  - 剩余 5 个仍能正常通信
+断言：
+  - 剩余客户端能发送并收到消息
+```
 
 ---
 
-### 2. 并发测试 (`server_ws_test.go` 中)
+## 未覆盖代码说明
 
-并发测试与集成测试放同一文件，便于共享工具函数。
-
-#### 测试场景
-
-| 测试 | 参数 | 验证方式 |
-|------|------|----------|
-| `TestConcurrent_Connect10` | 10 客户端同时连接 | 全部收到 `welcome` |
-| `TestConcurrent_JoinRoom10` | 10 客户端同时加入同一房间 | 全部成功（房间未满） |
-| `TestConcurrent_Chat10` | 10 客户端各发 10 条 `chat` | 消息被广播，无崩溃 |
-| `TestConcurrent_Disconnect5` | 10 客户端，随机断开 5 个 | 剩余 5 个仍能通信 |
-
-**注意**：
-- 广播允许在缓冲区满时丢弃消息（`default: // 跳过`）
-- 测试不要求零丢失，只验证无死锁、无崩溃
-
-#### 竞态检测
-
-```bash
-go test -race ./server/internal/network/
-```
-
----
-
-### 3. 未覆盖代码说明 (`KNOWN_GAPS.md`)
-
-记录无法或不需要测试的代码路径。
+创建 `KNOWN_GAPS.md`：
 
 ```markdown
 # 网络层测试已知缺口
 
 ## 超时分支
-- `readPump` 中的 `pongWait` 超时：需要禁用客户端自动 Pong，难以实现
-- `writePump` 中的 `writeWait` 超时：需要模拟慢客户端，耗时且不稳定
+- `readPump` 中的 `pongWait` 超时：需要禁用客户端自动 Pong
+- `writePump` 中的 `writeWait` 超时：需要模拟慢客户端
 
 ## 极端错误路径
-- `websocket.CloseError` 处理：需要注入底层错误
-- `json.Marshal` 失败：理论上不可能（所有数据都是可序列化的）
+- `websocket.CloseError` 特定错误码处理
+- `json.Marshal` 失败（理论上不可能）
 
-## 心跳机制
-- Ping/Pong 完整流程：由 gorilla/websocket 库自动处理
+## 心跳完整流程
+- Ping/Pong 由 gorilla/websocket 库自动处理
 
 ## 原因
-这些路径属于防御性代码，在实际运行中极少触发。如需覆盖，需要：
-1. 修改生产代码（添加接口或依赖注入）
-2. 编写复杂的 mock 基础设施
+这些路径属于防御性代码，实际极少触发。如需覆盖需要：
+1. 修改生产代码（添加接口/依赖注入）
+2. 编写复杂 mock 基础设施
 
 当前 ROI 不高，留待后续迭代。
 ```
 
 ---
 
-## 测试隔离与清理
-
-### 清理策略
-
-```go
-func TestWS_Example(t *testing.T) {
-    ts := NewTestServer(t)
-    defer ts.Close() // 关闭 HTTP 服务器
-    
-    client := ts.NewWSClient(t)
-    defer client.Close() // 关闭 WebSocket 连接
-    
-    // 测试代码...
-}
-```
-
-### 已知限制
-
-1. **Hub goroutine 泄漏**：`Hub.Run()` 是无限循环，测试结束时 goroutine 不会退出。这是可接受的，因为测试进程退出时会清理所有资源。
-
-2. **测试串扰风险**：每个测试创建独立 `TestServer`，不共享 Hub 或 RoomManager，避免串扰。
-
----
-
 ## 成功标准
 
-| 指标 | 目标 | 备注 |
-|------|------|------|
-| 整体覆盖率 | ≥ 90% | 允许 10% 未覆盖（见 KNOWN_GAPS.md） |
-| 单元测试 | 100% 通过 | |
-| 集成测试 | 100% 通过 | |
-| 并发测试 | 100% 通过 | 无死锁、无崩溃 |
-| 竞态检测 | 无警告 | `go test -race` |
+| 指标 | 目标 |
+|------|------|
+| 整体覆盖率 | ≥ 90% |
+| 单元测试 | 100% 通过 |
+| 集成测试 | 100% 通过 |
+| 并发测试 | 100% 通过 |
+| 竞态检测 | 无警告 |
 
 ---
 
@@ -309,9 +452,9 @@ func TestWS_Example(t *testing.T) {
 
 | 风险 | 缓解措施 |
 |------|----------|
-| WebSocket 测试不稳定 | 使用确定性超时、共享工具函数 |
-| Hub goroutine 泄漏 | 每个测试独立进程，退出时自动清理 |
-| 覆盖率未达标 | 记录到 KNOWN_GAPS.md，后续迭代补充 |
+| WebSocket 测试不稳定 | 确定性超时、共享工具函数 |
+| Hub goroutine 泄漏 | 测试进程退出时自动清理 |
+| 覆盖率未达标 | 记录到 KNOWN_GAPS.md |
 
 ---
 
@@ -323,13 +466,5 @@ func TestWS_Example(t *testing.T) {
 | 连接/房间测试 | 1 小时 |
 | 消息/异常测试 | 1 小时 |
 | 并发测试 | 1 小时 |
-| 调试与覆盖率调优 | 1 小时 |
+| 调试与覆盖率 | 1 小时 |
 | **总计** | **5 小时** |
-
----
-
-## 参考资料
-
-- [gorilla/websocket 测试示例](https://github.com/gorilla/websocket/blob/main/client_test.go)
-- [Go 测试最佳实践](https://go.dev/blog/testing)
-- 项目现有测试：`server/internal/game/game_test.go`
