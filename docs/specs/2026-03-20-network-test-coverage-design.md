@@ -11,15 +11,24 @@ go tool cover -func=cover.out | grep server.go
 go test -race ./server/internal/network/...
 ```
 
-**测试风格**：黑盒 WebSocket 测试，不直接操作 Hub/RoomManager 内部状态。
+---
+
+## 范围定义
+
+**本 spec 包含**：
+1. 生产修复：`BroadcastToRoom` nil 检查
+2. 测试代码实现
+
+**测试风格**：黑盒 WebSocket 测试。
+
+**黑盒规则**：
+- `TestServer.Hub` 和 `TestServer.RoomManager` 仅用于服务器初始化
+- **禁止**在测试中读取或修改 Hub/RoomManager 状态
+- 所有断言通过 WebSocket 消息完成
 
 ---
 
-## 前置依赖
-
-**假设**：`BroadcastToRoom(nil, ...)` 的 nil 检查已修复。
-
-如未修复，需先执行以下生产修复：
+## 生产修复
 
 ```go
 func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
@@ -32,80 +41,139 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 
 ---
 
+## 测试前置状态来源
+
+| 状态 | 来源 | 值 |
+|------|------|---|
+| 房间容量 | `room.MaxSize` | 10 |
+| 技能冷却 | `player.SkillCooldowns` | `heal`: 30s |
+| 射击冷却 | `player.shootCooldown` | 100ms |
+| 初始弹药 | `player.Ammo` | 30 |
+| 初始血量 | `player.Health` | 100 |
+
+**冷却时间注入**：测试不注入，直接使用生产常量。若常量变更，测试需同步更新。
+
+---
+
+## 时序常量
+
+```go
+const (
+    // 读取超时（单次 websocket.ReadJSON）
+    readTimeout = 2 * time.Second
+    
+    // drain 窗口（持续读取直到无新消息）
+    drainWindow = 200 * time.Millisecond
+    
+    // no-message 判定窗口
+    noMessageWait = 100 * time.Millisecond
+    
+    // race 模式放宽系数
+    raceFactor = 2  // -race 时超时翻倍
+)
+```
+
+---
+
 ## 可观察语义定义
 
 | 术语 | 定义 |
 |------|------|
-| `静默` | 100ms 内无 websocket 消息到达任何接收方 |
+| `静默` | noMessageWait 内无 websocket 消息到达 |
 | `零值广播` | 广播发生，JSON 字段为 Go 零值 |
 | `正常` | 期望的成功消息按断言合同到达 |
-| `连接存活` | 发送 `join_room` 并收到 `room_joined`（创建新房间） |
+| `连接存活` | 发送 `join_room`（无 room_id）并收到 `room_joined` |
 
 ---
 
 ## 测试工具接口
 
 ```go
-const (
-    readTimeout   = 2 * time.Second
-    drainWindow   = 200 * time.Millisecond
-    noMessageWait = 100 * time.Millisecond
-)
-
 // TestServer 测试服务器
 type TestServer struct {
     Server      *httptest.Server
-    Hub         *Hub
-    RoomManager *room.Manager
+    Hub         *Hub        // 仅用于初始化，禁止测试读取
+    RoomManager *room.Manager  // 仅用于初始化，禁止测试读取
     URL         string
 }
 
-// 职责：服务器生命周期
+// 服务器生命周期
 func NewTestServer(t *testing.T) *TestServer
 func (s *TestServer) Close()
 
-// 职责：连接管理
+// 连接管理（返回 conn, playerID 或 roomID）
 func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
 func CloseConn(t *testing.T, conn *websocket.Conn)
 
-// 职责：消息收发
+// 消息收发
 func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
 func Drain(t *testing.T, conn *websocket.Conn)
 func NoMessage(t *testing.T, conn *websocket.Conn)
 
-// 职责：辅助
+// 辅助
 func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 func CountType(msgs []*Message, msgType string) int
 ```
 
+### Message 结构
+
+```go
+type Message struct {
+    Type      string          `json:"type"`
+    Data      json.RawMessage `json:"data"`
+    Timestamp int64           `json:"timestamp"`
+}
+```
+
 ---
 
-## 消息行为规范表
+## JSON 失败分类
 
-### `join_room` 语义
+### 1. 顶层 JSON 非法
 
-| 输入 | 行为 |
-|------|------|
-| 无 room_id | 创建新房间（生成 room_id），加入 |
-| 有 room_id 且存在 | 加入该房间 |
-| 有 room_id 但不存在 | 创建新房间（**生成新 room_id**，不使用传入的 room_id） |
-| 房间满 | 返回 error |
+**输入**：整个 websocket frame 不是合法 JSON
+
+```go
+// 发送方式
+conn.WriteMessage(websocket.TextMessage, []byte(`{"invalid`))
+```
+
+**预期**：连接关闭或静默丢弃
+
+**测试**：`TestWS_InvalidTopLevelJSON`
+
+### 2. Payload JSON 非法
+
+**输入**：顶层 JSON 合法，但 `data` 字段不是合法 JSON
+
+```go
+// 发送方式
+Send(conn, "move", json.RawMessage(`{invalid`))
+```
+
+**预期**：handler 静默返回或零值广播
+
+**测试**：`TestWS_JSONParseFailure`
+
+---
+
+## 消息行为规范
 
 ### 输入 → 输出规范
 
-| 消息 | 发送者 | 其他人 | 无房间 | JSON失败 |
-|------|-------|-------|-------|---------|
+| 消息 | 发送者 | 其他人 | 无房间 | Payload非法 |
+|------|-------|-------|-------|------------|
 | `join_room` | `room_joined` | `player_joined` | 正常 | 静默 |
 | `leave_room` | ❌ | `player_left` | 静默 | N/A |
 | `move` | ❌ | `player_moved` | 静默 | 零值广播 |
 | `chat` | `chat` | `chat` | 静默 | 静默 |
 | `shoot` | ❌ | `player_shot` | 静默 | 零值广播 |
 | `reload` | `reload` | ❌ | 正常 | N/A |
-| `respawn` | `respawn` | `player_respawned` | 发送者正常+广播静默 | 零值广播 |
+| `respawn` | `respawn` | `player_respawned` | 发送者正常 | 零值广播 |
 | `weapon_change` | `weapon_changed` | `weapon_changed` | 静默 | 静默 |
 | `voice_start` | ❌ | `voice_start` | 静默 | N/A |
 | `voice_stop` | ❌ | `voice_stop` | 静默 | N/A |
@@ -120,61 +188,6 @@ func CountType(msgs []*Message, msgType string) int
 
 ---
 
-## 零值断言样例
-
-### `move` 零值广播
-
-```json
-{
-  "type": "player_moved",
-  "data": {
-    "player_id": "xxx",
-    "position": {},
-    "rotation": 0
-  }
-}
-```
-
-### `shoot` 零值广播
-
-```json
-{
-  "type": "player_shot",
-  "data": {
-    "player_id": "xxx",
-    "position": null,
-    "rotation": 0,
-    "ammo": 30
-  }
-}
-```
-
-### `team_join` 零值广播
-
-```json
-{
-  "type": "team_changed",
-  "data": {
-    "player_id": "xxx",
-    "team": ""
-  }
-}
-```
-
-### `emote` 零值广播
-
-```json
-{
-  "type": "emote",
-  "data": {
-    "player_id": "xxx",
-    "emote_id": ""
-  }
-}
-```
-
----
-
 ## 最小断言合同
 
 | 消息 | 必验字段 | 断言方式 |
@@ -185,7 +198,7 @@ func CountType(msgs []*Message, msgType string) int
 | `player_moved` | `player_id` | 存在 |
 | `chat` | `player_id`, `message` | message 精确匹配 |
 | `player_shot` | `player_id` | 存在 |
-| `reload` | `ammo`, `ammo_reserve` | 与前值比较（减少/填充） |
+| `reload` | `ammo` | ammo > 0（从 0 填充后） |
 | `respawn` | `health`, `ammo` | health == 100, ammo > 0 |
 | `player_respawned` | `player_id` | 其他人收到 |
 | `weapon_changed` | `player_id`, `weapon` | weapon 精确匹配 |
@@ -203,7 +216,7 @@ func CountType(msgs []*Message, msgType string) int
 
 ---
 
-## 连接测试验收合同
+## 连接测试
 
 ### TestWS_Connect
 
@@ -218,146 +231,152 @@ func CountType(msgs []*Message, msgType string) int
 ### TestWS_UnknownType
 
 - 步骤：发送 `{"type":"unknown","data":{}}`
-- 断言：静默
-- 存活验证：发送 `join_room` 收到 `room_joined`
+- 断言：静默 + 存活验证（join_room → room_joined）
 
 ### TestWS_InvalidTopLevelJSON
 
 - 步骤：发送原始 `{"invalid`
-- 断言：静默
-- 存活验证：发送 `join_room` 收到 `room_joined`
+- 断言：静默 + 存活验证（join_room → room_joined）
 
 ---
 
-## 异常测试前置条件
+## 房间测试
+
+### TestWS_JoinRoom_NewRoom
+
+- 断言：收到 `room_joined`，room_id 非空
+
+### TestWS_JoinRoom_ExistingRoom
+
+- 前置：A 创建房间
+- 步骤：B 加入该 room_id
+- 断言：B 收到 `room_joined`，A 收到 `player_joined`
+
+### TestWS_JoinRoom_Full
+
+- 前置：创建房间，`FillRoom(9)`（共 10 人）
+- 步骤：第 11 人加入
+- 断言：收到 `error` 包含 "full"
+
+### TestWS_LeaveRoom
+
+- 前置：A、B 在同一房间
+- 步骤：A 发送 `leave_room`
+- 断言：B 收到 `player_left`
+
+---
+
+## 异常测试
 
 ### TestWS_SkillOnCooldown
 
 - 前置：创建房间，Drain
-- 技能冷却：`heal` = 30s
-- 步骤：连续发送两次 `skill_use{"skill_id":"heal"}`
+- 步骤：连续发送 `skill_use{"skill_id":"heal"}` 两次
 - 断言：第二次收到 `error` 包含 "cooldown"
 
 ### TestWS_Shoot_Cooldown
 
-- 前置：创建房间，Drain
-- 射击冷却：100ms
+- 前置：创建房间，第二人加入，Drain
 - 步骤：发送 `shoot`，等待 50ms，再发送 `shoot`
-- 断言：只收到 1 次 `player_shot`
+- 断言：第二人只收到 1 次 `player_shot`
 
 ### TestWS_C4Defuse_NoC4
 
-- 前置：创建房间，Drain（不种包）
+- 前置：创建房间，Drain
 - 步骤：发送 `c4_defuse`
 - 断言：静默
 
 ---
 
-## JSON 解析失败测试
+## JSON 失败测试
 
-### 格式化 payload
+### TestWS_JSONParseFailure（表驱动）
 
-```go
-malformedPayload := json.RawMessage(`{invalid`)
-```
+**维度**：消息类型 × 在房间内
 
-### 测试用例
+**payload**：`json.RawMessage("{invalid")`
 
-| Handler | 预期行为 |
-|---------|---------|
-| `join_room` | 静默 |
-| `move` | 零值广播 |
-| `chat` | 静默 |
-| `shoot` | 零值广播 |
-| `respawn` | 零值广播 |
-| `weapon_change` | 静默 |
-| `team_join` | 零值广播 |
-| `grenade_throw` | 零值广播 |
-| `c4_plant` | 零值广播 |
-| `skill_use` | 静默 |
-| `emote` | 零值广播 |
-| `ping` | 零值广播 |
+| Handler | 在房间内 | 预期 |
+|---------|---------|------|
+| `join_room` | 否 | 静默 |
+| `move` | 是 | 其他人收到 `player_moved`（position={}） |
+| `chat` | 是 | 静默 |
+| `shoot` | 是 | 其他人收到 `player_shot`（position=null） |
+| `respawn` | 是 | 发送者收到 `respawn`（零值），其他人收到 `player_respawned` |
+| `weapon_change` | 是 | 静默 |
+| `team_join` | 是 | 广播 `team_changed`（team=""） |
+| `grenade_throw` | 是 | 广播 `grenade_thrown`（零值） |
+| `c4_plant` | 是 | 广播 `c4_planted`（position={}） |
+| `skill_use` | 是 | 静默 |
+| `emote` | 是 | 广播 `emote`（emote_id=""） |
+| `ping` | 是 | 广播 `ping`（零值） |
 
 ---
 
-## 并发测试设计
+## 无房间测试
 
-### 时序
+### TestWS_NoRoom（表驱动）
 
+需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
+
+**维度**：消息类型
+
+**预期**：
+- `respawn`：发送者收到 `respawn`，无广播
+- 其他：静默
+
+---
+
+## 并发测试
+
+### TestConcurrent_Broadcast
+
+**时序**：
 ```
 1. 创建房间，5 客户端加入
-2. 全部 Drain（排除 welcome/join 背景）
+2. 全部 Drain
 3. 并发发送（每人 5 条 chat）
 4. 等待 2s
-5. 统计 chat 消息（排除非 chat）
-6. 验证连接存活：每人发送 join_room 创建新房间
+5. 每客户端 RecvAll
+6. 统计 chat 消息（只统计 type="chat"）
+7. 每客户端发送 join_room（无 room_id）验证存活
 ```
 
-### 统计口径
+**统计口径**：
+- 每客户端分别统计收到的 `chat` 消息数
+- 汇总：总 chat 数 = 所有客户端 chat 数之和
 
-- 只统计 `type: "chat"` 消息
-- 排除 welcome、player_joined 等背景消息
-
-### 断言
-
+**断言**：
 - 无 panic、无死锁
-- 总 chat 消息 >= 100（理论 125 = 5客户端 × 5条 × 5接收者，允许 20% 丢失）
-- 每个客户端能创建新房间
+- 总 chat 数 >= 100（理论 125）
+- 每客户端至少收到 15 条 chat（理论 25）
+- 每客户端存活验证通过
 
-### 允许丢失原因
-
-系统使用非阻塞发送，缓冲区满时跳过。
+**允许丢失原因**：非阻塞发送，缓冲区满时跳过。
 
 ---
 
 ## Phase 5：消息分发测试矩阵
 
-| 消息 | 回自己 | 广播他人 | 无房间 | JSON失败 | 断言字段 |
-|------|-------|---------|-------|---------|---------|
-| `reload` | ✅ | ❌ | 正常 | N/A | ammo, ammo_reserve |
-| `move` | ❌ | ✅ | 静默 | 零值 | player_id |
-| `shoot` | ❌ | ✅ | 静默 | 零值 | player_id |
-| `voice_start` | ❌ | ✅ | 静默 | N/A | player_id |
-| `voice_stop` | ❌ | ✅ | 静默 | N/A | player_id |
-| `voice_data` | ❌ | ✅ | 静默 | N/A | player_id |
-| `chat` | ✅ | ✅ | 静默 | 静默 | player_id, message |
-| `respawn` | ✅ | ✅ | 发送者正常 | 零值 | health, ammo |
-| `weapon_change` | ✅ | ✅ | 静默 | 静默 | weapon |
-| `team_join` | ✅ | ✅ | 静默 | 零值 | team |
-| `grenade_throw` | ✅ | ✅ | 静默 | 零值 | type |
-| `c4_plant` | ✅ | ✅ | 静默 | 零值 | player_id |
-| `c4_defuse` | ✅ | ✅ | 静默 | N/A | player_id |
-| `skill_use` | ✅ | ✅ | 静默 | 静默 | skill_id |
-| `emote` | ✅ | ✅ | 静默 | 零值 | emote_id |
-| `ping` | ✅ | ✅ | 静默 | 零值 | type |
+**维度**：
+- 消息类型
+- 在房间内（是/否）
+- JSON 失败（是/否）
+- 接收方（发送者/其他人）
 
----
+| 消息 | 在房间 | JSON失败 | 发送者 | 其他人 |
+|------|-------|---------|-------|-------|
+| `reload` | 否 | N/A | ✅ `reload` | ❌ |
+| `reload` | 是 | N/A | ✅ `reload` | ❌ |
+| `move` | 是 | 否 | ❌ | ✅ `player_moved` |
+| `move` | 是 | 是 | ❌ | ✅ 零值 |
+| `move` | 否 | - | ❌ 静默 | ❌ |
+| `shoot` | 是 | 否 | ❌ | ✅ `player_shot` |
+| `shoot` | 是 | 是 | ❌ | ✅ 零值 |
+| `shoot` | 否 | - | ❌ 静默 | ❌ |
+| ... | ... | ... | ... | ... |
 
-## 覆盖率预算
-
-| 函数/区域 | 预计覆盖 | 说明 |
-|----------|---------|------|
-| `handleJoinRoom` | 100% | 正常/满房/JSON失败 |
-| `handleLeaveRoom` | 100% | 正常/无房间 |
-| `handleMove` | 95% | 正常/无房间/JSON失败 |
-| `handleChat` | 95% | 正常/无房间/JSON失败 |
-| `handleShoot` | 90% | 正常/无房间/冷却/JSON失败 |
-| `handleReload` | 100% | 正常 |
-| `handleRespawn` | 90% | 正常/无房间/JSON失败 |
-| `handleWeaponChange` | 90% | 正常/无房间/JSON失败 |
-| `handleVoiceXxx` | 90% | 正常/无房间 |
-| `handleTeamJoin` | 90% | 正常/无房间/JSON失败 |
-| `handleGrenadeThrow` | 90% | 正常/无房间/JSON失败 |
-| `handleC4Plant` | 90% | 正常/无房间/JSON失败 |
-| `handleC4Defuse` | 90% | 正常/无房间/无C4 |
-| `handleSkillUse` | 90% | 正常/无房间/冷却/JSON失败 |
-| `handleEmote` | 90% | 正常/无房间/JSON失败 |
-| `handlePing` | 90% | 正常/无房间/JSON失败 |
-| `BroadcastToRoom` | 100% | nil/空房间/正常 |
-| `ServeWS` | 85% | 升级失败不测 |
-| `readPump` | 80% | 超时不测 |
-| `writePump` | 75% | ping/超时不测 |
-| **总体** | **≥90%** | |
+（完整矩阵按此模式展开）
 
 ---
 
@@ -368,49 +387,6 @@ malformedPayload := json.RawMessage(`{invalid`)
 | `ServeWS` upgrade 失败 | HTTP 错误分支 |
 | `readPump`/`writePump` 超时 | 需特殊客户端 |
 | Ping 周期 | 60s 太长 |
-
----
-
-## 实施清单
-
-### Phase 1：生产修复
-
-- [ ] 修复 `BroadcastToRoom` nil 检查
-
-### Phase 2：测试工具
-
-- [ ] 实现 `TestServer`
-- [ ] 实现 helper 函数
-
-### Phase 3：连接测试
-
-- [ ] `TestWS_Connect`
-- [ ] `TestWS_Disconnect_InRoom`
-- [ ] `TestWS_UnknownType`
-- [ ] `TestWS_InvalidTopLevelJSON`
-
-### Phase 4：房间测试
-
-- [ ] `TestWS_JoinRoom_NewRoom`
-- [ ] `TestWS_JoinRoom_ExistingRoom`
-- [ ] `TestWS_JoinRoom_Full`
-- [ ] `TestWS_LeaveRoom`
-
-### Phase 5：消息分发测试
-
-按 Phase 5 矩阵表驱动实现。
-
-### Phase 6：异常测试
-
-- [ ] `TestWS_JSONParseFailure`（表驱动）
-- [ ] `TestWS_NoRoom`（表驱动）
-- [ ] `TestWS_SkillOnCooldown`
-- [ ] `TestWS_Shoot_Cooldown`
-- [ ] `TestWS_C4Defuse_NoC4`
-
-### Phase 7：并发测试
-
-- [ ] `TestConcurrent_Broadcast`
 
 ---
 
