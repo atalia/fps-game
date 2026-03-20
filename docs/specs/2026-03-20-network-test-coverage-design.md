@@ -13,18 +13,18 @@ go tool cover -func=cover.out | grep server.go
 go test -race ./server/internal/network/...
 ```
 
-**覆盖率可达性**：`server.go` 约 740 行，主要函数覆盖率来源：
+**覆盖率可达性**：`server.go` 约 740 行，未覆盖约 5%（HTTP upgrade 失败、readPump 超时），90% 可达。
 
-| 函数 | 覆盖来源 |
-|------|---------|
-| `ServeWS` | 连接测试 |
-| `readPump` | 所有测试 |
-| `writePump` | 所有测试 |
-| `handleXxx` (16个) | 消息分发测试 |
-| `BroadcastToRoom` | 广播测试 |
-| `Hub.Run` | 所有测试 |
+---
 
-**未覆盖**（约 5%）：`ServeWS` upgrade 失败、`readPump` 超时。
+## 与现有代码对齐
+
+| 行为 | 当前代码 | 说明 |
+|------|---------|------|
+| `shoot`/`respawn` data 反序列化失败 | 继续执行，零值广播 | handler 不检查 Unmarshal 错误 |
+| `weapon_change` 无房间 | 调用 `BroadcastToRoom(nil, ...)` | 修复后静默 |
+| `reload` 无房间 | 正常执行，发送者收到 | 不依赖房间 |
+| `skill_use` 未知技能 | 返回 "Skill on cooldown" | `CanUseSkill` 对未知技能返回 false |
 
 ---
 
@@ -43,7 +43,7 @@ go test -race ./server/internal/network/...
 | `move` | 无 | `player_moved` |
 | `chat` | `chat` | `chat` |
 | `shoot` | 无 | `player_shot` |
-| `reload` | `reload` | 无 |
+| `reload` | `reload` | **无（验证其他人不收到）** |
 | `respawn` | `respawn` | `player_respawned` |
 | `weapon_change` | `weapon_changed` | `weapon_changed` |
 | `voice_start` | 无 | `voice_start` |
@@ -63,10 +63,13 @@ go test -race ./server/internal/network/...
 
 | 单元 | 内容 |
 |------|------|
-| 单元 1 | 生产修复：`BroadcastToRoom` nil 检查 |
+| 单元 1 | 生产修复 |
 | 单元 2 | 测试基础设施 |
 | 单元 3 | 连接与房间测试 |
-| 单元 4 | 消息分发测试 |
+| 单元 4a | Self 响应消息（reload） |
+| 单元 4b | Self+Others 广播消息 |
+| 单元 4c | Others-only 广播消息 |
+| 单元 4d | 冷却/错误路径 |
 | 单元 5 | 并发测试 |
 
 ---
@@ -82,6 +85,14 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 }
 ```
 
+**触发的调用路径**：
+- `handleRespawn`：`c.Room == nil` 时仍调用广播
+- `handleWeaponChange`：`c.Room == nil` 时仍调用广播
+
+**修复后行为**：
+- `handleRespawn(nil)`：发送者收到 `respawn`，广播静默
+- `handleWeaponChange(nil)`：广播静默
+
 ---
 
 ## 单元 2：测试基础设施
@@ -92,7 +103,9 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 func NewTestServer(t *testing.T) *TestServer {
     hub := NewHub()
     go hub.Run()
-    rm := room.NewManager(10)  // 房间容量 10
+    
+    // room.NewManager(maxRooms, defaultSize)
+    rm := room.NewManager(100, 10)  // 最多100房间，每房间10人
     // ...
 }
 ```
@@ -109,8 +122,8 @@ const (
 
 ### 消息顺序策略
 
-- `CreateRoom`/`JoinRoom`：使用 `Drain` 清理所有背景消息后再返回
-- 测试断言：使用 `RecvType` 严格匹配目标消息，或 `RecvAll` + `CountType` 统计
+- `CreateRoom`/`JoinRoom`：`Drain` 清理背景消息
+- 断言：`RecvType` 严格匹配，或 `RecvAll` + 统计
 
 ### Helper 协议
 
@@ -150,9 +163,115 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 
 ---
 
-## 单元 4：消息分发测试
+## 单元 4a：Self 响应消息
 
-### 完整 payload
+### TestWS_Reload
+
+**payload**：`{}`
+
+**覆盖路径**：
+1. 有房间：发送者收到 `reload`，其他人不收到
+2. 无房间：发送者收到 `reload`（不依赖房间）
+
+**断言**：
+- 发送者：`ammo > 0`, `ammo_reserve`
+- 其他人：`NoMessage`（验证不收到）
+
+---
+
+## 单元 4b：Self+Others 广播消息
+
+| 消息 | 测试名 | 覆盖路径 |
+|------|--------|---------|
+| `chat` | TestWS_Chat | 正常广播、无房间静默、非法JSON静默 |
+| `respawn` | TestWS_Respawn | 正常广播、无房间发送者收到、非法JSON零值广播 |
+| `weapon_change` | TestWS_WeaponChange | 正常广播、无房间广播静默、非法JSON静默 |
+| `team_join` | TestWS_TeamJoin | 正常广播、无房间静默、非法JSON静默 |
+| `grenade_throw` | TestWS_GrenadeThrow | 正常广播、无房间静默、非法JSON静默 |
+| `c4_plant` | TestWS_C4Plant | 正常广播、无房间静默、非法JSON静默 |
+| `c4_defuse` | TestWS_C4Defuse | 正常广播、无房间静默、无C4静默 |
+| `skill_use` | TestWS_SkillUse | 正常广播、无房间静默、非法JSON静默 |
+| `emote` | TestWS_Emote | 正常广播、无房间静默、非法JSON静默 |
+| `ping` | TestWS_Ping | 正常广播、无房间静默、非法JSON静默 |
+
+### respawn 无房间说明
+
+**场景**：发送者不在房间，调用 `handleRespawn`。
+
+**行为**：
+- 发送者收到 `respawn`（`Player.Respawn()` 正常执行）
+- 其他人不收到 `player_respawned`（`BroadcastToRoom(nil)` 静默）
+
+**断言**：发送者收到，其他人 `NoMessage`。
+
+### weapon_change 无房间说明
+
+**场景**：发送者不在房间，调用 `handleWeaponChange`。
+
+**行为**：
+- 发送者不收到（`BroadcastToRoom(nil)` 静默，无自回显）
+- 其他人不收到
+
+**断言**：双方 `NoMessage`。
+
+---
+
+## 单元 4c：Others-only 广播消息
+
+| 消息 | 测试名 | 覆盖路径 |
+|------|--------|---------|
+| `move` | TestWS_Move | 正常广播、无房间静默、非法JSON静默 |
+| `shoot` | TestWS_Shoot | 正常广播、无房间静默、非法JSON零值广播 |
+| `voice_start` | TestWS_VoiceStart | 正常广播、无房间静默 |
+| `voice_stop` | TestWS_VoiceStop | 正常广播、无房间静默 |
+| `voice_data` | TestWS_VoiceData | 正常广播、无房间静默 |
+
+---
+
+## 单元 4d：冷却/错误路径
+
+### TestWS_Shoot_Cooldown
+
+```
+1. 创建房间，第二人加入，Drain
+2. Send("shoot", {...})
+3. Drain（第二人收到 player_shot）
+4. 等待 50ms（冷却 100ms）
+5. Send("shoot", {...})
+6. NoMessage（第二人不应收到第二条）
+```
+
+### TestWS_SkillUse_Cooldown
+
+```
+1. 创建房间，Drain
+2. Send("skill_use", {"skill_id":"heal"})
+3. Drain
+4. Send("skill_use", {"skill_id":"heal"})
+5. RecvType("error")，断言 message 包含 "cooldown"
+```
+
+### TestWS_SkillUse_UnknownSkill
+
+```
+1. 创建房间，Drain
+2. Send("skill_use", {"skill_id":"unknown"})
+3. RecvType("error")，断言 message 包含 "cooldown"
+```
+
+**说明**：当前 `CanUseSkill` 对未知技能返回 false，错误消息为 "Skill on cooldown"。接受此现状。
+
+### TestWS_C4Defuse_NoC4
+
+```
+1. 创建房间，Drain（不调用 c4_plant）
+2. Send("c4_defuse", {})
+3. NoMessage
+```
+
+---
+
+## 完整 payload
 
 | 消息 | data |
 |------|------|
@@ -173,74 +292,14 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 | `emote` | `{"emote_id":"wave"}` |
 | `ping` | `{"type":"enemy","x":1,"y":2,"z":3,"message":"here"}` |
 
-### 非法 JSON 分类
+---
 
-| 类别 | 示例 | 触发路径 |
+## 非法 JSON 分类
+
+| 类别 | 示例 | 测试位置 |
 |------|------|---------|
-| 顶层非法 | `{"invalid` | `readPump` 连接关闭或静默 |
-| data 反序列化失败 | `{"type":"move","data":{invalid}` | handler 内部 `json.Unmarshal` |
-
-**测试范围**：只测试 data 反序列化失败。
-
-### 测试清单
-
-| 测试名 | 入站消息 | 覆盖路径 |
-|--------|---------|---------|
-| TestWS_Move | `move` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_Chat | `chat` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_Shoot | `shoot` | 正常广播、无房间静默、非法JSON零值广播、冷却静默 |
-| TestWS_Reload | `reload` | 正常有房间、正常无房间 |
-| TestWS_Respawn | `respawn` | 正常广播、无房间发送者收到、非法JSON零值广播 |
-| TestWS_WeaponChange | `weapon_change` | 正常广播、无房间广播静默、非法JSON静默 |
-| TestWS_VoiceStart | `voice_start` | 正常广播、无房间静默 |
-| TestWS_VoiceStop | `voice_stop` | 正常广播、无房间静默 |
-| TestWS_VoiceData | `voice_data` | 正常广播、无房间静默 |
-| TestWS_TeamJoin | `team_join` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_GrenadeThrow | `grenade_throw` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_C4Plant | `c4_plant` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_C4Defuse | `c4_defuse` | 正常广播、无房间静默、无C4静默 |
-| TestWS_SkillUse | `skill_use` | 正常广播、无房间静默、非法JSON静默、冷却error |
-| TestWS_Emote | `emote` | 正常广播、无房间静默、非法JSON静默 |
-| TestWS_Ping | `ping` | 正常广播、无房间静默、非法JSON静默 |
-
-### 异常路径前置条件
-
-#### shoot 冷却
-
-```
-1. 创建房间，第二人加入，Drain
-2. Send("shoot", {...})  // 第一次，成功
-3. Drain（等待 player_shot）
-4. 等待 50ms（冷却 100ms）
-5. Send("shoot", {...})  // 第二次，冷却中
-6. NoMessage（第二人不应收到第二条 player_shot）
-```
-
-#### skill_use 冷却
-
-```
-1. 创建房间，Drain
-2. Send("skill_use", {"skill_id":"heal"})  // 第一次，成功
-3. Drain
-4. Send("skill_use", {"skill_id":"heal"})  // 第二次，冷却中
-5. RecvType("error")，断言 message 包含 "cooldown"
-```
-
-#### c4_defuse 无C4
-
-```
-1. 创建房间，Drain（不调用 c4_plant）
-2. Send("c4_defuse", {})
-3. NoMessage
-```
-
-### player_shot position 为 null 说明
-
-**场景**：`shoot` 的非法 JSON（data 反序列化失败）时，`json.Unmarshal` 不报错继续执行。
-
-**结果**：`pos.Position` 为 `nil`（map 零值），序列化为 JSON `null`。
-
-**断言**：`position` 字段存在，值为 `null`。
+| 顶层非法 | `{"invalid` | 单元 3：TestWS_InvalidTopLevelJSON |
+| data 反序列化失败 | `{"type":"move","data":{invalid}` | 单元 4：各 handler 测试 |
 
 ---
 
@@ -248,17 +307,21 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 
 ### TestConcurrent_Broadcast
 
-**系统可靠性**：广播使用非阻塞发送，缓冲区（256 条）满时允许丢失。
+**前提**：`chat` 使用 `excludeID == ""`，发送者也会收到广播。
+
+**计算**：
+- 5 客户端每人发 5 条 chat = 25 条发送
+- 每条广播给全房间 5 人 = 125 条接收
 
 **稳定性约束**：
-- 固定 5 客户端、每客户端 5 条 chat
+- 固定 5 客户端、每客户端 5 条
 - 发送完成后等待 2s
-- 使用 `sync.WaitGroup` 同步发送
+- 使用 `sync.WaitGroup` 同步
 - 不涉及连接关闭/离房
 
 **阈值**：
-- 理论：5 × 5 × 5 = 125 条
-- 允许 20% 丢失（测试稳定性容差）
+- 理论：125 条
+- 允许 20% 丢失（测试容差）
 - 断言：>= 100 条，每客户端 >= 15 条
 
 ---
@@ -295,7 +358,7 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 | 场景 | 关键字 |
 |------|-------|
 | 房间满 | "full" |
-| 技能冷却 | "cooldown" |
+| 技能冷却/未知技能 | "cooldown" |
 
 ---
 
@@ -303,8 +366,10 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 
 | 内容 | 原因 |
 |------|------|
-| `ServeWS` upgrade 失败 | HTTP 层 |
-| `readPump` 超时 | 需特殊构造 |
+| `ServeWS` upgrade 失败 | HTTP 层，约 5 行 |
+| `readPump` 超时 | 需特殊构造，约 5 行 |
+
+**覆盖率容差**：未覆盖约 10 行，占比 < 2%，90% 目标可达。
 
 ---
 
@@ -325,6 +390,6 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 | 单元 1 | 0.5h |
 | 单元 2 | 1h |
 | 单元 3 | 0.5h |
-| 单元 4 | 2h |
+| 单元 4a-4d | 2h |
 | 单元 5 | 0.5h |
 | **总计** | **4.5h** |
