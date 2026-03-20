@@ -20,7 +20,7 @@ go test -race ./server/internal/network/...
 ```go
 func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
     if r == nil {
-        return  // nil-safe，所有调用点自动安全
+        return  // nil-safe
     }
     msg := NewMessage(msgType, data)
     h.mu.RLock()
@@ -44,9 +44,63 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 **契约**：
 - `r == nil`：静默返回
 - `r.Players` 为空：遍历空 map，无效果
-- `client.Send` 满或关闭：default 分支跳过
+- `client.Send` 满：default 分支跳过（允许丢消息）
+- `client.Send` 关闭：**发送会 panic**（这是现有代码的风险，但正常流程不会触发）
 - `excludeID == ""`：所有玩家都收到（含发送者）
 - `excludeID != ""`：排除指定玩家
+
+**依赖处理**：
+- 修复 PR 合并前：可先编写测试工具和非阻塞用例（连接、房间操作）
+- 修复 PR 合并后：运行完整测试
+
+---
+
+## 消息语义矩阵
+
+| 发送类型 | 发送者收到 | 其他人收到 | 无房间 | 非法JSON | 冷却/无效 |
+|----------|-----------|-----------|-------|---------|---------|
+| `join_room` | `room_joined` | `player_joined` | 正常 | 静默 | - |
+| `leave_room` | ❌ | `player_left` | 静默 | N/A | - |
+| `move` | ❌ | `player_moved` | 静默 | 静默 | - |
+| `chat` | `chat` | `chat` | 静默 | 静默 | - |
+| `shoot` | ❌ | `player_shot` | 静默 | 静默 | 冷却时静默 |
+| `reload` | `reload` | ❌ | 正常 | N/A | - |
+| `respawn` | `respawn` | `player_respawned` | 静默 | 静默 | - |
+| `weapon_change` | `weapon_changed` | `weapon_changed` | 静默 | 静默 | - |
+| `voice_start` | ❌ | `voice_start` | 静默 | N/A | - |
+| `voice_stop` | ❌ | `voice_stop` | 静默 | N/A | - |
+| `voice_data` | ❌ | `voice_data` | 静默 | N/A | - |
+| `team_join` | `team_changed` | `team_changed` | 静默 | 静默 | - |
+| `grenade_throw` | `grenade_thrown` | `grenade_thrown` | 静默 | 静默 | - |
+| `c4_plant` | `c4_planted` | `c4_planted` | 静默 | 静默 | - |
+| `c4_defuse` | `c4_defused` | `c4_defused` | 静默 | N/A | - |
+| `skill_use` | `skill_used`/`error` | `skill_used` | 静默 | 静默 | 冷却→error |
+| `emote` | `emote` | `emote` | 静默 | 静默 | - |
+| `ping` | `ping` | `ping` | 静默 | 静默 | - |
+
+**期望条数公式**（n 人房间）：
+- 发送者收到 1 条 + 其他人收到 (n-1) 条
+- `chat`/`weapon_change`/`team_join`/`grenade_throw`/`c4_plant`/`skill_use`/`emote`/`ping`：n 条（含发送者）
+- `move`/`shoot`/`voice_*`/`leave_room`：(n-1) 条（不含发送者）
+
+---
+
+## JSON 解析失败期望表
+
+| Handler | 失败时行为 | 连接状态 |
+|---------|-----------|---------|
+| `join_room` | 静默无消息 | 存活 |
+| `move` | 静默无消息 | 存活 |
+| `chat` | 静默无消息 | 存活 |
+| `shoot` | 静默无消息 | 存活 |
+| `respawn` | 静默无消息 | 存活 |
+| `weapon_change` | 静默无消息 | 存活 |
+| `team_join` | 静默无消息 | 存活 |
+| `grenade_throw` | 静默无消息 | 存活 |
+| `c4_plant` | 静默无消息 | 存活 |
+| `skill_use` | 静默无消息 | 存活 |
+| `emote` | 静默无消息 | 存活 |
+| `ping` | 静默无消息 | 存活 |
 
 ---
 
@@ -63,22 +117,15 @@ type TestServer struct {
 }
 
 // NewTestServer 创建独立测试服务器
-// 契约：
-// 1. 创建独立 Hub 和 RoomManager
-// 2. 启动 Hub.Run()（一个独立 goroutine）
-// 3. 创建 httptest.Server
-// 4. 返回后立即可用
 func NewTestServer(t *testing.T) *TestServer
 
 // Close 关闭 httptest.Server
-// 契约：
-// - Hub goroutine 常驻（Hub 无 stop 机制）
-// - 接受 goroutine leak，测试进程退出时清理
-// - 每个测试独立 TestServer，无跨测试污染
+// Hub goroutine 常驻（Hub 无 stop 机制）
+// 架构限制：接受此限制，测试进程退出时清理
 func (s *TestServer) Close()
 ```
 
-### Helper 函数契约
+### Helper 函数
 
 ```go
 const (
@@ -86,34 +133,19 @@ const (
     drainTimeout   = 500 * time.Millisecond
 )
 
-// Connect 连接服务器
-// 契约：
-// 1. 建立 WebSocket 连接
-// 2. 自动读取第一条消息，验证类型为 "welcome"
-// 3. 返回 (conn, playerID)
+// Connect 连接，消费 welcome，返回 (conn, playerID)
 func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 
-// CreateRoom 创建并加入房间
-// 契约：
-// 1. Connect
-// 2. 发送 join_room（无 room_id）
-// 3. 等待 room_joined
-// 4. 返回 (conn, playerID, roomID)
+// CreateRoom 创建房间，消费 welcome+room_joined，返回 (conn, playerID, roomID)
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 
-// JoinRoom 加入已存在房间
-// 契约：
-// 1. Connect
-// 2. 发送 join_room（指定 roomID）
-// 3. 等待 room_joined
-// 4. 返回 (conn, playerID)
+// JoinRoom 加入房间，消费 welcome+room_joined
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
 
-// FillRoom 填满房间（count + 创建者 <= 10）
+// FillRoom 填满房间
 func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 
 // Drain 清空消息队列
-// 契约：持续读取直到 drainTimeout 内无新消息
 func Drain(t *testing.T, conn *websocket.Conn)
 
 // Send 发送消息
@@ -123,8 +155,8 @@ func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
 
 // RecvAll 接收所有消息
-// 契约：持续读取直到 defaultTimeout 内无新消息
 // 兼容批量写入：单 frame 内多条 JSON 用 \n 分隔
+// 这是当前服务端 writePump 的实际输出格式
 func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
 
 // NoMessage 验证 drainTimeout 内无消息
@@ -133,34 +165,6 @@ func NoMessage(t *testing.T, conn *websocket.Conn)
 // CountType 统计消息类型数量
 func CountType(msgs []*Message, msgType string) int
 ```
-
----
-
-## 消息测试完整表
-
-| 发送类型 | 输入 payload | 接收类型 | 需房间 | 发送者 | 其他 | 无房间 | 非法JSON |
-|----------|-------------|----------|-------|-------|------|-------|---------|
-| `join_room` | `{"name":"test"}` | `room_joined`/`player_joined` | 否 | ✅ | ✅ | 正常 | 静默 |
-| `join_room` | `{"name":"test","room_id":"xxx"}` | `room_joined`/`player_joined` | 否 | ✅ | ✅ | 正常 | - |
-| `leave_room` | `{}` | `player_left` | 是 | ❌ | ✅ | 静默 | - |
-| `move` | `{"x":1,"y":2,"z":3,"rotation":0}` | `player_moved` | 是 | ❌ | ✅ | 静默 | 静默 |
-| `chat` | `{"message":"hello"}` | `chat` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `shoot` | `{"position":{"x":0,"y":0,"z":0},"rotation":0}` | `player_shot` | 是 | ❌ | ✅ | 静默 | 静默 |
-| `reload` | `{}` | `reload` | 否 | ✅ | ❌ | 正常 | - |
-| `respawn` | `{"x":0,"y":0,"z":0}` | `respawn`/`player_respawned` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `weapon_change` | `{"weapon":"rifle"}` | `weapon_changed` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `voice_start` | `{}` | `voice_start` | 是 | ❌ | ✅ | 静默 | N/A |
-| `voice_stop` | `{}` | `voice_stop` | 是 | ❌ | ✅ | 静默 | N/A |
-| `voice_data` | `{"audio":"base64"}` | `voice_data` | 是 | ❌ | ✅ | 静默 | N/A |
-| `team_join` | `{"team":"red"}` | `team_changed` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `grenade_throw` | `{"type":"frag","position":{"x":0,"y":0,"z":0},"velocity":{"x":0,"y":0,"z":0}}` | `grenade_thrown` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `c4_plant` | `{"position":{"x":0,"y":0,"z":0}}` | `c4_planted` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `c4_defuse` | `{}` | `c4_defused` | 是 | ✅ | ✅ | 静默 | N/A |
-| `skill_use` | `{"skill_id":"heal"}` | `skill_used` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `emote` | `{"emote_id":"wave"}` | `emote` | 是 | ✅ | ✅ | 静默 | 静默 |
-| `ping` | `{"type":"enemy","x":0,"y":0,"z":0,"message":""}` | `ping` | 是 | ✅ | ✅ | 静默 | 静默 |
-
-**N/A 说明**：`voice_*` 和 `c4_defuse` 不解析 data 字段，无 JSON 解析失败分支。
 
 ---
 
@@ -175,7 +179,7 @@ func CountType(msgs []*Message, msgType string) int
 | `chat` | `player_id`, `message` | message 精确匹配 |
 | `player_shot` | `player_id` | 存在 |
 | `reload` | `ammo`, `ammo_reserve` | 数值 >= 0 |
-| `respawn` | `health`, `ammo` | 发送者收到 |
+| `respawn` | `health`, `ammo` | 发送者收到，值 >= 0 |
 | `player_respawned` | `player_id`, `position` | 其他人收到 |
 | `weapon_changed` | `player_id`, `weapon` | weapon 精确匹配 |
 | `voice_start` | `player_id` | 存在 |
@@ -210,52 +214,49 @@ func CountType(msgs []*Message, msgType string) int
 
 ### 3. 消息分发测试（表驱动）
 
-覆盖所有消息类型，验证：
-- 接收类型正确
-- 发送者/其他人接收符合预期
-- 必验字段存在且精确匹配
-
-**reload 单独测试**：无需房间场景。
+覆盖所有消息类型，按语义矩阵验证：
+- 发送者是否收到
+- 其他人是否收到
+- 期望条数正确
+- 必验字段精确匹配
 
 ### 4. JSON 解析失败测试
 
-覆盖所有解析 data 的 handler：
-`join_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `team_join`, `grenade_throw`, `c4_plant`, `skill_use`, `emote`, `ping`
+按 JSON 解析失败期望表，验证：
+- 静默无消息
+- 连接存活
 
 ### 5. 异常测试
 
-- `TestWS_SkillOnCooldown`：连续两次 → 第二次收到 error（断言：包含 "cooldown"）
-- `TestWS_InvalidSkill`：无效技能 → 收到 error（断言：收到 error 类型即可）
-- `TestWS_Shoot_Cooldown`：连续发送 → 至少收到 1 次（冒烟测试）
-- `TestWS_NoRoom_Operations`：见下方完整列表
+- `TestWS_SkillOnCooldown`：连续两次 → 第二次收到 error
+- `TestWS_InvalidSkill`：无效技能 → 收到 error
+- `TestWS_Shoot_Cooldown`：快速连续发送 → 验证至少收到 1 次（弱断言，冒烟测试）
+- `TestWS_NoRoom_Operations`：需要房间的消息列表
 
 ### 6. 无房间操作测试（完整列表）
 
 需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
 
-每个消息：
-1. Connect（不加入房间）
-2. 发送消息
-3. NoMessage
-4. 验证连接存活
+每个消息验证：NoMessage + 连接存活
 
 ### 7. 并发测试
 
 - `TestConcurrent_Broadcast`：5 客户端各发 5 条 chat
-- 断言：无 panic、无死锁、总消息 >= 100、连接存活
+- 期望条数：5 × 5 × 5 = 125（chat 含发送者）
+- 断言：无 panic、无死锁、总消息 >= 100（允许丢消息）、连接存活
 
 ---
 
 ## 不测范围与覆盖率预算
 
-| 排除内容 | 预估占比 | 说明 |
-|----------|---------|------|
-| `ServeWS` upgrade 失败 | ~2% | HTTP 错误分支 |
-| `pongWait`/`writeWait` 超时 | ~3% | 超时分支 |
-| Ping 周期 | ~1% | 时间相关 |
-| **合计** | **~6%** | |
+| 排除内容 | 预估占比 |
+|----------|---------|
+| `ServeWS` upgrade 失败 | ~2% |
+| `pongWait`/`writeWait` 超时 | ~3% |
+| Ping 周期 | ~1% |
+| **合计** | **~6%** |
 
-**可行性**：覆盖主要路径后，剩余 ~10% 裕度可吸收排除分支，90%+ 目标可达。
+**可行性**：当前覆盖率 33.9%，需提升 ~56%。排除 ~6% 后，主要路径（handler 分发、广播、异常处理）覆盖后可达 90%+。
 
 ---
 
