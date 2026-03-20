@@ -97,6 +97,9 @@ func (h *Hub) Broadcast(msgType string, data interface{}) {
 
 // BroadcastToRoom 广播消息给房间内所有玩家
 func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
+	if r == nil {
+		return
+	}
 	msg := NewMessage(msgType, data)
 	h.mu.RLock()
 	defer h.mu.RUnlock()

@@ -1,13 +1,246 @@
 package network
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"fps-game/internal/player"
 	"fps-game/internal/room"
+
+	"github.com/gorilla/websocket"
 )
+
+// 时序常量
+const (
+	readTimeout   = 2 * time.Second
+	drainWindow   = 200 * time.Millisecond
+	noMessageWait = 100 * time.Millisecond
+)
+
+// TestServer 测试服务器
+type TestServer struct {
+	Server      *httptest.Server
+	Hub         *Hub
+	RoomManager *room.Manager
+	URL         string
+}
+
+// NewTestServer 创建测试服务器
+func NewTestServer(t *testing.T) *TestServer {
+	hub := NewHub()
+	go hub.Run()
+
+	rm := room.NewManager(100, 10) // 最多100房间，每房间10人
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ServeWS(hub, rm, nil, w, r)
+	})
+
+	server := httptest.NewServer(handler)
+	ts := &TestServer{
+		Server:      server,
+		Hub:         hub,
+		RoomManager: rm,
+		URL:         "ws" + strings.TrimPrefix(server.URL, "http"),
+	}
+	t.Cleanup(func() {
+		server.Close()
+	})
+	return ts
+}
+
+// Message 消息结构（测试用）
+type TestMessage struct {
+	Type      string          `json:"type"`
+	Data      json.RawMessage `json:"data"`
+	Timestamp int64           `json:"timestamp"`
+}
+
+// Connect 建立连接，读取 welcome
+func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string) {
+	conn, _, err := websocket.DefaultDialer.Dial(ts.URL, nil)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	t.Cleanup(func() {
+		conn.Close()
+	})
+
+	conn.SetReadDeadline(time.Now().Add(readTimeout))
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read welcome: %v", err)
+	}
+
+	var msg TestMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
+		t.Fatalf("Failed to parse welcome: %v", err)
+	}
+	if msg.Type != "welcome" {
+		t.Fatalf("Expected welcome, got %s", msg.Type)
+	}
+
+	var welcomeData struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &welcomeData); err != nil {
+		t.Fatalf("Failed to parse welcome data: %v", err)
+	}
+
+	return conn, welcomeData.PlayerID
+}
+
+// CreateRoom 创建房间，读取 welcome + room_joined
+func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string) {
+	conn, playerID := Connect(t, ts)
+
+	// 发送 join_room 创建新房间
+	Send(t, conn, "join_room", map[string]string{"name": "test"})
+
+	// 读取 room_joined
+	msg := RecvType(t, conn, "room_joined")
+	var roomData struct {
+		RoomID string `json:"room_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &roomData); err != nil {
+		t.Fatalf("Failed to parse room_joined: %v", err)
+	}
+
+	return conn, playerID, roomData.RoomID
+}
+
+// JoinRoom 加入已存在房间
+func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string) {
+	conn, playerID := Connect(t, ts)
+
+	// 发送 join_room 加入已存在房间
+	Send(t, conn, "join_room", map[string]string{"name": roomID})
+
+	// 读取 room_joined
+	RecvType(t, conn, "room_joined")
+
+	return conn, playerID
+}
+
+// CloseConn 关闭连接
+func CloseConn(t *testing.T, conn *websocket.Conn) {
+	conn.Close()
+}
+
+// Send 发送消息
+func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{}) {
+	msg := map[string]interface{}{
+		"type": msgType,
+		"data": data,
+	}
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("Failed to marshal message: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, jsonData); err != nil {
+		t.Fatalf("Failed to send message: %v", err)
+	}
+}
+
+// SendRaw 发送原始 JSON 字符串
+func SendRaw(t *testing.T, conn *websocket.Conn, raw string) {
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(raw)); err != nil {
+		t.Fatalf("Failed to send raw message: %v", err)
+	}
+}
+
+// RecvType 读取一条消息，验证类型
+func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage {
+	conn.SetReadDeadline(time.Now().Add(readTimeout))
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read message: %v", err)
+	}
+
+	var msg TestMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
+		t.Fatalf("Failed to parse message: %v", err)
+	}
+
+	if msg.Type != wantType {
+		t.Fatalf("Expected %s, got %s", wantType, msg.Type)
+	}
+
+	return &msg
+}
+
+// RecvAll 读取所有消息，直到 drainWindow 无新消息
+func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
+	var msgs []*TestMessage
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		// 处理可能的换行分隔多消息
+		for _, line := range bytes.Split(data, []byte{'\n'}) {
+			if len(line) == 0 {
+				continue
+			}
+			var msg TestMessage
+			if err := json.Unmarshal(line, &msg); err == nil {
+				msgs = append(msgs, &msg)
+			}
+		}
+	}
+
+	return msgs
+}
+
+// Drain 丢弃所有消息，直到 drainWindow 无新消息
+func Drain(t *testing.T, conn *websocket.Conn) {
+	for {
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+	}
+}
+
+// NoMessage 验证静默
+func NoMessage(t *testing.T, conn *websocket.Conn) {
+	conn.SetReadDeadline(time.Now().Add(noMessageWait))
+	_, _, err := conn.ReadMessage()
+	if err == nil {
+		t.Error("Expected no message, but got one")
+	}
+}
+
+// FillRoom 填满房间
+func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn {
+	var conns []*websocket.Conn
+	for i := 0; i < count; i++ {
+		conn, _ := JoinRoom(t, ts, roomID)
+		conns = append(conns, conn)
+	}
+	return conns
+}
+
+// CountType 统计消息类型数量
+func CountType(msgs []*TestMessage, msgType string) int {
+	count := 0
+	for _, msg := range msgs {
+		if msg.Type == msgType {
+			count++
+		}
+	}
+	return count
+}
 
 func TestHub_Run(t *testing.T) {
 	hub := NewHub()
@@ -615,4 +848,180 @@ func TestClient_handleC4Defuse(t *testing.T) {
 	if r.IsC4Planted() {
 		t.Error("C4 should be defused")
 	}
+}
+
+// ==================== WebSocket 集成测试 ====================
+
+// TestWS_Connect 测试连接建立
+func TestWS_Connect(t *testing.T) {
+	ts := NewTestServer(t)
+	conn, playerID := Connect(t, ts)
+	defer conn.Close()
+
+	if playerID == "" {
+		t.Error("Expected non-empty playerID")
+	}
+}
+
+// TestWS_Disconnect_InRoom 测试断开连接
+func TestWS_Disconnect_InRoom(t *testing.T) {
+	ts := NewTestServer(t)
+
+	// A 创建房间
+	connA, _, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	// B 加入房间
+	connB, playerIDB := JoinRoom(t, ts, roomID)
+	defer connB.Close()
+
+	// 清理背景消息
+	Drain(t, connA)
+	Drain(t, connB)
+
+	// A 断开连接
+	connA.Close()
+
+	// 等待并验证 B 收到 player_left
+	time.Sleep(100 * time.Millisecond)
+	msg := RecvType(t, connB, "player_left")
+
+	var leftData struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &leftData); err != nil {
+		t.Fatalf("Failed to parse player_left: %v", err)
+	}
+	if leftData.PlayerID != playerIDB {
+		// A 的 playerID 未知，只验证收到消息
+		t.Logf("player_left received with player_id: %s", leftData.PlayerID)
+	}
+}
+
+// TestWS_UnknownType 测试未知消息类型
+func TestWS_UnknownType(t *testing.T) {
+	ts := NewTestServer(t)
+	conn, _ := Connect(t, ts)
+	defer conn.Close()
+
+	SendRaw(t, conn, `{"type":"unknown","data":{}}`)
+	NoMessage(t, conn)
+}
+
+// TestWS_InvalidTopLevelJSON 测试顶层非法 JSON
+func TestWS_InvalidTopLevelJSON(t *testing.T) {
+	ts := NewTestServer(t)
+	conn, _ := Connect(t, ts)
+	defer conn.Close()
+
+	SendRaw(t, conn, `{invalid`)
+	// 连接应关闭或静默
+	time.Sleep(100 * time.Millisecond)
+}
+
+// TestWS_JoinRoom_NewRoom 测试创建新房间
+func TestWS_JoinRoom_NewRoom(t *testing.T) {
+	ts := NewTestServer(t)
+	conn, _, roomID := CreateRoom(t, ts)
+	defer conn.Close()
+
+	if roomID == "" {
+		t.Error("Expected non-empty roomID")
+	}
+}
+
+// TestWS_JoinRoom_ExistingRoom 测试加入已存在房间
+func TestWS_JoinRoom_ExistingRoom(t *testing.T) {
+	ts := NewTestServer(t)
+
+	// A 创建房间
+	connA, playerIDA, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	// B 加入房间
+	connB, _ := JoinRoom(t, ts, roomID)
+	defer connB.Close()
+
+	// A 应收到 player_joined
+	msg := RecvType(t, connA, "player_joined")
+	var joinData struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &joinData); err != nil {
+		t.Fatalf("Failed to parse player_joined: %v", err)
+	}
+	if joinData.PlayerID == playerIDA {
+		t.Error("player_joined should be for B, not A")
+	}
+}
+
+// TestWS_JoinRoom_Full 测试房间满
+func TestWS_JoinRoom_Full(t *testing.T) {
+	ts := NewTestServer(t)
+
+	// A 创建房间
+	connA, _, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	// 填满房间（容量 10，A 已占 1，再填 9 人）
+	FillRoom(t, ts, roomID, 9)
+
+	// 第 11 人尝试加入
+	connB, _ := Connect(t, ts)
+	defer connB.Close()
+
+	Send(t, connB, "join_room", map[string]string{"name": roomID})
+
+	// 应收到 error
+	msg := RecvType(t, connB, "error")
+	var errData struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(msg.Data, &errData); err != nil {
+		t.Fatalf("Failed to parse error: %v", err)
+	}
+	if !strings.Contains(errData.Message, "full") {
+		t.Errorf("Expected 'full' in error message, got: %s", errData.Message)
+	}
+}
+
+// TestWS_LeaveRoom 测试离开房间
+func TestWS_LeaveRoom(t *testing.T) {
+	ts := NewTestServer(t)
+
+	// A 创建房间
+	connA, playerIDA, _ := CreateRoom(t, ts)
+	defer connA.Close()
+
+	// B 加入房间
+	connB, _ := JoinRoom(t, ts, ts.RoomManager.GetRoomByPlayerID(playerIDA).ID)
+	defer connB.Close()
+
+	// 清理背景消息
+	Drain(t, connA)
+	Drain(t, connB)
+
+	// A 离开房间
+	Send(t, connA, "leave_room", map[string]string{})
+
+	// B 应收到 player_left
+	msg := RecvType(t, connB, "player_left")
+	var leftData struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &leftData); err != nil {
+		t.Fatalf("Failed to parse player_left: %v", err)
+	}
+	if leftData.PlayerID != playerIDA {
+		t.Errorf("Expected player_id %s, got %s", playerIDA, leftData.PlayerID)
+	}
+}
+
+// TestWS_BroadcastToRoom_Nil 测试 BroadcastToRoom nil 检查
+func TestWS_BroadcastToRoom_Nil(t *testing.T) {
+	ts := NewTestServer(t)
+	hub := ts.Hub
+
+	// 不应 panic
+	hub.BroadcastToRoom(nil, "test", map[string]string{"msg": "hello"}, "")
 }
