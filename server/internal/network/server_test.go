@@ -3,7 +3,6 @@ package network
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -100,8 +99,8 @@ func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string) {
 func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string) {
 	conn, playerID := Connect(t, ts)
 
-	// 发送 join_room 创建新房间
-	Send(t, conn, "join_room", map[string]string{"name": "test"})
+	// 发送 join_room 创建新房间（不指定 room_id）
+	Send(t, conn, "join_room", map[string]string{"room_id": "", "name": "test"})
 
 	// 读取 room_joined
 	msg := RecvType(t, conn, "room_joined")
@@ -120,7 +119,7 @@ func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, str
 	conn, playerID := Connect(t, ts)
 
 	// 发送 join_room 加入已存在房间
-	Send(t, conn, "join_room", map[string]string{"name": roomID})
+	Send(t, conn, "join_room", map[string]string{"room_id": roomID, "name": "player"})
 
 	// 读取 room_joined
 	RecvType(t, conn, "room_joined")
@@ -143,9 +142,12 @@ func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{}) 
 	if err != nil {
 		t.Fatalf("Failed to marshal message: %v", err)
 	}
+	t.Logf("Sending: %s", string(jsonData))
 	if err := conn.WriteMessage(websocket.TextMessage, jsonData); err != nil {
 		t.Fatalf("Failed to send message: %v", err)
 	}
+	// 等待服务器处理
+	time.Sleep(100 * time.Millisecond)
 }
 
 // SendRaw 发送原始 JSON 字符串
@@ -179,8 +181,13 @@ func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage 
 func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 	var msgs []*TestMessage
 
+	// 先等待消息到达
+	time.Sleep(100 * time.Millisecond)
+
+	// 设置读超时
+	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+
 	for {
-		conn.SetReadDeadline(time.Now().Add(drainWindow))
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			break
@@ -196,20 +203,30 @@ func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 				msgs = append(msgs, &msg)
 			}
 		}
+
+		// 设置下一次读取的超时
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
 	}
 
 	return msgs
 }
 
 // Drain 丢弃所有消息，直到 drainWindow 无新消息
+// 注意：这个函数会清空所有待处理的消息，不要在期望接收特定消息之前调用
 func Drain(t *testing.T, conn *websocket.Conn) {
+	conn.SetReadDeadline(time.Now().Add(drainWindow))
+	count := 0
 	for {
-		conn.SetReadDeadline(time.Now().Add(drainWindow))
-		_, _, err := conn.ReadMessage()
+		_, data, err := conn.ReadMessage()
 		if err != nil {
 			break
 		}
+		count++
+		// 继续读取直到超时
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
+		_ = data // 忽略数据
 	}
+	t.Logf("Drained %d messages", count)
 }
 
 // NoMessage 验证静默
@@ -229,17 +246,6 @@ func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websock
 		conns = append(conns, conn)
 	}
 	return conns
-}
-
-// CountType 统计消息类型数量
-func CountType(msgs []*TestMessage, msgType string) int {
-	count := 0
-	for _, msg := range msgs {
-		if msg.Type == msgType {
-			count++
-		}
-	}
-	return count
 }
 
 func TestHub_Run(t *testing.T) {
@@ -869,32 +875,20 @@ func TestWS_Disconnect_InRoom(t *testing.T) {
 
 	// A 创建房间
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
 
 	// B 加入房间
-	connB, playerIDB := JoinRoom(t, ts, roomID)
+	connB, _ := JoinRoom(t, ts, roomID)
 	defer connB.Close()
-
-	// 清理背景消息
-	Drain(t, connA)
-	Drain(t, connB)
 
 	// A 断开连接
 	connA.Close()
 
 	// 等待并验证 B 收到 player_left
-	time.Sleep(100 * time.Millisecond)
-	msg := RecvType(t, connB, "player_left")
-
-	var leftData struct {
-		PlayerID string `json:"player_id"`
-	}
-	if err := json.Unmarshal(msg.Data, &leftData); err != nil {
-		t.Fatalf("Failed to parse player_left: %v", err)
-	}
-	if leftData.PlayerID != playerIDB {
-		// A 的 playerID 未知，只验证收到消息
-		t.Logf("player_left received with player_id: %s", leftData.PlayerID)
+	time.Sleep(200 * time.Millisecond)
+	msgsB := RecvAll(t, connB)
+	leftCount := CountType(msgsB, "player_left")
+	if leftCount == 0 {
+		t.Error("B should receive player_left when A disconnects")
 	}
 }
 
@@ -964,13 +958,16 @@ func TestWS_JoinRoom_Full(t *testing.T) {
 	defer connA.Close()
 
 	// 填满房间（容量 10，A 已占 1，再填 9 人）
-	FillRoom(t, ts, roomID, 9)
+	for i := 0; i < 9; i++ {
+		conn, _ := JoinRoom(t, ts, roomID)
+		defer conn.Close()
+	}
 
 	// 第 11 人尝试加入
 	connB, _ := Connect(t, ts)
 	defer connB.Close()
 
-	Send(t, connB, "join_room", map[string]string{"name": roomID})
+	Send(t, connB, "join_room", map[string]string{"room_id": roomID, "name": "player11"})
 
 	// 应收到 error
 	msg := RecvType(t, connB, "error")
@@ -990,30 +987,35 @@ func TestWS_LeaveRoom(t *testing.T) {
 	ts := NewTestServer(t)
 
 	// A 创建房间
-	connA, playerIDA, _ := CreateRoom(t, ts)
+	connA, playerIDA, roomID := CreateRoom(t, ts)
 	defer connA.Close()
 
 	// B 加入房间
-	connB, _ := JoinRoom(t, ts, ts.RoomManager.GetRoomByPlayerID(playerIDA).ID)
+	connB, _ := JoinRoom(t, ts, roomID)
 	defer connB.Close()
-
-	// 清理背景消息
-	Drain(t, connA)
-	Drain(t, connB)
 
 	// A 离开房间
 	Send(t, connA, "leave_room", map[string]string{})
 
 	// B 应收到 player_left
-	msg := RecvType(t, connB, "player_left")
-	var leftData struct {
-		PlayerID string `json:"player_id"`
+	msgsB := RecvAll(t, connB)
+	leftCount := 0
+	for _, msg := range msgsB {
+		if msg.Type == "player_left" {
+			leftCount++
+			var leftData struct {
+				PlayerID string `json:"player_id"`
+			}
+			if err := json.Unmarshal(msg.Data, &leftData); err != nil {
+				t.Fatalf("Failed to parse player_left: %v", err)
+			}
+			if leftData.PlayerID != playerIDA {
+				t.Errorf("Expected player_id %s, got %s", playerIDA, leftData.PlayerID)
+			}
+		}
 	}
-	if err := json.Unmarshal(msg.Data, &leftData); err != nil {
-		t.Fatalf("Failed to parse player_left: %v", err)
-	}
-	if leftData.PlayerID != playerIDA {
-		t.Errorf("Expected player_id %s, got %s", playerIDA, leftData.PlayerID)
+	if leftCount == 0 {
+		t.Error("B should receive player_left")
 	}
 }
 
