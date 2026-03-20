@@ -8,53 +8,48 @@
 
 ### 当前覆盖率基线
 
-| 函数/路径 | 当前覆盖 | 说明 |
+| 函数/路径 | 当前状态 | 说明 |
 |-----------|----------|------|
-| `Hub.Run()` | 部分 | 注册/注销有测试，循环体未完全覆盖 |
-| `Hub.Broadcast()` | 有 | `TestHub_Broadcast_Empty` |
-| `Hub.BroadcastToRoom()` | 有 | `TestHub_BroadcastToRoom_Empty` |
-| `Hub.GetClient()` | 有 | `TestHub_GetClient_NotFound` |
+| `Hub.Run()` | 部分 | 注册/注销有单测 |
+| `Hub.Broadcast/ToRoom()` | 有单测 | 空房间场景 |
+| `Hub.GetClient()` | 有单测 | |
 | `ServeWS()` | 无 | 需要集成测试 |
 | `HandleConnection()` | 无 | 需要集成测试 |
 | `readPump()` | 无 | 需要集成测试 |
 | `writePump()` | 无 | 需要集成测试 |
-| `handleMessage()` | 部分 | 各 handler 有单测，分发逻辑未覆盖 |
-| 各 `handle*` 函数 | 有 | 现有单测覆盖 |
+| `handleMessage()` | 部分 | 分发逻辑未完全覆盖 |
+| 各 `handle*` 函数 | 有单测 | 现有 server_test.go |
 
-### 新增测试预期覆盖
+### 覆盖率预算
 
-| 测试 | 预期覆盖函数/路径 |
-|------|------------------|
-| 连接测试 | `ServeWS`, `HandleConnection`, `readPump`, `writePump` |
-| 房间测试 | `handleJoinRoom`, `handleLeaveRoom` 的完整路径 |
-| 广播测试 | `Broadcast`, `BroadcastToRoom` 的真实连接路径 |
-| 异常测试 | 错误处理分支 |
-| 并发测试 | 并发安全路径 |
+| 函数 | 当前 | 目标 | 新增测试 |
+|------|------|------|----------|
+| `ServeWS` | 0% | 100% | 集成测试 |
+| `HandleConnection` | 0% | 100% | 集成测试 |
+| `readPump` | 0% | 70% | 集成测试（超时分支除外） |
+| `writePump` | 0% | 70% | 集成测试（超时分支除外） |
+| `handleMessage` | 60% | 100% | 消息分发测试 |
+| 其他函数 | 80%+ | 维持 | 现有单测 |
+
+**预期总覆盖率**：90%+
 
 ---
 
 ## 范围界定
 
-### 测试边界
-
-**网络层职责**：消息分发与连接管理
+### 网络层职责
 
 | 测试重点 | 说明 |
 |----------|------|
-| 消息分发 | 输入 X 类型 → 触发正确 handler |
-| 消息广播 | 发送者之外的其他客户端收到消息 |
-| 连接管理 | 建立、注册、注销、断线清理 |
+| 消息分发 | `handleMessage` 的 switch 分支覆盖 |
+| 消息广播 | `Broadcast`/`BroadcastToRoom` 真实连接验证 |
+| 连接管理 | `ServeWS`/`HandleConnection` 完整流程 |
 | 异常处理 | 无效输入不崩溃 |
 
-**不测试的业务逻辑**（由 game/room/player 包负责）：
-- 武器伤害计算
-- 命中检测
-- 技能效果
-- C4 爆炸范围
+### 不测试的业务逻辑
 
-**允许验证的业务副作用**（作为网络分发的确认）：
-- 房间满员时拒绝加入（这是网络层的路由逻辑）
-- 未在房间时忽略 move/shoot（这是前置条件检查）
+由 game/room/player 包负责：
+- 武器伤害、命中检测、技能效果、C4 爆炸范围
 
 ---
 
@@ -62,10 +57,10 @@
 
 ```
 server/internal/network/
-├── server.go                  # 现有代码（不修改）
-├── server_test.go             # 现有单元测试（保留）
-├── server_ws_test.go          # 真实 WebSocket 集成测试（新增）
-└── KNOWN_GAPS.md              # 未覆盖代码说明（新增）
+├── server.go                  # 现有代码
+├── server_test.go             # 现有单元测试
+├── server_ws_test.go          # 集成测试（新增）
+└── KNOWN_GAPS.md              # 未覆盖说明（新增）
 ```
 
 ---
@@ -75,7 +70,6 @@ server/internal/network/
 ### TestServer
 
 ```go
-// TestServer 测试服务器
 type TestServer struct {
     Server      *httptest.Server
     Hub         *Hub
@@ -84,51 +78,57 @@ type TestServer struct {
 }
 
 // NewTestServer 创建测试服务器
-func NewTestServer(t *testing.T) *TestServer {
-    ts := &TestServer{
-        Hub:         NewHub(),
-        RoomManager: room.NewManager(10, 10), // max 10 rooms, 10 players per room
-    }
-    
-    go ts.Hub.Run()
-    
-    mux := http.NewServeMux()
-    mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-        ServeWS(ts.Hub, ts.RoomManager, nil, w, r)
-    })
-    ts.Server = httptest.NewServer(mux)
-    ts.URL = "ws" + strings.TrimPrefix(ts.Server.URL, "http") + "/ws"
-    
-    return ts
-}
+// 注意：matcher 参数固定为 nil（当前实现未使用）
+func NewTestServer(t *testing.T) *TestServer
 
 // Close 关闭服务器
-func (s *TestServer) Close() {
-    s.Server.Close()
-}
-
-// NewClient 创建 WebSocket 客户端并返回连接和 player_id
-func (s *TestServer) NewClient(t *testing.T) (*websocket.Conn, string)
-
-// JoinRoom 创建客户端并加入房间，返回连接和房间 ID
-func (s *TestServer) JoinRoom(t *testing.T, roomID string) (*websocket.Conn, string, string)
+// 注意：Hub.Run() goroutine 会泄漏，测试进程退出时清理
+func (s *TestServer) Close()
 ```
 
-### 断言工具
+### 客户端工具
 
 ```go
-// 默认超时
 const defaultTimeout = 2 * time.Second
+const noMsgTimeout = 500 * time.Millisecond
 
-// AssertMessageType 断言收到指定类型消息
-func AssertMessageType(t *testing.T, conn *websocket.Conn, wantType string) *Message
+// Connect 创建 WebSocket 连接
+// 自动消费 welcome 消息，返回 player_id
+func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
 
-// AssertNoMessage 断言超时内无消息（默认 500ms）
-func AssertNoMessage(t *testing.T, conn *websocket.Conn)
+// CloseConn 关闭连接
+func CloseConn(t *testing.T, conn *websocket.Conn)
 
-// SendMessage 发送消息
-func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
+// CreateRoom 创建房间并加入，返回 room_id
+func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
+
+// JoinRoom 加入已存在的房间
+func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
+
+// FillRoom 填满房间（返回 N 个客户端连接）
+func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
 ```
+
+### 消息工具
+
+```go
+// Send 发送消息
+func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
+
+// Recv 接收消息（带超时）
+func Recv(t *testing.T, conn *websocket.Conn, timeout time.Duration) *Message
+
+// RecvType 接收并验证类型
+func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
+
+// NoMessage 验证超时内无消息
+func NoMessage(t *testing.T, conn *websocket.Conn)
+```
+
+**工具契约**：
+- 每个连接只有一个 goroutine 读取消息
+- `Connect` 自动消费 welcome
+- 调用者负责 `CloseConn`
 
 ---
 
@@ -139,27 +139,22 @@ func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interf
 #### TestWS_Connect
 
 ```
-前置条件：无
-输入：建立 WebSocket 连接
+步骤：
+  1. 调用 Connect(ts)
 预期：
-  - 收到 welcome 消息
-  - 消息包含 player_id 字段
-断言：
-  - msg.Type == "welcome"
-  - msg.Data.player_id 非空
+  - 返回非空 player_id
 ```
 
 #### TestWS_Disconnect_WithRoom
 
 ```
-前置条件：
-  - 客户端 A、B 都加入同一房间
-输入：客户端 A 关闭连接
+前置：
+  1. 客户端 A、B 加入同一房间
+步骤：
+  1. A 关闭连接
+  2. B 等待消息
 预期：
-  - 客户端 B 收到 player_left 消息
-断言：
-  - 客户端 B 收到 type == "player_left"
-  - player_id == A 的 ID
+  - B 收到 player_left，player_id == A 的 ID
 ```
 
 ### 2. 房间操作
@@ -167,243 +162,174 @@ func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interf
 #### TestWS_JoinRoom_New
 
 ```
-前置条件：无
-输入：发送 join_room（无 room_id）
+步骤：
+  1. 调用 CreateRoom(ts)
 预期：
-  - 收到 room_joined 消息
-  - 消息包含新生成的 room_id
-断言：
-  - msg.Type == "room_joined"
-  - msg.Data.room_id 非空
+  - 返回非空 room_id
 ```
 
 #### TestWS_JoinRoom_Existing
 
 ```
-前置条件：
-  - 客户端 A 创建房间，获取 room_id
-输入：客户端 B 使用该 room_id 加入
+前置：
+  1. A 创建房间，获取 room_id
+步骤：
+  1. B 调用 JoinRoom(ts, room_id)
 预期：
-  - 客户端 B 收到 room_joined
-  - room_id 与 A 的房间相同
-  - 客户端 A 收到 player_joined
-断言：
-  - B 收到 msg.Data.room_id == A 的 room_id
-  - A 收到 msg.Type == "player_joined"
+  - B 收到 room_joined，room_id 正确
+  - A 收到 player_joined
 ```
 
 #### TestWS_JoinRoom_Full
 
 ```
-前置条件：
-  - 创建房间
-  - 用 10 个客户端填满房间（MaxSize=10）
-输入：第 11 个客户端尝试加入
+前置：
+  1. 创建房间
+  2. 填入 10 名玩家（房间满）
+步骤：
+  1. 第 11 名玩家尝试加入
 预期：
-  - 收到 error 消息
-断言：
-  - msg.Type == "error"
-  - msg.Data.message == "Room is full"
+  - 收到 error 消息，message == "Room is full"
 ```
 
 #### TestWS_LeaveRoom
 
 ```
-前置条件：
-  - 客户端 A、B 都加入同一房间
-输入：客户端 A 发送 leave_room
+前置：
+  1. A、B 加入同一房间
+步骤：
+  1. A 发送 leave_room
 预期：
-  - 客户端 B 收到 player_left
-断言：
-  - B 收到 msg.Type == "player_left"
+  - B 收到 player_left
 ```
 
-### 3. 消息广播
+### 3. 消息分发测试
 
-#### TestWS_Broadcast_TwoClients
+**目标**：覆盖 `handleMessage` 所有 case 分支
 
-```
-前置条件：
-  - 客户端 A、B 加入同一房间
-输入：A 发送 chat {"message": "hello"}
-预期：
-  - B 收到 chat 消息
-  - A 不收到自己的消息
-断言：
-  - B 收到 msg.Type == "chat"
-  - B 收到 msg.Data.message == "hello"
-  - A 在 500ms 内无消息
-```
+#### 表驱动测试：消息分发
 
-#### TestWS_Broadcast_TenClients
-
-```
-前置条件：
-  - 10 个客户端加入同一房间
-输入：客户端 1 发送 chat
-预期：
-  - 其他 9 个客户端收到消息
-断言：
-  - 9 个客户端各收到 1 条 chat 消息
-```
-
-### 4. 核心消息分发
-
-#### TestWS_Move
-
-```
-前置条件：
-  - 客户端 A、B 加入同一房间
-输入：A 发送 move {"x":10,"y":5,"z":20,"rotation":1.57}
-预期：
-  - B 收到 player_moved
-断言：
-  - msg.Type == "player_moved"
-  - msg.Data.position.x == 10
-```
-
-#### TestWS_Chat
-
-```
-前置条件：
-  - 客户端 A、B 加入同一房间
-输入：A 发送 chat {"message":"hello"}
-预期：
-  - B 收到 chat
-断言：
-  - msg.Type == "chat"
-  - msg.Data.message == "hello"
+```go
+func TestWS_MessageDispatch(t *testing.T) {
+    tests := []struct {
+        name      string
+        msgType   string
+        data      interface{}
+        wantReply string   // 期望的响应类型
+        broadcast bool     // 是否广播给其他玩家
+    }{
+        {"move", "move", moveData, "player_moved", true},
+        {"chat", "chat", chatData, "chat", true},
+        {"shoot", "shoot", shootData, "player_shot", true},
+        {"reload", "reload", nil, "reload", false},
+        {"respawn", "respawn", respawnData, "respawn", false},
+        {"weapon_change", "weapon_change", weaponData, "weapon_changed", true},
+        {"voice_start", "voice_start", nil, "voice_start", true},
+        {"voice_stop", "voice_stop", nil, "voice_stop", true},
+        {"team_join", "team_join", teamData, "team_changed", true},
+        {"grenade_throw", "grenade_throw", grenadeData, "grenade_thrown", true},
+        {"c4_plant", "c4_plant", c4Data, "c4_planted", true},
+        {"c4_defuse", "c4_defuse", nil, "c4_defused", true},
+        {"skill_use", "skill_use", skillData, "skill_used", true},
+        {"emote", "emote", emoteData, "emote", true},
+        {"ping", "ping", pingData, "ping", true},
+        {"voice_data", "voice_data", voiceData, "voice_data", true},
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // 1. 创建两个客户端并加入同一房间
+            // 2. A 发送消息
+            // 3. 验证 B 收到广播（如果 broadcast）
+            // 4. 验证 A 收到响应（如果 wantReply）
+        })
+    }
+}
 ```
 
-#### TestWS_Shoot
-
-```
-前置条件：
-  - 客户端 A、B 加入同一房间
-输入：A 发送 shoot {"position":{"x":0,"y":0,"z":0},"rotation":0}
-预期：
-  - B 收到 player_shot
-断言：
-  - msg.Type == "player_shot"
-```
-
-#### TestWS_Reload
-
-```
-前置条件：
-  - 客户端 A 加入房间
-输入：A 发送 reload
-预期：
-  - A 收到 reload 响应
-断言：
-  - msg.Type == "reload"
-  - msg.Data.ammo == 30
-```
-
-#### TestWS_VoiceData
-
-```
-前置条件：
-  - 客户端 A、B 加入同一房间
-输入：A 发送 voice_data {"audio":"base64..."}
-预期：
-  - B 收到 voice_data
-断言：
-  - msg.Type == "voice_data"
-  - msg.Data.player_id == A 的 ID
-```
-
-### 5. 异常输入
+### 4. 异常输入
 
 #### TestWS_InvalidJSON
 
 ```
-前置条件：客户端已连接
-输入：发送 '{"invalid'
-预期：无响应，连接保持
-断言：
-  - 500ms 内无消息
-  - 后续消息仍可正常收发
+步骤：
+  1. 连接后发送非法 JSON: '{"invalid'
+  2. 等待 500ms
+预期：
+  - 无消息
+  - 连接仍可用（发送正常消息能收到响应）
 ```
 
 #### TestWS_UnknownType
 
 ```
-前置条件：客户端已连接
-输入：发送 {"type":"unknown","data":{}}
-预期：无响应，连接保持
-断言：
-  - 500ms 内无消息
+步骤：
+  1. 发送 {"type":"unknown","data":{}}
+  2. 等待 500ms
+预期：
+  - 无消息
 ```
 
-#### TestWS_Move_NotInRoom
+#### TestWS_NoRoom_Operations
 
 ```
-前置条件：客户端已连接但未加入房间
-输入：发送 move
-预期：无响应，连接保持
-断言：
-  - 500ms 内无消息
+步骤：
+  1. 连接但不加入房间
+  2. 发送 move, shoot, chat
+  3. 每次等待 500ms
+预期：
+  - 均无消息（被忽略）
 ```
 
 #### TestWS_JoinRoom_MissingName
 
 ```
-前置条件：无
-输入：发送 join_room 无 name 字段
-预期：使用空字符串作为 name（当前实现行为）
-断言：
-  - 收到 room_joined
-  - 后续 player_joined 消息中 name 为空
-```
-
-### 6. 并发测试
-
-#### TestConcurrent_Connect10
-
-```
-前置条件：无
-输入：10 个客户端同时连接
-预期：全部收到 welcome
-断言：
-  - 10 个客户端各收到 1 条 welcome
-```
-
-#### TestConcurrent_JoinRoom10
-
-```
-前置条件：无
-输入：10 个客户端同时 join_room（无 room_id）
+前置：
+  1. A 创建房间
+步骤：
+  1. B 加入房间（不提供 name）
+  2. A 收到 player_joined
 预期：
-  - 全部成功加入（可能在不同房间）
-断言：
-  - 每个客户端收到 room_joined
+  - A 收到的消息中 name 为空字符串
 ```
 
-#### TestConcurrent_Chat10
+### 5. 并发测试
+
+#### TestConcurrent_JoinSameRoom
 
 ```
-前置条件：
-  - 10 个客户端加入同一房间
-输入：每个客户端各发 10 条 chat
+前置：
+  1. A 创建房间，获取 room_id
+步骤：
+  1. 5 个客户端同时 JoinRoom(ts, room_id)
+预期：
+  - 全部成功加入
+  - A 收到 5 个 player_joined
+```
+
+#### TestConcurrent_Broadcast
+
+```
+前置：
+  1. 5 个客户端加入同一房间
+步骤：
+  1. 每个客户端同时发送 5 条 chat
 预期：
   - 无崩溃、无死锁
-  - 连接仍可通信
-断言：
-  - 所有发送完成
-  - 之后发送一条消息能收到响应
+  - 总消息数 = 5 * 5 * 4 = 100 条（每个广播给其他 4 个）
 ```
 
-#### TestConcurrent_Disconnect5
+#### TestConcurrent_Disconnect
 
 ```
-前置条件：
-  - 10 个客户端加入同一房间
-输入：随机断开 5 个客户端
+前置：
+  1. 10 个客户端加入同一房间
+步骤：
+  1. 随机断开 5 个
+  2. 剩余 5 个互相发消息
 预期：
-  - 剩余 5 个仍能正常通信
-断言：
-  - 剩余客户端能发送并收到消息
+  - 无崩溃
+  - 消息正常收发
 ```
 
 ---
@@ -416,23 +342,40 @@ func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interf
 # 网络层测试已知缺口
 
 ## 超时分支
-- `readPump` 中的 `pongWait` 超时：需要禁用客户端自动 Pong
-- `writePump` 中的 `writeWait` 超时：需要模拟慢客户端
+- readPump pongWait 超时
+- writePump writeWait 超时
 
-## 极端错误路径
-- `websocket.CloseError` 特定错误码处理
-- `json.Marshal` 失败（理论上不可能）
+## 极端错误
+- websocket.CloseError 特定错误码
+- json.Marshal 失败
 
-## 心跳完整流程
-- Ping/Pong 由 gorilla/websocket 库自动处理
+## 心跳流程
+- Ping/Pong 由 gorilla/websocket 自动处理
+
+## Hub goroutine
+- Hub.Run() 无 stop 机制，测试时会泄漏
+- 依赖测试进程退出清理
 
 ## 原因
-这些路径属于防御性代码，实际极少触发。如需覆盖需要：
-1. 修改生产代码（添加接口/依赖注入）
-2. 编写复杂 mock 基础设施
-
-当前 ROI 不高，留待后续迭代。
+防御性代码，实际极少触发。需要修改生产代码或复杂 mock。
+留待后续迭代。
 ```
+
+---
+
+## Hub Goroutine 处理策略
+
+**现状**：`Hub.Run()` 是无限循环，无 stop 机制。
+
+**策略**：
+1. 接受测试时 goroutine 泄漏
+2. 测试进程退出时自动清理
+3. 每个测试创建独立 Hub，不共享状态
+4. 在 KNOWN_GAPS.md 中记录
+
+**未来改进**（不在本设计范围）：
+- 为 Hub 添加 context/stop 机制
+- 或使用 `runtime.SetFinalizer` 清理
 
 ---
 
@@ -448,23 +391,12 @@ func SendMessage(t *testing.T, conn *websocket.Conn, msgType string, data interf
 
 ---
 
-## 风险与缓解
-
-| 风险 | 缓解措施 |
-|------|----------|
-| WebSocket 测试不稳定 | 确定性超时、共享工具函数 |
-| Hub goroutine 泄漏 | 测试进程退出时自动清理 |
-| 覆盖率未达标 | 记录到 KNOWN_GAPS.md |
-
----
-
 ## 时间估计
 
 | 任务 | 时间 |
 |------|------|
-| 测试工具函数 | 1 小时 |
-| 连接/房间测试 | 1 小时 |
-| 消息/异常测试 | 1 小时 |
-| 并发测试 | 1 小时 |
-| 调试与覆盖率 | 1 小时 |
-| **总计** | **5 小时** |
+| 测试工具 | 1 小时 |
+| 消息分发测试 | 1.5 小时 |
+| 异常/并发测试 | 1 小时 |
+| 调试优化 | 0.5 小时 |
+| **总计** | **4 小时** |
