@@ -11,9 +11,33 @@ go tool cover -func=cover.out | grep server.go
 go test -race ./server/internal/network/...
 ```
 
-**执行顺序**：先完成单元 1（生产修复），再依次完成单元 2-6（测试）。
+---
 
-**覆盖率可达性**：`server.go` 约 740 行，未测分支（upgrade 失败、pump 超时、ping 周期）占比 < 10%，90% 目标可达。
+## 生产修复（前置）
+
+### 修复内容
+
+在 `BroadcastToRoom` 添加 nil 检查：
+
+```go
+func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
+    if r == nil {
+        return
+    }
+    // ... 原有逻辑
+}
+```
+
+### 影响的 handler
+
+以下 handler 在 `c.Room == nil` 时仍调用 `BroadcastToRoom`，修复后变为静默：
+
+| Handler | 当前行为 | 修复后行为 |
+|---------|---------|-----------|
+| `handleRespawn` | 发送者收到 respawn，广播 panic | 发送者收到 respawn，广播静默 |
+| `handleWeaponChange` | 设置武器后广播 panic | 设置武器后广播静默 |
+
+**测试前提**：修复必须先合并。
 
 ---
 
@@ -30,28 +54,11 @@ go test -race ./server/internal/network/...
 
 ---
 
-## 单元 1：生产修复
-
-**目标行为**：修复后 `BroadcastToRoom(nil, ...)` 静默返回，不 panic。
-
-```go
-func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
-    if r == nil {
-        return
-    }
-    // ... 原有逻辑
-}
-```
-
-**respawn 无房间行为**：修复后，`respawn` 在无房间时发送者收到 `respawn`，广播部分被 nil 检查拦截（静默）。
-
----
-
 ## 单元 2：测试基础设施
 
 ### 黑盒规则
 
-- `TestServer.Hub` 和 `TestServer.RoomManager` 仅用于服务器初始化
+- `TestServer.Hub` 和 `TestServer.RoomManager` 仅用于服务器构造
 - **禁止**在测试中读取或修改 Hub/RoomManager 状态
 - 所有断言通过 WebSocket 消息完成
 
@@ -74,20 +81,6 @@ const (
 | 零值字符串 | `""` | `""` |
 | 零值数字 | `0` | `0` |
 
-### TestServer 接口
-
-```go
-type TestServer struct {
-    Server      *httptest.Server
-    Hub         *Hub        // 仅初始化用
-    RoomManager *room.Manager // 仅初始化用
-    URL         string
-}
-
-func NewTestServer(t *testing.T) *TestServer
-func (s *TestServer) Close()
-```
-
 ### Helper 协议合同
 
 ```go
@@ -105,7 +98,6 @@ func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
 
 // JoinRoom：加入已存在房间
 // 协议：读取 welcome + room_joined，验证类型
-// 异常：若顺序不对或类型不对，t.Fatalf
 // 返回：(conn, playerID)
 func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
 
@@ -148,8 +140,6 @@ func CountType(msgs []*Message, msgType string) int
 
 ### 存活验证
 
-**适用场景**：验证连接仍能正常通信。
-
 **操作**：新建连接，发送 `join_room{"name":"probe"}`，验证收到 `room_joined`。
 
 ---
@@ -180,7 +170,7 @@ func CountType(msgs []*Message, msgType string) int
 - 断言：静默 + 存活验证
 
 ### TestWS_InvalidTopLevelJSON
-- 步骤：发送原始 `{"invalid`
+- 步骤：发送原始 `{"invalid`（非法 JSON）
 - 断言：静默 + 存活验证
 
 ### TestWS_JoinRoom_NewRoom
@@ -194,10 +184,6 @@ func CountType(msgs []*Message, msgType string) int
 - 前置：创建房间，`FillRoom(9)`（共 10 人）
 - 断言：第 11 人收到 `error` 包含 "full"
 
-### TestWS_JoinRoom_MissingName
-- 步骤：发送 `join_room{}`（无 name 字段）
-- 断言：收到 `room_joined`（name 为空字符串）
-
 ### TestWS_LeaveRoom
 - 前置：A、B 在同一房间
 - 断言：A 发送 leave_room 后，B 收到 `player_left`
@@ -206,19 +192,49 @@ func CountType(msgs []*Message, msgType string) int
 
 ## 单元 4：消息分发测试
 
-### 测试范围
+### 当前代码行为（修复后）
 
-每个消息验证：
-1. 在房间内正常行为（发送者 + 其他人）
-2. 无房间行为（按规范表）
+**JSON 解析失败处理**：
 
-### 消息行为规范
+| Handler | Unmarshal 错误检查 | 失败时行为 |
+|---------|------------------|-----------|
+| `handleMove` | ✅ 检查 | return（静默） |
+| `handleChat` | ✅ 检查 | return（静默） |
+| `handleWeaponChange` | ✅ 检查 | return（静默） |
+| `handleTeamJoin` | ✅ 检查 | return（静默） |
+| `handleGrenadeThrow` | ✅ 检查 | return（静默） |
+| `handleC4Plant` | ✅ 检查 | return（静默） |
+| `handleSkillUse` | ✅ 检查 | return（静默） |
+| `handleEmote` | ✅ 检查 | return（静默） |
+| `handlePing` | ✅ 检查 | return（静默） |
+| `handleShoot` | ❌ 不检查 | 零值广播 |
+| `handleRespawn` | ❌ 不检查 | 零值广播（发送者 + 其他人） |
+
+**无房间处理**：
+
+| Handler | Room nil 检查 | 修复后行为 |
+|---------|-------------|-----------|
+| `handleMove` | ✅ 检查 | 静默 |
+| `handleChat` | ✅ 检查 | 静默 |
+| `handleShoot` | ✅ 检查 | 静默 |
+| `handleVoiceStart/Stop/Data` | ✅ 检查 | 静默 |
+| `handleTeamJoin` | ✅ 检查 | 静默 |
+| `handleGrenadeThrow` | ✅ 检查 | 静默 |
+| `handleC4Plant/Defuse` | ✅ 检查 | 静默 |
+| `handleSkillUse` | ✅ 检查 | 静默 |
+| `handleEmote` | ✅ 检查 | 静默 |
+| `handlePing` | ✅ 检查 | 静默 |
+| `handleReload` | ❌ 不需要 | 正常（只发给自己） |
+| `handleRespawn` | ❌ 不检查 | 发送者收到 respawn，广播静默（nil 拦截） |
+| `handleWeaponChange` | ❌ 不检查 | 广播静默（nil 拦截） |
+
+### 消息行为规范（修复后）
 
 | 消息 | 发送者 | 其他人 | 无房间 | Payload非法 |
 |------|-------|-------|-------|------------|
 | `join_room` | `room_joined` | `player_joined` | 正常 | 静默 |
 | `leave_room` | ❌ | `player_left` | 静默 | N/A |
-| `move` | ❌ | `player_moved` | 静默 | 零值广播 |
+| `move` | ❌ | `player_moved` | 静默 | 静默 |
 | `chat` | `chat` | `chat` | 静默 | 静默 |
 | `shoot` | ❌ | `player_shot` | 静默 | 零值广播 |
 | `reload` | `reload` | ❌ | 正常 | N/A |
@@ -227,27 +243,13 @@ func CountType(msgs []*Message, msgType string) int
 | `voice_start` | ❌ | `voice_start` | 静默 | N/A |
 | `voice_stop` | ❌ | `voice_stop` | 静默 | N/A |
 | `voice_data` | ❌ | `voice_data` | 静默 | N/A |
-| `team_join` | `team_changed` | `team_changed` | 静默 | 零值广播 |
-| `grenade_throw` | `grenade_thrown` | `grenade_thrown` | 静默 | 零值广播 |
-| `c4_plant` | `c4_planted` | `c4_planted` | 静默 | 零值广播 |
+| `team_join` | `team_changed` | `team_changed` | 静默 | 静默 |
+| `grenade_throw` | `grenade_thrown` | `grenade_thrown` | 静默 | 静默 |
+| `c4_plant` | `c4_planted` | `c4_planted` | 静默 | 静默 |
 | `c4_defuse` | `c4_defused` | `c4_defused` | 静默 | N/A |
 | `skill_use` | `skill_used` | `skill_used` | 静默 | 静默 |
-| `emote` | `emote` | `emote` | 静默 | 零值广播 |
-| `ping` | `ping` | `ping` | 静默 | 零值广播 |
-
-### 特殊消息说明
-
-#### reload
-- **无房间**：正常执行，发送者收到 `reload`
-- **有房间**：发送者收到 `reload`，其他人不收（断言不收到）
-
-#### respawn
-- **无房间**：发送者收到 `respawn`，广播部分静默（`BroadcastToRoom(nil)` 被拦截）
-- **归类**：需要房间才能完成完整功能
-
-#### ping
-- **字段说明**：消息顶层 `type` 为 `"ping"`，payload 内也有 `type` 字段
-- **断言**：验证 payload 内的 `type` 字段（data.type）
+| `emote` | `emote` | `emote` | 静默 | 静默 |
+| `ping` | `ping` | `ping` | 静默 | 静默 |
 
 ### 成功路径测试清单
 
@@ -270,20 +272,6 @@ func CountType(msgs []*Message, msgType string) int
 | `emote` | TestWS_Emote_InRoom |
 | `ping` | TestWS_Ping_InRoom |
 
-### 零值断言规则
-
-| 消息 | 零值时断言 |
-|------|-----------|
-| `player_moved` | `player_id` 存在，`position` 为 `{}` |
-| `player_shot` | `player_id` 存在，`position` 为 `null` |
-| `player_respawned` | `player_id` 存在，`position` 为 `{}` |
-| `team_changed` | `player_id` 存在，`team` 为 `""` |
-| `grenade_thrown` | `player_id` 存在，`type` 为 `""` |
-| `c4_planted` | `player_id` 存在，`position` 为 `{}` |
-| `emote` | `player_id` 存在，`emote_id` 为 `""` |
-| `ping` | `player_id` 存在，payload 内 `type` 为 `""` |
-| `respawn`（发送者） | `player_id` 存在，`health`=0，`ammo`=0 |
-
 ---
 
 ## 单元 5：异常测试
@@ -304,31 +292,36 @@ func CountType(msgs []*Message, msgType string) int
 
 ### TestWS_JSONParseFailure（表驱动）
 
-**输入构造**：`Send(conn, "move", json.RawMessage("{invalid"))`
-- `Send` 将 `json.RawMessage` 原样嵌入 data 字段
-- 顶层 `{"type":"move","data":{invalid}` 合法，data 内 `{invalid` 非法
+**精确 payload 构造**：
 
-| Handler | 在房间内 | 预期 |
-|---------|---------|------|
-| `join_room` | 否 | 静默 |
-| `move` | 是 | 其他人收到零值 `player_moved` |
-| `chat` | 是 | 静默 |
-| `shoot` | 是 | 其他人收到零值 `player_shot` |
-| `respawn` | 是 | 发送者收到零值 `respawn`，其他人收到零值 `player_respawned` |
-| `weapon_change` | 是 | 静默 |
-| `team_join` | 是 | 广播零值 `team_changed` |
-| `grenade_throw` | 是 | 广播零值 `grenade_thrown` |
-| `c4_plant` | 是 | 广播零值 `c4_planted` |
-| `skill_use` | 是 | 静默 |
-| `emote` | 是 | 广播零值 `emote` |
-| `ping` | 是 | 广播零值 `ping` |
+```go
+// 发送合法顶层 JSON，data 内非法
+// 例如 move：{"type":"move","data":{invalid}}
+rawPayload := json.RawMessage("{invalid")
+Send(conn, "move", rawPayload)
+```
+
+**实际产生的 WebSocket 消息**：
+```json
+{"type":"move","data":{invalid}}
+```
+
+**测试范围**（只测试会零值广播的 handler）：
+
+| Handler | 预期行为 |
+|---------|---------|
+| `shoot` | 其他人收到 `player_shot`（position=null, rotation=0） |
+| `respawn` | 发送者收到 `respawn`（零值位置），其他人收到 `player_respawned` |
+
+**注意**：其他 handler 在 `json.Unmarshal` 失败时 return，不测试。
 
 ### TestWS_NoRoom（表驱动）
 
-需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
+需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
 
 **预期**：
-- `respawn`：发送者收到 `respawn`，无广播
+- `respawn`：发送者收到 `respawn`，广播静默
+- `weapon_change`：广播静默
 - 其他：静默
 
 ---
@@ -356,16 +349,11 @@ func CountType(msgs []*Message, msgType string) int
 **统计口径**：
 - 理论值：5 客户端 × 5 条 × 5 接收者 = 125 条
 - 只统计 `type="chat"` 消息
-- 每客户端分别统计后汇总
 
 **断言**：
-- 总 chat 数 >= 100（理论 125，允许 20% 丢失）
-- 每客户端至少收到 15 条（理论 25）
-- 存活验证：新连接创建房间成功
-
-**不可验证项**：
-- "无 panic"：测试框架自动捕获
-- "无死锁"：超时后测试失败
+- 总 chat 数 >= 100（允许 20% 丢失）
+- 每客户端至少收到 15 条
+- 存活验证通过
 
 ---
 
@@ -387,13 +375,21 @@ func CountType(msgs []*Message, msgType string) int
 | `voice_stop` | `player_id` | 存在 |
 | `voice_data` | `player_id`, `audio` | 存在 |
 | `team_changed` | `player_id`, `team` | team 精确匹配 |
-| `grenade_thrown` | `player_id`, `type`, `position` | type 精确匹配 |
+| `grenade_thrown` | `player_id`, `type` | type 精确匹配 |
 | `c4_planted` | `player_id`, `position` | position 为对象 |
 | `c4_defused` | `player_id` | 存在 |
 | `skill_used` | `player_id`, `skill_id` | skill_id 精确匹配 |
 | `emote` | `player_id`, `emote_id` | emote_id 精确匹配 |
-| `ping` | `player_id`, payload 内 `type`, `position` | type 精确匹配 |
+| `ping` | `player_id`, `type` | type 精确匹配 |
 | `error` | `message` | 包含关键字 |
+
+### 零值断言（JSON 解析失败）
+
+| 消息 | 零值字段断言 |
+|------|-------------|
+| `player_shot` | `position` 为 `null`，`rotation` 为 `0` |
+| `respawn`（发送者） | `position` 为 `{x:0,y:0,z:0}`，`health` 恢复满血，`ammo` 恢复满弹 |
+| `player_respawned` | `player_id` 存在，`position` 为零值 |
 
 ---
 
