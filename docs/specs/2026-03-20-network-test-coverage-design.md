@@ -13,7 +13,7 @@ go test -race ./server/internal/network/...
 
 ---
 
-## 前置修复
+## 前置修复（本 spec 包含）
 
 修复 `BroadcastToRoom` 添加 nil 检查：
 
@@ -26,15 +26,41 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 }
 ```
 
+**原因**：当前 `BroadcastToRoom(nil, ...)` 会 panic，这是需要修复的缺陷。
+
 ---
 
 ## 测试分层
 
-| 层级 | 文件 | 内容 |
-|------|------|------|
-| 单元测试 | `server_test.go` | Hub 注册/注销、Broadcast 空房间 |
-| 集成测试 | `server_ws_test.go` | WebSocket 连接、消息分发、异常 |
-| 并发冒烟 | `server_ws_test.go` | 广播稳定性 |
+| 层级 | 文件 | 内容 | 判定标准 |
+|------|------|------|---------|
+| 单元测试 | `server_test.go` | Hub 注册/注销、BroadcastToRoom 直接调用 | 不依赖 WebSocket |
+| 集成测试 | `server_ws_test.go` | WebSocket 端到端 | 真实网络连接 |
+| 并发冒烟 | `server_ws_test.go` | 多客户端稳定性 | 验证无竞态 |
+
+---
+
+## 测试工具稳定性合同
+
+```go
+const (
+    readTimeout    = 2 * time.Second   // 单次读取超时
+    drainWindow    = 200 * time.Millisecond  // 消息收集窗口
+    noMessageWait  = 100 * time.Millisecond  // NoMessage 等待时间
+)
+
+// NoMessage 验证无消息
+// 等待 noMessageWait，确保期间无消息到达
+func NoMessage(t *testing.T, conn *websocket.Conn)
+
+// RecvAll 接收所有消息
+// 持续读取直到 drainWindow 内无新消息
+func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
+
+// Drain 清空消息
+// 持续读取直到 drainWindow 内无新消息
+func Drain(t *testing.T, conn *websocket.Conn)
+```
 
 ---
 
@@ -42,98 +68,95 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 
 ### 1. 单播给发送者（不依赖房间）
 
-| 类型 | 说明 |
-|------|------|
-| `reload` | 发送者收到 `reload`，其他人不收到 |
+| 类型 | 发送者 | 其他人 | 无房间 |
+|------|-------|-------|-------|
+| `reload` | `reload` | ❌ | 正常 |
 
 ### 2. 广播给其他人（不含发送者）
 
-| 类型 | 说明 |
-|------|------|
-| `move` | 其他人收到 `player_moved` |
-| `shoot` | 其他人收到 `player_shot` |
-| `voice_start` | 其他人收到 `voice_start` |
-| `voice_stop` | 其他人收到 `voice_stop` |
-| `voice_data` | 其他人收到 `voice_data` |
-| `leave_room` | 其他人收到 `player_left` |
+| 类型 | 无房间 |
+|------|-------|
+| `move` | 静默 |
+| `shoot` | 静默 |
+| `voice_start` | 静默 |
+| `voice_stop` | 静默 |
+| `voice_data` | 静默 |
+| `leave_room` | 静默 |
 
 ### 3. 广播给全房间（含发送者）
 
-| 类型 | 发送者收到 | 其他人收到 |
-|------|-----------|-----------|
-| `join_room` | `room_joined` | `player_joined` |
-| `chat` | `chat` | `chat` |
-| `respawn` | `respawn` | `player_respawned` |
-| `weapon_change` | `weapon_changed` | `weapon_changed` |
-| `team_join` | `team_changed` | `team_changed` |
-| `grenade_throw` | `grenade_thrown` | `grenade_thrown` |
-| `c4_plant` | `c4_planted` | `c4_planted` |
-| `c4_defuse` | `c4_defused` | `c4_defused` |
-| `skill_use` | `skill_used` | `skill_used` |
-| `emote` | `emote` | `emote` |
-| `ping` | `ping` | `ping` |
+| 类型 | 无房间 |
+|------|-------|
+| `join_room` | 正常 |
+| `chat` | 静默 |
+| `respawn` | 发送者正常 + 广播静默 |
+| `weapon_change` | 发送者正常 + 广播静默 |
+| `team_join` | 静默 |
+| `grenade_throw` | 静默 |
+| `c4_plant` | 静默 |
+| `c4_defuse` | 静默 |
+| `skill_use` | 静默 |
+| `emote` | 静默 |
+| `ping` | 静默 |
 
 ---
 
-## 已知代码前提
+## 无房间场景精确清单
 
-### `CanUseSkill` 行为
-
-```go
-// player.go
-func (p *Player) CanUseSkill(skillID string) bool {
-    cooldown, exists := SkillCooldowns[skillID]
-    if !exists {
-        return false  // 无效技能返回 false
-    }
-    // ...
-}
-```
-
-**结论**：无效技能 ID 会导致 `CanUseSkill` 返回 `false`，然后 `handleSkillUse` 发送 `error "Skill on cooldown"`。
-
-### `CanShoot` 行为
-
-```go
-// server.go
-func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
-    if c.Room == nil || !c.Player.CanShoot() {
-        return  // 冷却时静默返回，不发送任何消息
-    }
-    // ...
-}
-```
-
-**结论**：射击冷却时静默丢弃，不发送 error。
+| 消息 | 预期行为 |
+|------|---------|
+| `join_room` | 正常执行，创建房间 |
+| `reload` | 正常执行，发送者收到 `reload` |
+| `leave_room` | 静默，无消息 |
+| `move` | 静默，无消息 |
+| `chat` | 静默，无消息 |
+| `shoot` | 静默，无消息 |
+| `respawn` | 发送者收到 `respawn`，广播静默 |
+| `weapon_change` | 发送者收到 `weapon_changed`，广播静默 |
+| `voice_start` | 静默，无消息 |
+| `voice_stop` | 静默，无消息 |
+| `voice_data` | 静默，无消息 |
+| `team_join` | 静默，无消息 |
+| `grenade_throw` | 静默，无消息 |
+| `c4_plant` | 静默，无消息 |
+| `c4_defuse` | 静默，无消息 |
+| `skill_use` | 静默，无消息 |
+| `emote` | 静默，无消息 |
+| `ping` | 静默，无消息 |
 
 ---
 
-## 消息语义矩阵
+## JSON 解析失败测试范围
 
-| 类型 | 发送者 | 其他人 | 无房间 | 非法JSON | 冷却/无效 |
-|------|-------|-------|-------|---------|---------|
-| `join_room` | `room_joined` | `player_joined` | 正常 | 静默 | - |
-| `leave_room` | ❌ | `player_left` | 静默 | N/A | - |
-| `move` | ❌ | `player_moved` | 静默 | 静默 | - |
-| `chat` | `chat` | `chat` | 静默 | 静默 | - |
-| `shoot` | ❌ | `player_shot` | 静默 | 静默 | 静默 |
-| `reload` | `reload` | ❌ | 正常 | N/A | - |
-| `respawn` | `respawn` | `player_respawned` | 发送者正常+广播静默 | 静默 | - |
-| `weapon_change` | `weapon_changed` | `weapon_changed` | 发送者正常+广播静默 | 静默 | - |
-| `voice_start` | ❌ | `voice_start` | 静默 | N/A | - |
-| `voice_stop` | ❌ | `voice_stop` | 静默 | N/A | - |
-| `voice_data` | ❌ | `voice_data` | 静默 | N/A | - |
-| `team_join` | `team_changed` | `team_changed` | 静默 | 静默 | - |
-| `grenade_throw` | `grenade_thrown` | `grenade_thrown` | 静默 | 静默 | - |
-| `c4_plant` | `c4_planted` | `c4_planted` | 静默 | 静默 | - |
-| `c4_defuse` | `c4_defused` | `c4_defused` | 静默 | N/A | - |
-| `skill_use` | `skill_used`/`error` | `skill_used` | 静默 | 静默 | `error` |
-| `emote` | `emote` | `emote` | 静默 | 静默 | - |
-| `ping` | `ping` | `ping` | 静默 | 静默 | - |
+### 需要测试（解析 data）
 
-**无房间时特殊行为**：
-- `respawn`：发送者收到 `respawn`，广播给其他人部分因 `BroadcastToRoom(nil)` 静默
-- `weapon_change`：同上
+| Handler | 失败行为 |
+|---------|---------|
+| `join_room` | 静默 |
+| `move` | 静默 |
+| `chat` | 静默 |
+| `shoot` | 静默 |
+| `respawn` | 静默 |
+| `weapon_change` | 静默 |
+| `team_join` | 静默 |
+| `grenade_throw` | 静默 |
+| `c4_plant` | 静默 |
+| `skill_use` | 静默 |
+| `emote` | 静默 |
+| `ping` | 静默 |
+
+### 不需要测试（无 data 解析）
+
+`reload`, `leave_room`, `voice_start`, `voice_stop`, `voice_data`, `c4_defuse`
+
+---
+
+## 错误消息关键字
+
+| 场景 | 关键字 |
+|------|-------|
+| 房间满 | `full` |
+| 技能冷却/无效 | `cooldown` |
 
 ---
 
@@ -153,7 +176,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 | `weapon_changed` | `player_id`, `weapon` | weapon 精确匹配 |
 | `voice_start` | `player_id` | 存在 |
 | `voice_stop` | `player_id` | 存在 |
-| `voice_data` | `player_id` | 存在（audio 字段结构不验证） |
+| `voice_data` | `player_id` | 存在 |
 | `team_changed` | `player_id`, `team` | team 精确匹配 |
 | `grenade_thrown` | `player_id`, `type`, `position` | type 精确匹配 |
 | `c4_planted` | `player_id`, `position` | position 有 x/y/z |
@@ -165,110 +188,38 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 ---
 
-## 测试工具设计
+## 并发测试设计
+
+### 系统设计说明
+
+`BroadcastToRoom` 使用非阻塞发送：
 
 ```go
-type TestServer struct {
-    Server      *httptest.Server
-    Hub         *Hub
-    RoomManager *room.Manager
-    URL         string
+select {
+case client.Send <- msg.ToJSON():
+default:
+    // 缓冲区满，跳过
 }
-
-// NewTestServer 创建独立测试服务器
-func NewTestServer(t *testing.T) *TestServer
-
-// Close 关闭服务器
-func (s *TestServer) Close()
-
-// Connect 连接，消费 welcome
-func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string)
-
-// CreateRoom 创建房间
-func CreateRoom(t *testing.T, ts *TestServer) (*websocket.Conn, string, string)
-
-// JoinRoom 加入房间
-func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, string)
-
-// FillRoom 填满房间
-func FillRoom(t *testing.T, ts *TestServer, roomID string, count int) []*websocket.Conn
-
-// Drain 清空消息
-func Drain(t *testing.T, conn *websocket.Conn)
-
-// Send 发送消息
-func Send(t *testing.T, conn *websocket.Conn, msgType string, data interface{})
-
-// RecvType 接收并验证类型
-func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *Message
-
-// RecvAll 接收所有消息
-func RecvAll(t *testing.T, conn *websocket.Conn) []*Message
-
-// NoMessage 验证无消息
-func NoMessage(t *testing.T, conn *websocket.Conn)
-
-// CountType 统计消息类型
-func CountType(msgs []*Message, msgType string) int
 ```
 
----
+**允许丢消息**：当接收方处理慢时，发送通道满会丢弃消息。
 
-## 测试场景
-
-### 1. 连接测试
-
-- `TestWS_Connect`：playerID 非空
-- `TestWS_Disconnect_InRoom`：其他人收到 player_left
-- `TestWS_UnknownType`：NoMessage + 连接存活
-- `TestWS_InvalidTopLevelJSON`：NoMessage + 连接存活
-
-### 2. 房间测试
-
-- `TestWS_JoinRoom_NewRoom`
-- `TestWS_JoinRoom_ExistingRoom`
-- `TestWS_JoinRoom_Full`：error 包含 "full"
-- `TestWS_LeaveRoom`
-
-### 3. 消息分发测试
-
-按分类覆盖所有消息类型，验证：
-- 单播：发送者收到，其他人不收到
-- 广播其他人：发送者不收到，其他人收到
-- 广播全房间：所有人都收到
-
-### 4. JSON 解析失败测试
-
-所有解析 data 的 handler：静默 + 连接存活
-
-### 5. 异常测试
-
-- `TestWS_SkillOnCooldown`：error 包含 "cooldown"
-- `TestWS_InvalidSkill`：error 包含 "cooldown"（无效技能也报这个）
-- `TestWS_Shoot_Cooldown`：其他人只收到 1 次 `player_shot`
-- `TestWS_Reload_NoRoom`：发送者收到 `reload`
-
-### 6. 无房间操作测试
-
-需要房间的消息：`leave_room`, `move`, `chat`, `shoot`, `respawn`, `weapon_change`, `voice_start`, `voice_stop`, `voice_data`, `team_join`, `grenade_throw`, `c4_plant`, `c4_defuse`, `skill_use`, `emote`, `ping`
-
-每个验证：NoMessage（或发送者正常 + 广播静默）
-
-### 7. 并发测试
+### 测试时序
 
 ```
-时序：
 1. 创建房间，5 客户端加入
 2. 全部 Drain
 3. 并发发送（每人 5 条 chat）
 4. 等待 2s
 5. 统计 chat 消息
+```
 
-断言：
+### 断言
+
 - 无 panic、无死锁
 - 总消息 >= 100（理论 125，允许 20% 丢失）
+- 每个客户端至少收到 80 条（保证公平性）
 - 连接存活
-```
 
 ---
 
@@ -292,6 +243,55 @@ func CountType(msgs []*Message, msgType string) int
 | `handleXxx` | ~95% | 主要路径覆盖 |
 | `BroadcastToRoom` | 100% | nil/空房间/正常 |
 | **总体** | **≥90%** | |
+
+---
+
+## 实施清单
+
+### Phase 1：基础设施
+
+- [ ] 修复 `BroadcastToRoom` nil 检查
+- [ ] 实现 `TestServer`
+- [ ] 实现 helper 函数
+
+### Phase 2：连接测试
+
+- [ ] `TestWS_Connect`
+- [ ] `TestWS_Disconnect_InRoom`
+- [ ] `TestWS_UnknownType`
+- [ ] `TestWS_InvalidTopLevelJSON`
+
+### Phase 3：房间测试
+
+- [ ] `TestWS_JoinRoom_NewRoom`
+- [ ] `TestWS_JoinRoom_ExistingRoom`
+- [ ] `TestWS_JoinRoom_Full`
+- [ ] `TestWS_LeaveRoom`
+
+### Phase 4：消息分发测试
+
+**单播**：
+- [ ] `reload`
+
+**广播其他人**：
+- [ ] `move`, `shoot`, `voice_start`, `voice_stop`, `voice_data`
+
+**广播全房间**：
+- [ ] `chat`, `respawn`, `weapon_change`, `team_join`
+- [ ] `grenade_throw`, `c4_plant`, `c4_defuse`
+- [ ] `skill_use`, `emote`, `ping`
+
+### Phase 5：异常测试
+
+- [ ] `TestWS_JSONParseFailure`（表驱动）
+- [ ] `TestWS_NoRoom`（表驱动）
+- [ ] `TestWS_SkillOnCooldown`
+- [ ] `TestWS_InvalidSkill`
+- [ ] `TestWS_Shoot_Cooldown`
+
+### Phase 6：并发测试
+
+- [ ] `TestConcurrent_Broadcast`
 
 ---
 
