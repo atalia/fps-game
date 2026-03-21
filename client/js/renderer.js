@@ -127,7 +127,11 @@ class Renderer {
         const playerGroup = new THREE.Group();
         playerGroup.add(body);
         playerGroup.add(head);
-        playerGroup.position.set(position.x || 0, position.y || 0, position.z || 0);
+        
+        // Y 坐标应该是身体底部位置，如果 Y=0，身体中心在地面
+        // 胶囊高度约 2.5 (0.5*2 + 1.5)，所以 Y=1.25 时底部贴地
+        const yPos = (position.y || 0) + 1.25;
+        playerGroup.position.set(position.x || 0, yPos, position.z || 0);
 
         this.scene.add(playerGroup);
         this.players.set(id, playerGroup);
@@ -146,7 +150,9 @@ class Renderer {
     updatePlayer(id, position, rotation) {
         const player = this.players.get(id);
         if (player) {
-            player.position.set(position.x, position.y, position.z);
+            // Y 坐标加上身体偏移
+            const yPos = (position.y || 0) + 1.25;
+            player.position.set(position.x, yPos, position.z);
             player.rotation.y = rotation;
         }
     }

@@ -139,9 +139,21 @@ function setupNetworkHandlers() {
 
     // 玩家加入
     window.network.on('player_joined', (data) => {
-        console.log('Player joined:', data.name);
-        window.renderer.addPlayer(data.player_id, data.position, false);
-        window.uiManager.addKillFeed(`${data.name} 加入了游戏`);
+        console.log('Player joined:', data.name, 'position:', data.position);
+        // 确保位置有效
+        const position = data.position || { x: 0, y: 0, z: 0 };
+        window.renderer.addPlayer(data.player_id, position, false);
+        window.uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`);
+        
+        // 同步到 game.players Map
+        if (window.game && window.game.players) {
+            window.game.players.set(data.player_id, {
+                id: data.player_id,
+                name: data.name,
+                position: position,
+                rotation: 0
+            });
+        }
     });
 
     // 玩家离开
@@ -149,11 +161,25 @@ function setupNetworkHandlers() {
         console.log('Player left:', data.player_id);
         window.renderer.removePlayer(data.player_id);
         window.uiManager.addKillFeed(`玩家离开了游戏`);
+        
+        // 从 game.players Map 移除
+        if (window.game && window.game.players) {
+            window.game.players.delete(data.player_id);
+        }
     });
 
     // 玩家移动
     window.network.on('player_moved', (data) => {
         window.renderer.updatePlayer(data.player_id, data.position, data.rotation);
+        
+        // 同步到 game.players Map
+        if (window.game && window.game.players) {
+            const player = window.game.players.get(data.player_id);
+            if (player) {
+                player.position = data.position;
+                player.rotation = data.rotation;
+            }
+        }
     });
 
     // 玩家射击
