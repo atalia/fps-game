@@ -3,7 +3,6 @@ package game
 import (
 	"math"
 	"math/rand"
-	"sync"
 
 	"fps-game/internal/player"
 	"fps-game/internal/weapon"

@@ -703,3 +703,13 @@ func CountType(msgs []*TestMessage, msgType string) int {
 
 // assertChatData 验证聊天消息数据
 func assertChatData(t *testing.T, msg *TestMessage, wantMessage string) {
+	var data struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(msg.Data, &data); err != nil {
+		t.Fatalf("Failed to parse chat: %v", err)
+	}
+	if data.Message != wantMessage {
+		t.Errorf("Expected message %q, got %q", wantMessage, data.Message)
+	}
+}
