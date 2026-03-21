@@ -94,7 +94,7 @@ func TestEnsureDir(t *testing.T) {
 func TestFileExists(t *testing.T) {
 	// 创建临时文件
 	tmpFile := "/tmp/test_file_" + GenerateID()
-	os.WriteFile(tmpFile, []byte("test"), 0644)
+	_ = os.WriteFile(tmpFile, []byte("test"), 0644)
 	defer os.Remove(tmpFile)
 
 	if !FileExists(tmpFile) {
@@ -109,7 +109,7 @@ func TestFileExists(t *testing.T) {
 func TestDirExists(t *testing.T) {
 	// 创建临时目录
 	tmpDir := "/tmp/test_dir_" + GenerateID()
-	os.MkdirAll(tmpDir, 0755)
+	_ = os.MkdirAll(tmpDir, 0755)
 	defer os.RemoveAll(tmpDir)
 
 	if !DirExists(tmpDir) {
@@ -122,7 +122,7 @@ func TestDirExists(t *testing.T) {
 
 	// 文件不是目录
 	tmpFile := "/tmp/test_not_dir_" + GenerateID()
-	os.WriteFile(tmpFile, []byte("test"), 0644)
+	_ = os.WriteFile(tmpFile, []byte("test"), 0644)
 	defer os.Remove(tmpFile)
 
 	if DirExists(tmpFile) {
