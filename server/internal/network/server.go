@@ -3,10 +3,14 @@ package network
 import (
 	"encoding/json"
 	"log"
+	"math"
+	"strings"
 	"net/http"
 	"sync"
 	"time"
 
+	"fps-game/internal/ai"
+	"fps-game/internal/hitbox"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
 
@@ -97,6 +101,9 @@ func (h *Hub) Broadcast(msgType string, data interface{}) {
 
 // BroadcastToRoom 广播消息给房间内所有玩家
 func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, excludeID string) {
+	if r == nil {
+		return
+	}
 	msg := NewMessage(msgType, data)
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -250,7 +257,6 @@ func (c *Client) writePump() {
 			if err := w.Close(); err != nil {
 				return
 			}
-
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -307,6 +313,11 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	// 标记系统
 	case "ping":
 		c.handlePing(msg.Data, roomManager)
+	// AI 机器人
+	case "add_bot":
+		c.handleAddBot(msg.Data)
+	case "remove_bot":
+		c.handleRemoveBot(msg.Data)
 	}
 }
 
@@ -417,19 +428,208 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 	c.Player.Shoot()
 
-	var pos struct {
-		Position map[string]float64 `json:"position"`
-		Rotation float64            `json:"rotation"`
+	var shootData struct {
+		Position  map[string]float64 `json:"position"`
+		Rotation  float64            `json:"rotation"`
+		Direction map[string]float64 `json:"direction"`
+		WeaponID  string             `json:"weapon_id"`
 	}
-	json.Unmarshal(data, &pos)
+	json.Unmarshal(data, &shootData)
 
 	// 广播射击事件
 	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"position":  pos.Position,
-		"rotation":  pos.Rotation,
+		"position":  shootData.Position,
+		"rotation":  shootData.Rotation,
 		"ammo":      c.Player.Ammo,
 	}, c.Player.ID)
+
+	// 命中检测
+	if shootData.Direction != nil {
+		origin := hitbox.Position{
+			X: shootData.Position["x"],
+			Y: shootData.Position["y"],
+			Z: shootData.Position["z"],
+		}
+		direction := hitbox.Position{
+			X: shootData.Direction["x"],
+			Y: shootData.Direction["y"],
+			Z: shootData.Direction["z"],
+		}
+
+		// 武器射程 (默认 50)
+		weaponRange := 50.0
+
+		hit := c.detectHit(origin, direction, weaponRange)
+		if hit != nil {
+			// 基础伤害 (根据武器类型)
+			baseDamage := 30
+			if shootData.WeaponID == "sniper" {
+				baseDamage = 100
+			} else if shootData.WeaponID == "shotgun" {
+				baseDamage = 80
+			} else if shootData.WeaponID == "pistol" {
+				baseDamage = 25
+			}
+
+			// 计算伤害
+			damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
+
+			// 获取被击中的目标（玩家或机器人）
+			var target *player.Player
+			var isBot bool
+			
+			// 检查是否是机器人
+			if strings.HasPrefix(hit.PlayerID, "bot_") {
+				bots := c.Room.GetBots()
+				for _, bot := range bots {
+					if bot.Player.ID == hit.PlayerID {
+						target = bot.Player
+						isBot = true
+						break
+					}
+				}
+			} else {
+				target = c.Room.GetPlayer(hit.PlayerID)
+			}
+			
+			if target != nil && target.IsAlive() {
+				target.TakeDamage(damage)
+
+				// 广播受伤消息
+				c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
+					"player_id":        hit.PlayerID,
+					"attacker_id":      c.Player.ID,
+					"damage":           damage,
+					"hitbox":           hit.HitBoxType,
+					"remaining_health": target.Health,
+					"position":         target.Position,
+					"is_bot":           isBot,
+				}, "")
+
+				// 检查死亡
+				if target.Health <= 0 {
+					// 更新击杀统计
+					c.Player.AddKill(1)
+					target.Die()
+
+					c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
+						"victim_id":     hit.PlayerID,
+						"killer_id":     c.Player.ID,
+						"weapon_id":     shootData.WeaponID,
+						"hitbox":        hit.HitBoxType,
+						"is_headshot":   hit.HitBoxType == "head",
+						"kill_distance": hit.Distance,
+						"is_bot":        isBot,
+					}, "")
+
+					// 玩家自动重生，机器人不重生
+					if !isBot {
+						go c.respawnPlayer(target)
+					}
+				}
+			}
+		}
+	}
+}
+
+// HitResult 命中结果
+type HitResult struct {
+	PlayerID   string
+	HitBoxType string
+	Distance   float64
+}
+
+// detectHit 检测射击命中
+func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) *HitResult {
+	if c.Room == nil {
+		return nil
+	}
+
+	var closestHit *HitResult
+	minDistance := math.MaxFloat64
+
+	// 检查真实玩家
+	for playerID, p := range c.Room.Players {
+		if playerID == c.Player.ID {
+			continue // 不打自己
+		}
+
+		for _, hb := range p.HitBoxes {
+			worldPos := hitbox.Position{
+				X: p.Position.X + hb.Offset.X,
+				Y: p.Position.Y + hb.Offset.Y,
+				Z: p.Position.Z + hb.Offset.Z,
+			}
+
+			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
+				distance := math.Sqrt(
+					math.Pow(worldPos.X-origin.X, 2)+
+						math.Pow(worldPos.Y-origin.Y, 2)+
+						math.Pow(worldPos.Z-origin.Z, 2),
+				)
+
+				if distance < minDistance {
+					minDistance = distance
+					closestHit = &HitResult{
+						PlayerID:   playerID,
+						HitBoxType: hb.Type,
+						Distance:   distance,
+					}
+				}
+			}
+		}
+	}
+
+	// 检查 AI 机器人
+	bots := c.Room.GetBots()
+	for _, bot := range bots {
+		for _, hb := range bot.Player.HitBoxes {
+			worldPos := hitbox.Position{
+				X: bot.Player.Position.X + hb.Offset.X,
+				Y: bot.Player.Position.Y + hb.Offset.Y,
+				Z: bot.Player.Position.Z + hb.Offset.Z,
+			}
+
+			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
+				distance := math.Sqrt(
+					math.Pow(worldPos.X-origin.X, 2)+
+						math.Pow(worldPos.Y-origin.Y, 2)+
+						math.Pow(worldPos.Z-origin.Z, 2),
+				)
+
+				if distance < minDistance {
+					minDistance = distance
+					closestHit = &HitResult{
+						PlayerID:   bot.Player.ID,
+						HitBoxType: hb.Type,
+						Distance:   distance,
+					}
+				}
+			}
+		}
+	}
+
+	return closestHit
+}
+
+// respawnPlayer 重生玩家
+func (c *Client) respawnPlayer(p *player.Player) {
+	time.Sleep(3 * time.Second) // 3 秒重生延迟
+
+	// 重置玩家状态
+	p.Health = p.MaxHealth
+	p.Position = player.Position{
+		X: (float64(time.Now().Unix()%100) - 50), // 随机重生点
+		Y: 0,
+		Z: (float64(time.Now().UnixNano()%100) - 50),
+	}
+
+	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
+		"player_id": p.ID,
+		"position":  p.Position,
+		"health":    p.Health,
+	}, "")
 }
 
 func (c *Client) handleReload() {
@@ -737,5 +937,63 @@ func (c *Client) handlePing(data json.RawMessage, roomManager *room.Manager) {
 			"z": req.Z,
 		},
 		"message": req.Message,
+	}, "")
+}
+
+// handleAddBot 处理添加机器人
+func (c *Client) handleAddBot(data json.RawMessage) {
+	var req struct {
+		Difficulty string `json:"difficulty"`
+		Team       string `json:"team"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	if c.Room == nil {
+		return
+	}
+
+	difficulty := ai.Difficulty(req.Difficulty)
+	if difficulty == "" {
+		difficulty = ai.DifficultyNormal
+	}
+
+	bot := c.Room.AddBot(difficulty, req.Team)
+	if bot == nil {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Cannot add more bots",
+		}).ToJSON()
+		return
+	}
+
+	// 广播机器人加入
+	c.hub.BroadcastToRoom(c.Room, "player_joined", map[string]interface{}{
+		"player_id":  bot.ID,
+		"name":       bot.Name,
+		"position":   bot.Position,
+		"is_bot":     true,
+		"difficulty": bot.Config.Difficulty,
+	}, "")
+}
+
+// handleRemoveBot 处理移除机器人
+func (c *Client) handleRemoveBot(data json.RawMessage) {
+	var req struct {
+		BotID string `json:"bot_id"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	if c.Room == nil {
+		return
+	}
+
+	c.Room.RemoveBot(req.BotID)
+
+	// 广播机器人离开
+	c.hub.BroadcastToRoom(c.Room, "player_left", map[string]interface{}{
+		"player_id": req.BotID,
 	}, "")
 }

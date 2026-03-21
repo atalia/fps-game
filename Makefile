@@ -10,7 +10,7 @@ build:
 	cd server && go build -o bin/fps-server ./cmd/server
 
 run:
-	cd server && go run ./cmd/server
+	cd server && CLIENT_PATH=../client go run ./cmd/server
 
 test:
 	cd server && go test -v ./...

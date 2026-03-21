@@ -136,6 +136,24 @@ class PlayerController {
                 break;
         }
 
+        // 发送射击消息到服务器
+        if (window.network && window.network.connected) {
+            window.network.send('shoot', {
+                position: {
+                    x: this.position.x,
+                    y: this.position.y + 1.7, // 眼睛高度
+                    z: this.position.z
+                },
+                rotation: this.rotation,
+                pitch: this.pitch
+            });
+        }
+
+        // 更新本地弹药显示
+        if (window.uiManager) {
+            window.uiManager.updateAmmo(this.ammo, this.ammoReserve);
+        }
+
         return true;
     }
 
