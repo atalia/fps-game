@@ -8,12 +8,12 @@ func TestNewSkinManager(t *testing.T) {
 	sm := NewSkinManager()
 
 	if sm == nil {
-		t.Error("SkinManager should not be nil")
+		t.Fatal("SkinManager should not be nil")
 	}
 
 	skins := sm.GetAllSkins()
 	if len(skins) == 0 {
-		t.Error("Should have default skins")
+		t.Fatal("Should have default skins")
 	}
 }
 
@@ -22,7 +22,7 @@ func TestSkinManager_GetSkin(t *testing.T) {
 
 	skin := sm.GetSkin("pistol_default")
 	if skin == nil {
-		t.Error("Should find pistol_default skin")
+		t.Fatal("Should find pistol_default skin")
 	}
 
 	if skin.Name != "默认" {
@@ -32,7 +32,7 @@ func TestSkinManager_GetSkin(t *testing.T) {
 	// 不存在的皮肤
 	skin = sm.GetSkin("nonexistent")
 	if skin != nil {
-		t.Error("Should return nil for nonexistent skin")
+		t.Fatal("Should return nil for nonexistent skin")
 	}
 }
 
@@ -41,7 +41,7 @@ func TestSkinManager_GetSkinsByWeapon(t *testing.T) {
 
 	pistolSkins := sm.GetSkinsByWeapon("pistol")
 	if len(pistolSkins) == 0 {
-		t.Error("Should have pistol skins")
+		t.Fatal("Should have pistol skins")
 	}
 
 	for _, skin := range pistolSkins {
@@ -56,7 +56,7 @@ func TestSkinManager_GetSkinsByRarity(t *testing.T) {
 
 	legendarySkins := sm.GetSkinsByRarity(RarityLegendary)
 	if len(legendarySkins) == 0 {
-		t.Error("Should have legendary skins")
+		t.Fatal("Should have legendary skins")
 	}
 
 	for _, skin := range legendarySkins {
@@ -71,7 +71,7 @@ func TestSkinManager_UnlockSkin(t *testing.T) {
 
 	// 解锁皮肤
 	if !sm.UnlockSkin("player1", "pistol_gold") {
-		t.Error("Should unlock skin")
+		t.Fatal("Should unlock skin")
 	}
 
 	// 验证玩家拥有皮肤
@@ -82,12 +82,12 @@ func TestSkinManager_UnlockSkin(t *testing.T) {
 
 	// 再次解锁同样的皮肤应该失败
 	if sm.UnlockSkin("player1", "pistol_gold") {
-		t.Error("Should not unlock same skin twice")
+		t.Fatal("Should not unlock same skin twice")
 	}
 
 	// 解锁不存在的皮肤应该失败
 	if sm.UnlockSkin("player1", "nonexistent") {
-		t.Error("Should not unlock nonexistent skin")
+		t.Fatal("Should not unlock nonexistent skin")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestSkinManager_GetPlayerSkins(t *testing.T) {
 	// 没有皮肤的玩家
 	skins := sm.GetPlayerSkins("empty_player")
 	if len(skins) != 0 {
-		t.Error("Should have no skins")
+		t.Fatal("Should have no skins")
 	}
 
 	// 解锁多个皮肤

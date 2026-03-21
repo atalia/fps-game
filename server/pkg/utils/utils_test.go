@@ -280,18 +280,18 @@ func TestContains(t *testing.T) {
 	slice := []string{"a", "b", "c"}
 
 	if !Contains(slice, "a") {
-		t.Error("Should contain 'a'")
+		t.Fatal("Should contain 'a'")
 	}
 	if Contains(slice, "d") {
-		t.Error("Should not contain 'd'")
+		t.Fatal("Should not contain 'd'")
 	}
 
 	intSlice := []int{1, 2, 3}
 	if !Contains(intSlice, 2) {
-		t.Error("Should contain 2")
+		t.Fatal("Should contain 2")
 	}
 	if Contains(intSlice, 4) {
-		t.Error("Should not contain 4")
+		t.Fatal("Should not contain 4")
 	}
 }
 
@@ -303,7 +303,7 @@ func TestRemove(t *testing.T) {
 		t.Errorf("Remove result length = %d, want 3", len(result))
 	}
 	if Contains(result, 2) {
-		t.Error("Should not contain removed element")
+		t.Fatal("Should not contain removed element")
 	}
 }
 

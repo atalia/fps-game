@@ -32,7 +32,7 @@ func TestHitDetector_DetectHit(t *testing.T) {
 	results := hd.DetectHit(shooterPos, shooterRot, targets, weapon.NewRifle())
 
 	if len(results) == 0 {
-		t.Error("Should detect hit on target in front")
+		t.Fatal("Should detect hit on target in front")
 	}
 
 	if len(results) > 0 {
@@ -65,7 +65,7 @@ func TestHitDetector_DetectHit_OutOfRange(t *testing.T) {
 	results := hd.DetectHit(shooterPos, shooterRot, targets, weapon.NewRifle())
 
 	if len(results) > 0 {
-		t.Error("Should not detect hit when target is out of range")
+		t.Fatal("Should not detect hit when target is out of range")
 	}
 }
 
@@ -85,7 +85,7 @@ func TestHitDetector_DetectHit_WrongAngle(t *testing.T) {
 	results := hd.DetectHit(shooterPos, shooterRot, targets, weapon.NewRifle())
 
 	if len(results) > 0 {
-		t.Error("Should not detect hit when target is not in front")
+		t.Fatal("Should not detect hit when target is not in front")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestHitDetector_DetectHit_DeadTarget(t *testing.T) {
 	results := hd.DetectHit(shooterPos, shooterRot, targets, weapon.NewRifle())
 
 	if len(results) > 0 {
-		t.Error("Should not detect hit on dead target")
+		t.Fatal("Should not detect hit on dead target")
 	}
 }
 

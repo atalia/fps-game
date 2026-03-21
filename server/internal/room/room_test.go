@@ -25,7 +25,7 @@ func TestRoom_AddPlayer(t *testing.T) {
 
 	p1 := player.NewPlayer()
 	if !r.AddPlayer(p1) {
-		t.Error("Should be able to add first player")
+		t.Fatal("Should be able to add first player")
 	}
 	if r.GetPlayerCount() != 1 {
 		t.Errorf("PlayerCount = %d, want 1", r.GetPlayerCount())
@@ -33,13 +33,13 @@ func TestRoom_AddPlayer(t *testing.T) {
 
 	p2 := player.NewPlayer()
 	if !r.AddPlayer(p2) {
-		t.Error("Should be able to add second player")
+		t.Fatal("Should be able to add second player")
 	}
 
 	// 房间已满
 	p3 := player.NewPlayer()
 	if r.AddPlayer(p3) {
-		t.Error("Should not be able to add player to full room")
+		t.Fatal("Should not be able to add player to full room")
 	}
 }
 
@@ -81,12 +81,12 @@ func TestRoom_GetPlayer(t *testing.T) {
 
 	found := r.GetPlayer(p.ID)
 	if found == nil {
-		t.Error("Should find added player")
+		t.Fatal("Should find added player")
 	}
 
 	notFound := r.GetPlayer("non-existent")
 	if notFound != nil {
-		t.Error("Should not find non-existent player")
+		t.Fatal("Should not find non-existent player")
 	}
 }
 
@@ -122,18 +122,18 @@ func TestManager_CreateRoom(t *testing.T) {
 
 	r1 := m.CreateRoom()
 	if r1 == nil {
-		t.Error("Should create first room")
+		t.Fatal("Should create first room")
 	}
 
 	r2 := m.CreateRoom()
 	if r2 == nil {
-		t.Error("Should create second room")
+		t.Fatal("Should create second room")
 	}
 
 	// 达到最大房间数
 	r3 := m.CreateRoom()
 	if r3 != nil {
-		t.Error("Should not create room when max reached")
+		t.Fatal("Should not create room when max reached")
 	}
 }
 
@@ -143,12 +143,12 @@ func TestManager_GetRoom(t *testing.T) {
 
 	found := m.GetRoom(r.ID)
 	if found == nil {
-		t.Error("Should find created room")
+		t.Fatal("Should find created room")
 	}
 
 	notFound := m.GetRoom("non-existent")
 	if notFound != nil {
-		t.Error("Should not find non-existent room")
+		t.Fatal("Should not find non-existent room")
 	}
 }
 
@@ -168,14 +168,14 @@ func TestManager_FindAvailableRoom(t *testing.T) {
 
 	// 没有房间时
 	if m.FindAvailableRoom() != nil {
-		t.Error("Should not find room when none exist")
+		t.Fatal("Should not find room when none exist")
 	}
 
 	// 创建房间
 	r := m.CreateRoom()
 	found := m.FindAvailableRoom()
 	if found == nil || found.ID != r.ID {
-		t.Error("Should find available room")
+		t.Fatal("Should find available room")
 	}
 
 	// 填满房间
@@ -184,7 +184,7 @@ func TestManager_FindAvailableRoom(t *testing.T) {
 
 	// 房间满了
 	if m.FindAvailableRoom() != nil {
-		t.Error("Should not find full room")
+		t.Fatal("Should not find full room")
 	}
 }
 
@@ -207,18 +207,18 @@ func TestManager_JoinRoom(t *testing.T) {
 	p := player.NewPlayer()
 
 	if !m.JoinRoom(p.ID, r.ID) {
-		t.Error("Should be able to join room")
+		t.Fatal("Should be able to join room")
 	}
 
 	// 再次加入（离开旧房间，加入新房间）
 	r2 := m.CreateRoom()
 	if !m.JoinRoom(p.ID, r2.ID) {
-		t.Error("Should be able to join another room")
+		t.Fatal("Should be able to join another room")
 	}
 
 	// 检查是否离开了旧房间
 	if m.GetPlayerRoom(p.ID).ID != r2.ID {
-		t.Error("Should be in new room")
+		t.Fatal("Should be in new room")
 	}
 }
 

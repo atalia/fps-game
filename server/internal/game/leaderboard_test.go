@@ -12,7 +12,7 @@ func TestNewLeaderboard(t *testing.T) {
 	}
 
 	if len(lb.entries) != 0 {
-		t.Error("Leaderboard should be empty")
+		t.Fatal("Leaderboard should be empty")
 	}
 }
 
@@ -77,7 +77,7 @@ func TestLeaderboard_Clear(t *testing.T) {
 	lb.Clear()
 
 	if len(lb.entries) != 0 {
-		t.Error("Leaderboard should be empty after clear")
+		t.Fatal("Leaderboard should be empty after clear")
 	}
 }
 

@@ -29,7 +29,7 @@ func TestAchievementSystem_GetAll(t *testing.T) {
 
 	all := as.GetAll()
 	if len(all) == 0 {
-		t.Error("Should have achievements")
+		t.Fatal("Should have achievements")
 	}
 }
 
@@ -38,7 +38,7 @@ func TestAchievementSystem_GetByCategory(t *testing.T) {
 
 	kills := as.GetByCategory("kills")
 	if len(kills) == 0 {
-		t.Error("Should have kill achievements")
+		t.Fatal("Should have kill achievements")
 	}
 
 	for _, a := range kills {
@@ -54,7 +54,7 @@ func TestPlayerAchievements_Unlock(t *testing.T) {
 	// 解锁成就
 	unlocked := pa.Unlock("first-blood", 10)
 	if !unlocked {
-		t.Error("Should unlock achievement")
+		t.Fatal("Should unlock achievement")
 	}
 
 	if pa.TotalPoints != 10 {
@@ -64,7 +64,7 @@ func TestPlayerAchievements_Unlock(t *testing.T) {
 	// 重复解锁
 	unlocked = pa.Unlock("first-blood", 10)
 	if unlocked {
-		t.Error("Should not unlock same achievement twice")
+		t.Fatal("Should not unlock same achievement twice")
 	}
 
 	if pa.TotalPoints != 10 {
@@ -76,13 +76,13 @@ func TestPlayerAchievements_IsUnlocked(t *testing.T) {
 	pa := NewPlayerAchievements("player1")
 
 	if pa.IsUnlocked("first-blood") {
-		t.Error("Achievement should not be unlocked yet")
+		t.Fatal("Achievement should not be unlocked yet")
 	}
 
 	pa.Unlock("first-blood", 10)
 
 	if !pa.IsUnlocked("first-blood") {
-		t.Error("Achievement should be unlocked")
+		t.Fatal("Achievement should be unlocked")
 	}
 }
 

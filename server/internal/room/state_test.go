@@ -23,7 +23,7 @@ func TestRoomWithState_StartGame(t *testing.T) {
 
 	// 人数不够，不能开始
 	if r.StartGame() {
-		t.Error("Should not start game with 0 players")
+		t.Fatal("Should not start game with 0 players")
 	}
 
 	// 添加玩家
@@ -34,7 +34,7 @@ func TestRoomWithState_StartGame(t *testing.T) {
 
 	// 现在可以开始
 	if !r.StartGame() {
-		t.Error("Should start game with 2 players")
+		t.Fatal("Should start game with 2 players")
 	}
 
 	if r.state != StatePlaying {
@@ -43,7 +43,7 @@ func TestRoomWithState_StartGame(t *testing.T) {
 
 	// 已经在游戏中，不能再次开始
 	if r.StartGame() {
-		t.Error("Should not start game again")
+		t.Fatal("Should not start game again")
 	}
 }
 

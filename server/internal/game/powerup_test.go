@@ -13,7 +13,7 @@ func TestNewPowerupManager(t *testing.T) {
 
 	powerups := pm.GetAllPowerups()
 	if len(powerups) == 0 {
-		t.Error("Should have powerups spawned")
+		t.Fatal("Should have powerups spawned")
 	}
 }
 
@@ -27,13 +27,13 @@ func TestPowerupManager_GetPowerup(t *testing.T) {
 
 	p := pm.GetPowerup(powerups[0].ID)
 	if p == nil {
-		t.Error("Should find powerup")
+		t.Fatal("Should find powerup")
 	}
 
 	// 不存在的道具
 	p = pm.GetPowerup("nonexistent")
 	if p != nil {
-		t.Error("Should return nil for nonexistent powerup")
+		t.Fatal("Should return nil for nonexistent powerup")
 	}
 }
 
@@ -48,7 +48,7 @@ func TestPowerupManager_CheckPickup(t *testing.T) {
 	// 在道具位置拾取
 	p := pm.CheckPickup(powerups[0].Position, 1.0)
 	if p == nil {
-		t.Error("Should pickup powerup")
+		t.Fatal("Should pickup powerup")
 	}
 
 	// 道具应该变为不活跃
@@ -68,7 +68,7 @@ func TestPowerupManager_CheckPickup_NotInRange(t *testing.T) {
 	// 在远处拾取
 	p := pm.CheckPickup(Position{X: 1000, Y: 0, Z: 1000}, 1.0)
 	if p != nil {
-		t.Error("Should not pickup powerup when not in range")
+		t.Fatal("Should not pickup powerup when not in range")
 	}
 }
 

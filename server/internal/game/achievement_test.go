@@ -8,12 +8,12 @@ func TestNewAchievementManager(t *testing.T) {
 	am := NewAchievementManager()
 
 	if am == nil {
-		t.Error("AchievementManager should not be nil")
+		t.Fatal("AchievementManager should not be nil")
 	}
 
 	achievements := am.GetAllAchievements()
 	if len(achievements) == 0 {
-		t.Error("Should have default achievements")
+		t.Fatal("Should have default achievements")
 	}
 }
 
@@ -32,7 +32,7 @@ func TestAchievementManager_GetAchievement(t *testing.T) {
 	// 不存在的成就
 	achievement = am.GetAchievement("nonexistent")
 	if achievement != nil {
-		t.Error("Should return nil for nonexistent achievement")
+		t.Fatal("Should return nil for nonexistent achievement")
 	}
 }
 
@@ -71,7 +71,7 @@ func TestAchievementManager_UpdateProgress(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("Should complete first_blood achievement")
+		t.Fatal("Should complete first_blood achievement")
 	}
 }
 
@@ -102,7 +102,7 @@ func TestAchievementManager_GetCompletedAchievements(t *testing.T) {
 
 	completed := am.GetCompletedAchievements("player1")
 	if len(completed) == 0 {
-		t.Error("Should have completed achievements")
+		t.Fatal("Should have completed achievements")
 	}
 
 	found := false

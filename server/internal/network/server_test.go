@@ -321,11 +321,11 @@ func TestClient_handleJoinRoom_ExistingRoom(t *testing.T) {
 	client.handleJoinRoom(data, roomManager)
 
 	if client.Room == nil {
-		t.Error("Should join existing room")
+		t.Fatal("Should join existing room")
 	}
 
 	if client.Room.ID != existingRoom.ID {
-		t.Error("Should join the specified room")
+		t.Fatal("Should join the specified room")
 	}
 }
 
@@ -536,10 +536,10 @@ func TestClient_SendMessage(t *testing.T) {
 	select {
 	case received := <-client.Send:
 		if received == nil {
-			t.Error("Should receive message")
+			t.Fatal("Should receive message")
 		}
 	default:
-		t.Error("Should have message in buffer")
+		t.Fatal("Should have message in buffer")
 	}
 }
 

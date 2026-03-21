@@ -28,7 +28,7 @@ func TestPlayer_Jump_InAir(t *testing.T) {
 
 	// 速度不应该改变
 	if p.Velocity.Y != oldVelocity {
-		t.Error("Should not jump while in air")
+		t.Fatal("Should not jump while in air")
 	}
 }
 
@@ -135,7 +135,7 @@ func TestPlayer_CanShoot_NoAmmo(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	if p.CanShoot() {
-		t.Error("Should not be able to shoot with no ammo")
+		t.Fatal("Should not be able to shoot with no ammo")
 	}
 }
 
@@ -146,7 +146,7 @@ func TestPlayer_ShootCooldown_Elapsed(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	if !p.CanShoot() {
-		t.Error("Should be able to shoot after cooldown")
+		t.Fatal("Should be able to shoot after cooldown")
 	}
 }
 
@@ -178,7 +178,7 @@ func TestPlayer_Reload_NoReserve(t *testing.T) {
 	p.Reload()
 
 	if p.Ammo != ammoBefore {
-		t.Error("Should not reload without reserve ammo")
+		t.Fatal("Should not reload without reserve ammo")
 	}
 }
 

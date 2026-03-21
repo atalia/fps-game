@@ -46,7 +46,7 @@ func TestWS_Reload_NoRoom(t *testing.T) {
 	msgs := RecvAll(t, conn)
 	reloadCount := CountType(msgs, "reload")
 	if reloadCount == 0 {
-		t.Error("Should receive reload message")
+		t.Fatal("Should receive reload message")
 	}
 }
 
@@ -200,7 +200,7 @@ func TestWS_Shoot_Cooldown(t *testing.T) {
 	msgs := RecvAll(t, conn)
 	shootCount := CountType(msgs, "player_shot")
 	if shootCount > 0 {
-		t.Error("Should not shoot during cooldown")
+		t.Fatal("Should not shoot during cooldown")
 	}
 }
 
@@ -273,7 +273,7 @@ func TestWS_Respawn_NoRoom(t *testing.T) {
 	msgs := RecvAll(t, conn)
 	respawnCount := CountType(msgs, "respawn")
 	if respawnCount == 0 {
-		t.Error("Should receive respawn message (no room check)")
+		t.Fatal("Should receive respawn message (no room check)")
 	}
 }
 
@@ -602,7 +602,7 @@ func TestWS_SkillUse_Cooldown(t *testing.T) {
 	// 读取 error 消息
 	msg2 := RecvType(t, conn, "error")
 	if msg2 == nil {
-		t.Error("Should receive error for cooldown")
+		t.Fatal("Should receive error for cooldown")
 	}
 }
 
@@ -631,7 +631,7 @@ func TestWS_SkillUse_UnknownSkill(t *testing.T) {
 		}
 	}
 	if errorMsg == nil {
-		t.Error("Should receive error for unknown skill")
+		t.Fatal("Should receive error for unknown skill")
 	}
 }
 

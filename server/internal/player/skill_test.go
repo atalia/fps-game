@@ -14,7 +14,7 @@ func TestNewSkillManager(t *testing.T) {
 
 	skills := sm.GetAllSkills()
 	if len(skills) == 0 {
-		t.Error("Should have default skills")
+		t.Fatal("Should have default skills")
 	}
 }
 
@@ -23,7 +23,7 @@ func TestSkillManager_GetSkill(t *testing.T) {
 
 	skill := sm.GetSkill("dash")
 	if skill == nil {
-		t.Error("Should find dash skill")
+		t.Fatal("Should find dash skill")
 	}
 
 	if skill.Name != "冲刺" {
@@ -33,7 +33,7 @@ func TestSkillManager_GetSkill(t *testing.T) {
 	// 不存在的技能
 	skill = sm.GetSkill("nonexistent")
 	if skill != nil {
-		t.Error("Should return nil for nonexistent skill")
+		t.Fatal("Should return nil for nonexistent skill")
 	}
 }
 
@@ -49,13 +49,13 @@ func TestSkillManager_CanUseSkill(t *testing.T) {
 	// 能量不足
 	canUse, _ = sm.CanUseSkill("player1", "dash", 10)
 	if canUse {
-		t.Error("Should not be able to use skill (not enough energy)")
+		t.Fatal("Should not be able to use skill (not enough energy)")
 	}
 
 	// 不存在的技能
 	canUse, _ = sm.CanUseSkill("player1", "nonexistent", 100)
 	if canUse {
-		t.Error("Should not be able to use nonexistent skill")
+		t.Fatal("Should not be able to use nonexistent skill")
 	}
 }
 
@@ -123,13 +123,13 @@ func TestSkillManager_GetActiveEffects(t *testing.T) {
 
 	effects := sm.GetActiveEffects("player1")
 	if len(effects) == 0 {
-		t.Error("Should have active effect")
+		t.Fatal("Should have active effect")
 	}
 
 	// 不存在的玩家
 	effects = sm.GetActiveEffects("nonexistent")
 	if len(effects) != 0 {
-		t.Error("Should have no effects for nonexistent player")
+		t.Fatal("Should have no effects for nonexistent player")
 	}
 }
 

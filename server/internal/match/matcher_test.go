@@ -55,7 +55,7 @@ func TestMatcher_TryMatch_NotEnough(t *testing.T) {
 
 	match := m.TryMatch()
 	if match != nil {
-		t.Error("Should not match with insufficient players")
+		t.Fatal("Should not match with insufficient players")
 	}
 }
 
@@ -77,7 +77,7 @@ func TestMatcher_TryMatch_Success(t *testing.T) {
 
 	match := m.TryMatch()
 	if match == nil {
-		t.Error("Should match with enough players")
+		t.Fatal("Should match with enough players")
 		return
 	}
 

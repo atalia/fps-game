@@ -8,7 +8,7 @@ func TestNewTeamManager(t *testing.T) {
 	tm := NewTeamManager()
 
 	if tm == nil {
-		t.Error("TeamManager should not be nil")
+		t.Fatal("TeamManager should not be nil")
 	}
 
 	teams := tm.GetAllTeams()
@@ -32,7 +32,7 @@ func TestTeamManager_CreateTeam(t *testing.T) {
 	// 获取新创建的队伍
 	team = tm.GetTeam("green")
 	if team == nil {
-		t.Error("Should find green team")
+		t.Fatal("Should find green team")
 	}
 }
 
@@ -52,7 +52,7 @@ func TestTeamManager_GetTeam(t *testing.T) {
 	// 不存在的队伍
 	team := tm.GetTeam("nonexistent")
 	if team != nil {
-		t.Error("Should return nil for nonexistent team")
+		t.Fatal("Should return nil for nonexistent team")
 	}
 }
 
@@ -61,7 +61,7 @@ func TestTeamManager_AddPlayerToTeam(t *testing.T) {
 
 	// 添加玩家
 	if !tm.AddPlayerToTeam("red") {
-		t.Error("Should add player to red team")
+		t.Fatal("Should add player to red team")
 	}
 
 	red := tm.GetTeam("red")
@@ -78,12 +78,12 @@ func TestTeamManager_AddPlayerToTeam_Full(t *testing.T) {
 
 	// 添加第一个玩家
 	if !tm.AddPlayerToTeam("small") {
-		t.Error("Should add first player")
+		t.Fatal("Should add first player")
 	}
 
 	// 添加第二个玩家（应该失败）
 	if tm.AddPlayerToTeam("small") {
-		t.Error("Should not add player to full team")
+		t.Fatal("Should not add player to full team")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestTeamManager_GetAutoAssignTeam(t *testing.T) {
 	// 初始应该返回第一个队伍
 	team := tm.GetAutoAssignTeam()
 	if team == "" {
-		t.Error("Should return a team")
+		t.Fatal("Should return a team")
 	}
 
 	// 添加玩家到红队
@@ -150,7 +150,7 @@ func TestTeamManager_GetWinningTeam(t *testing.T) {
 
 	winner := tm.GetWinningTeam()
 	if winner == nil || winner.ID != "red" {
-		t.Error("Red team should be winning")
+		t.Fatal("Red team should be winning")
 	}
 }
 
