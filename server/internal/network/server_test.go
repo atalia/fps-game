@@ -71,7 +71,7 @@ func Connect(t *testing.T, ts *TestServer) (*websocket.Conn, string) {
 		conn.Close()
 	})
 
-	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+	conn.SetReadDeadline(time.Now().Add(readTimeout))
 	_, data, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("Failed to read welcome: %v", err)
@@ -159,7 +159,7 @@ func SendRaw(t *testing.T, conn *websocket.Conn, raw string) {
 
 // RecvType 读取指定类型的消息，跳过其他类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage {
-	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+	conn.SetReadDeadline(time.Now().Add(readTimeout))
 	
 	for {
 		_, data, err := conn.ReadMessage()
@@ -177,7 +177,7 @@ func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage 
 		}
 		// 跳过不匹配的消息，继续读取
 		t.Logf("Skipping message type %s, waiting for %s", msg.Type, wantType)
-		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+		conn.SetReadDeadline(time.Now().Add(readTimeout))
 	}
 }
 
@@ -186,7 +186,7 @@ func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 	var msgs []*TestMessage
 
 	// 设置较长的读超时
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 
 	for {
 		_, data, err := conn.ReadMessage()
@@ -206,7 +206,7 @@ func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 		}
 
 		// 设置下一次读取的超时
-		_ = conn.SetReadDeadline(time.Now().Add(drainWindow))
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
 	}
 
 	return msgs
@@ -215,7 +215,7 @@ func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 // Drain 丢弃所有消息，直到 drainWindow 无新消息
 // 注意：这个函数会清空所有待处理的消息，不要在期望接收特定消息之前调用
 func Drain(t *testing.T, conn *websocket.Conn) {
-	_ = conn.SetReadDeadline(time.Now().Add(drainWindow))
+	conn.SetReadDeadline(time.Now().Add(drainWindow))
 	count := 0
 	for {
 		_, data, err := conn.ReadMessage()
@@ -224,7 +224,7 @@ func Drain(t *testing.T, conn *websocket.Conn) {
 		}
 		count++
 		// 继续读取直到超时
-		_ = conn.SetReadDeadline(time.Now().Add(drainWindow))
+		conn.SetReadDeadline(time.Now().Add(drainWindow))
 		_ = data // 忽略数据
 	}
 	t.Logf("Drained %d messages", count)
@@ -232,7 +232,7 @@ func Drain(t *testing.T, conn *websocket.Conn) {
 
 // NoMessage 验证静默
 func NoMessage(t *testing.T, conn *websocket.Conn) {
-	_ = conn.SetReadDeadline(time.Now().Add(noMessageWait))
+	conn.SetReadDeadline(time.Now().Add(noMessageWait))
 	_, _, err := conn.ReadMessage()
 	if err == nil {
 		t.Error("Expected no message, but got one")
@@ -262,16 +262,16 @@ func TestHub_Run(t *testing.T) {
 	hub.register <- c
 	time.Sleep(10 * time.Millisecond)
 
-	if len(hub.clients) != 1 {
-		t.Errorf("Expected 1 client, got %d", len(hub.clients))
+	if hub.GetClientCount() != 1 {
+		t.Errorf("Expected 1 client, got %d", hub.GetClientCount())
 	}
 
 	// 测试注销
 	hub.unregister <- c
 	time.Sleep(10 * time.Millisecond)
 
-	if len(hub.clients) != 0 {
-		t.Errorf("Expected 0 clients, got %d", len(hub.clients))
+	if hub.GetClientCount() != 0 {
+		t.Errorf("Expected 0 clients, got %d", hub.GetClientCount())
 	}
 }
 

@@ -43,6 +43,13 @@ type Hub struct {
 }
 
 // NewHub 创建 Hub
+// GetClientCount 获取客户端数量（线程安全）
+func (h *Hub) GetClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
