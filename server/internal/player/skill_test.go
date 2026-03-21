@@ -47,7 +47,7 @@ func TestSkillManager_CanUseSkill(t *testing.T) {
 	}
 
 	// 能量不足
-	canUse, reason = sm.CanUseSkill("player1", "dash", 10)
+	canUse, _ = sm.CanUseSkill("player1", "dash", 10)
 	if canUse {
 		t.Error("Should not be able to use skill (not enough energy)")
 	}

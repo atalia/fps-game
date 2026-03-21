@@ -126,9 +126,3 @@ func withLogging(next http.Handler) http.Handler {
 	})
 }
 
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}

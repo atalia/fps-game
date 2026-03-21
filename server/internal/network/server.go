@@ -31,7 +31,6 @@ type Client struct {
 	Room   *room.Room
 	Send   chan []byte
 	hub    *Hub
-	mu     sync.Mutex
 }
 
 // Hub 连接中心

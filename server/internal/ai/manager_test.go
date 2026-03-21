@@ -92,7 +92,7 @@ func TestManager_GetBot(t *testing.T) {
 
 	found := m.GetBot(bot.ID)
 	if found == nil {
-		t.Error("expected to find bot")
+		t.Fatal("expected to find bot")
 	}
 
 	if found.ID != bot.ID {

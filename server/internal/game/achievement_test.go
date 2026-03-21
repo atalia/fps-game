@@ -22,7 +22,7 @@ func TestAchievementManager_GetAchievement(t *testing.T) {
 
 	achievement := am.GetAchievement("first_blood")
 	if achievement == nil {
-		t.Error("Should find first_blood achievement")
+		t.Fatal("Should find first_blood achievement")
 	}
 
 	if achievement.Name != "第一滴血" {
@@ -153,7 +153,7 @@ func TestAchievementManager_HiddenAchievement(t *testing.T) {
 	// 获取隐藏成就
 	oneShot := am.GetAchievement("one_shot")
 	if oneShot == nil {
-		t.Error("Should find hidden achievement")
+		t.Fatal("Should find hidden achievement")
 	}
 	if !oneShot.Hidden {
 		t.Error("one_shot should be hidden")

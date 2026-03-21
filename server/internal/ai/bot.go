@@ -60,7 +60,6 @@ func generateBotName() string {
 	prefixes := []string{"Alpha", "Beta", "Gamma", "Delta", "Echo", "Foxtrot", "Ghost", "Hunter", "Ivy", "Jet"}
 	suffixes := []string{"Bot", "AI", "Droid", "Unit", "Core", "Node"}
 
-	rand.Seed(time.Now().UnixNano())
 	return fmt.Sprintf("%s-%s", prefixes[rand.Intn(len(prefixes))], suffixes[rand.Intn(len(suffixes))])
 }
 

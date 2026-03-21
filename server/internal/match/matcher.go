@@ -66,7 +66,6 @@ func (pq *PriorityQueue) Pop() interface{} {
 type Matcher struct {
 	queue      PriorityQueue
 	matches    map[string]*Match
-	playerLock sync.RWMutex
 	teamSize   int
 	maxWait    time.Duration
 	mu         sync.Mutex

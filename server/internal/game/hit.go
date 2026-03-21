@@ -21,7 +21,6 @@ type HitResult struct {
 // HitDetector 命中检测器
 type HitDetector struct {
 	mapSize float64
-	mu      sync.RWMutex
 }
 
 // NewHitDetector 创建命中检测器
