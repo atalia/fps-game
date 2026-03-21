@@ -13,7 +13,7 @@ import (
 // GenerateID 生成唯一 ID
 func GenerateID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 

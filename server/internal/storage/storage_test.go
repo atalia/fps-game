@@ -141,9 +141,9 @@ func TestMemoryStorage_Leaderboard(t *testing.T) {
 	ctx := context.Background()
 
 	// Add scores
-	s.IncrementScore(ctx, "player1", 100)
-	s.IncrementScore(ctx, "player2", 200)
-	s.IncrementScore(ctx, "player3", 150)
+	_, _ = s.IncrementScore(ctx, "player1", 100)
+	_, _ = s.IncrementScore(ctx, "player2", 200)
+	_, _ = s.IncrementScore(ctx, "player3", 150)
 
 	// Get leaderboard
 	entries, err := s.GetLeaderboard(ctx, 10)

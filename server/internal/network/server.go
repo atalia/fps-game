@@ -203,9 +203,9 @@ func (c *Client) readPump(roomManager *room.Manager) {
 	}()
 
 	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
 
@@ -235,9 +235,9 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
@@ -245,20 +245,20 @@ func (c *Client) writePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			_, _ = w.Write(message)
 
 			// 批量发送
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Send)
+				_, _ = w.Write([]byte{'\n'})
+				_, _ = w.Write(<-c.Send)
 			}
 
 			if err := w.Close(); err != nil {
 				return
 			}
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -434,7 +434,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		Direction map[string]float64 `json:"direction"`
 		WeaponID  string             `json:"weapon_id"`
 	}
-	json.Unmarshal(data, &shootData)
+	if err := json.Unmarshal(data, &shootData); err != nil { return }
 
 	// 广播射击事件
 	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
@@ -666,7 +666,7 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		Y float64 `json:"y"`
 		Z float64 `json:"z"`
 	}
-	json.Unmarshal(data, &pos)
+	if err := json.Unmarshal(data, &pos); err != nil { return }
 
 	c.Player.Respawn(pos.X, pos.Y, pos.Z)
 

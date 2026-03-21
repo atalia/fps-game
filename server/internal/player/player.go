@@ -269,7 +269,7 @@ func (p *Player) ToMap() map[string]interface{} {
 
 func generateID() string {
 	b := make([]byte, 4)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
