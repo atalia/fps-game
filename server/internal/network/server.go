@@ -108,7 +108,14 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	r.mu.RLock()
+	players := make([]string, 0, len(r.Players))
 	for playerID := range r.Players {
+		players = append(players, playerID)
+	}
+	r.mu.RUnlock()
+
+	for _, playerID := range players {
 		if playerID == excludeID {
 			continue
 		}
