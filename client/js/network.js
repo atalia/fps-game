@@ -42,6 +42,7 @@ class Network {
 
             messages.forEach(msg => {
                 const parsed = JSON.parse(msg);
+                console.log('[NETWORK] Received:', parsed.type, parsed.data ? JSON.stringify(parsed.data).substring(0, 100) : '');
                 const handler = this.handlers.get(parsed.type);
 
                 if (handler) {
@@ -69,7 +70,7 @@ class Network {
 
     send(type, data) {
         if (!this.connected) {
-            console.warn('WebSocket not connected');
+            console.warn('[NETWORK] WebSocket not connected, cannot send:', type);
             return;
         }
 
@@ -79,6 +80,7 @@ class Network {
             timestamp: Date.now()
         });
 
+        console.log('[NETWORK] Sending:', type, JSON.stringify(data).substring(0, 100));
         this.ws.send(message);
     }
 
