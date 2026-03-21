@@ -11,7 +11,7 @@ func TestNewRoomWithState(t *testing.T) {
 	r := NewRoomWithState(10)
 
 	if r == nil {
-		t.Error("RoomWithState should not be nil")
+		t.Fatal("RoomWithState should not be nil")
 	}
 	if r.state != StateWaiting {
 		t.Errorf("State = %d, want StateWaiting", r.state)
