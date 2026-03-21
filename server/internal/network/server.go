@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"strings"
 	"net/http"
 	"sync"
 	"time"
@@ -474,8 +475,24 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			// 计算伤害
 			damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
 
-			// 获取被击中的玩家
-			target := c.Room.GetPlayer(hit.PlayerID)
+			// 获取被击中的目标（玩家或机器人）
+			var target *player.Player
+			var isBot bool
+			
+			// 检查是否是机器人
+			if strings.HasPrefix(hit.PlayerID, "bot_") {
+				bots := c.Room.GetBots()
+				for _, bot := range bots {
+					if bot.Player.ID == hit.PlayerID {
+						target = bot.Player
+						isBot = true
+						break
+					}
+				}
+			} else {
+				target = c.Room.GetPlayer(hit.PlayerID)
+			}
+			
 			if target != nil && target.IsAlive() {
 				target.TakeDamage(damage)
 
@@ -487,6 +504,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 					"hitbox":           hit.HitBoxType,
 					"remaining_health": target.Health,
 					"position":         target.Position,
+					"is_bot":           isBot,
 				}, "")
 
 				// 检查死亡
@@ -502,10 +520,13 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 						"hitbox":        hit.HitBoxType,
 						"is_headshot":   hit.HitBoxType == "head",
 						"kill_distance": hit.Distance,
+						"is_bot":        isBot,
 					}, "")
 
-					// 自动重生
-					go c.respawnPlayer(target)
+					// 玩家自动重生，机器人不重生
+					if !isBot {
+						go c.respawnPlayer(target)
+					}
 				}
 			}
 		}
@@ -526,22 +547,21 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 	}
 
 	var closestHit *HitResult
-	minDistance := maxRange
+	minDistance := math.MaxFloat64
 
+	// 检查真实玩家
 	for playerID, p := range c.Room.Players {
 		if playerID == c.Player.ID {
 			continue // 不打自己
 		}
 
 		for _, hb := range p.HitBoxes {
-			// 计算命中盒世界坐标
 			worldPos := hitbox.Position{
 				X: p.Position.X + hb.Offset.X,
 				Y: p.Position.Y + hb.Offset.Y,
 				Z: p.Position.Z + hb.Offset.Z,
 			}
 
-			// 射线检测
 			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
 				distance := math.Sqrt(
 					math.Pow(worldPos.X-origin.X, 2)+
@@ -553,6 +573,35 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 					minDistance = distance
 					closestHit = &HitResult{
 						PlayerID:   playerID,
+						HitBoxType: hb.Type,
+						Distance:   distance,
+					}
+				}
+			}
+		}
+	}
+
+	// 检查 AI 机器人
+	bots := c.Room.GetBots()
+	for _, bot := range bots {
+		for _, hb := range bot.Player.HitBoxes {
+			worldPos := hitbox.Position{
+				X: bot.Player.Position.X + hb.Offset.X,
+				Y: bot.Player.Position.Y + hb.Offset.Y,
+				Z: bot.Player.Position.Z + hb.Offset.Z,
+			}
+
+			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
+				distance := math.Sqrt(
+					math.Pow(worldPos.X-origin.X, 2)+
+						math.Pow(worldPos.Y-origin.Y, 2)+
+						math.Pow(worldPos.Z-origin.Z, 2),
+				)
+
+				if distance < minDistance {
+					minDistance = distance
+					closestHit = &HitResult{
+						PlayerID:   bot.Player.ID,
 						HitBoxType: hb.Type,
 						Distance:   distance,
 					}
