@@ -22,7 +22,7 @@ func TestTeamManager_CreateTeam(t *testing.T) {
 
 	team := tm.CreateTeam("green", "绿队", "#4CAF50", 5)
 	if team == nil {
-		t.Error("Team should not be nil")
+		t.Fatal("Team should not be nil")
 	}
 
 	if team.Name != "绿队" {
@@ -42,7 +42,7 @@ func TestTeamManager_GetTeam(t *testing.T) {
 	// 默认队伍
 	red := tm.GetTeam("red")
 	if red == nil {
-		t.Error("Should find red team")
+		t.Fatal("Should find red team")
 	}
 
 	if red.Name != "红队" {

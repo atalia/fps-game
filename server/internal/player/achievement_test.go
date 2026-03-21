@@ -10,7 +10,7 @@ func TestAchievementSystem_Get(t *testing.T) {
 	// 测试获取存在的成就
 	a := as.Get("first-blood")
 	if a == nil {
-		t.Error("Achievement should exist")
+		t.Fatal("Achievement should exist")
 	}
 
 	if a.Name != "首杀" {
