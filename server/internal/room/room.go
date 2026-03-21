@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"fps-game/internal/ai"
 	"fps-game/internal/player"
 )
 
@@ -15,6 +16,7 @@ type Room struct {
 	Name         string
 	MaxSize      int
 	Players      map[string]*player.Player
+	BotManager   *ai.Manager
 	CreatedAt    time.Time
 	StartedAt    time.Time
 	// C4 爆破模式
@@ -29,11 +31,39 @@ type Room struct {
 // NewRoom 创建房间
 func NewRoom(maxSize int) *Room {
 	return &Room{
-		ID:        generateID(),
-		MaxSize:   maxSize,
-		Players:   make(map[string]*player.Player),
-		CreatedAt: time.Now(),
+		ID:         generateID(),
+		MaxSize:    maxSize,
+		Players:    make(map[string]*player.Player),
+		BotManager: ai.NewManager(),
+		CreatedAt:  time.Now(),
 	}
+}
+
+// GetPlayers 实现 Room 接口 (供 AI 使用)
+func (r *Room) GetPlayers() map[string]*player.Player {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.Players
+}
+
+// AddBot 添加机器人
+func (r *Room) AddBot(difficulty ai.Difficulty, team string) *ai.Bot {
+	return r.BotManager.AddBot(difficulty, team)
+}
+
+// RemoveBot 移除机器人
+func (r *Room) RemoveBot(botID string) {
+	r.BotManager.RemoveBot(botID)
+}
+
+// GetBots 获取所有机器人
+func (r *Room) GetBots() []*ai.Bot {
+	return r.BotManager.GetAllBots()
+}
+
+// GetBotCount 获取机器人数量
+func (r *Room) GetBotCount() int {
+	return r.BotManager.GetBotCount()
 }
 
 // AddPlayer 添加玩家

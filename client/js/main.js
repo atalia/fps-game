@@ -139,10 +139,16 @@ function setupNetworkHandlers() {
 
     // 玩家加入
     window.network.on('player_joined', (data) => {
-        console.log('Player joined:', data.name, 'position:', data.position);
+        console.log('Player joined:', data.name, 'position:', data.position, 'is_bot:', data.is_bot);
         // 确保位置有效
         const position = data.position || { x: 0, y: 0, z: 0 };
         window.renderer.addPlayer(data.player_id, position, false);
+        
+        // 如果是机器人，显示 AI 标签
+        if (data.is_bot && window.aiLabels) {
+            window.aiLabels.createLabel(data.player_id, data.name, data.difficulty);
+        }
+        
         window.uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`);
         
         // 同步到 game.players Map
@@ -151,7 +157,8 @@ function setupNetworkHandlers() {
                 id: data.player_id,
                 name: data.name,
                 position: position,
-                rotation: 0
+                rotation: 0,
+                is_bot: data.is_bot
             });
         }
     });
@@ -160,6 +167,12 @@ function setupNetworkHandlers() {
     window.network.on('player_left', (data) => {
         console.log('Player left:', data.player_id);
         window.renderer.removePlayer(data.player_id);
+        
+        // 移除 AI 标签
+        if (window.aiLabels) {
+            window.aiLabels.removeLabel(data.player_id);
+        }
+        
         window.uiManager.addKillFeed(`玩家离开了游戏`);
         
         // 从 game.players Map 移除
@@ -190,6 +203,71 @@ function setupNetworkHandlers() {
         }
     });
 
+    // 玩家受伤
+    window.network.on('player_damaged', (data) => {
+        console.log(`Player ${data.player_id} took ${data.damage} damage (${data.hitbox})`);
+
+        // 更新血量
+        if (data.player_id === window.game?.player?.id) {
+            window.game.player.health = data.remaining_health;
+            window.uiManager.updateHealth(data.remaining_health);
+
+            // 屏幕闪红
+            if (window.screenEffects) {
+                window.screenEffects.flashDamage();
+            }
+        } else {
+            // 显示命中标记 (射击者视角)
+            if (data.attacker_id === window.game?.player?.id && window.hitEffects) {
+                window.hitEffects.showHitMarker(
+                    new THREE.Vector3(data.position.x, data.position.y, data.position.z),
+                    data.hitbox,
+                    data.damage
+                );
+                window.hitEffects.showDamageNumber(
+                    data.position,
+                    data.damage,
+                    data.hitbox === 'head'
+                );
+            }
+        }
+    });
+
+    // 玩家死亡
+    window.network.on('player_killed', (data) => {
+        console.log(`Player ${data.victim_id} killed by ${data.killer_id}`);
+
+        // 更新击杀计数
+        if (data.killer_id === window.game?.player?.id) {
+            window.game.player.kills++;
+            window.uiManager.updateKills(window.game.player.kills);
+            window.uiManager.addKillFeed(`击杀 ${data.victim_id}${data.is_headshot ? ' (爆头!)' : ''}`);
+            
+            // 击杀音效
+            if (window.audioManager) {
+                window.audioManager.playKill();
+            }
+        }
+
+        if (data.victim_id === window.game?.player?.id) {
+            window.game.player.deaths++;
+            window.uiManager.updateDeaths(window.game.player.deaths);
+            window.uiManager.showDeathScreen();
+        }
+    });
+
+    // 玩家重生
+    window.network.on('player_respawned', (data) => {
+        if (data.player_id === window.game?.player?.id) {
+            window.game.player.health = data.health;
+            window.game.player.position = data.position;
+            window.uiManager.updateHealth(data.health);
+            window.uiManager.hideDeathScreen();
+        }
+
+        window.renderer.updatePlayer(data.player_id, data.position, 0);
+    });
+
     // 聊天消息
     window.network.on('chat', (data) => {
         window.uiManager.addChatMessage(data.name, data.message);
@@ -208,6 +286,16 @@ async function startGame(playerId) {
     // 初始化游戏
     window.game = new Game();
     await window.game.init();
+
+    // 初始化命中效果系统
+    if (typeof HitEffects !== 'undefined') {
+        window.hitEffects = new HitEffects(window.renderer.scene, window.renderer.camera);
+    }
+
+    // 初始化 AI 标签系统
+    if (typeof AILabels !== 'undefined') {
+        window.aiLabels = new AILabels();
+    }
 
     // 隐藏大厅
     if (window.lobby) {

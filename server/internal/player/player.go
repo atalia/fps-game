@@ -14,6 +14,13 @@ type Position struct {
 	Z float64 `json:"z"`
 }
 
+// HitBox 命中盒定义
+type HitBox struct {
+	Type   string   `json:"type"`
+	Offset Position `json:"offset"`
+	Radius float64  `json:"radius"`
+}
+
 // Player 玩家
 type Player struct {
 	ID           string            `json:"id"`
@@ -33,6 +40,7 @@ type Player struct {
 	LastShot     time.Time         `json:"-"`
 	SkillCooldowns map[string]time.Time `json:"-"`
 	Connected    bool              `json:"-"`
+	HitBoxes     []HitBox          `json:"hit_boxes"`
 	mu           sync.RWMutex
 }
 
@@ -61,6 +69,16 @@ func NewPlayer() *Player {
 	return NewPlayerWithConfig(DefaultConfig)
 }
 
+// DefaultHitBoxes 默认命中盒配置
+var DefaultHitBoxes = []HitBox{
+	{Type: "head", Offset: Position{Y: 1.6}, Radius: 0.25},
+	{Type: "body", Offset: Position{Y: 1.0}, Radius: 0.4},
+	{Type: "arm", Offset: Position{X: 0.3, Y: 1.0}, Radius: 0.15},
+	{Type: "arm", Offset: Position{X: -0.3, Y: 1.0}, Radius: 0.15},
+	{Type: "leg", Offset: Position{X: 0.15, Y: 0.3}, Radius: 0.15},
+	{Type: "leg", Offset: Position{X: -0.15, Y: 0.3}, Radius: 0.15},
+}
+
 // NewPlayerWithConfig 使用配置创建玩家
 func NewPlayerWithConfig(cfg Config) *Player {
 	return &Player{
@@ -75,6 +93,7 @@ func NewPlayerWithConfig(cfg Config) *Player {
 		AmmoReserve:   cfg.DefaultAmmoReserve,
 		SkillCooldowns: make(map[string]time.Time),
 		Connected:     true,
+		HitBoxes:      DefaultHitBoxes,
 	}
 }
 
