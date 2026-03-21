@@ -108,14 +108,8 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	r.mu.RLock()
-	players := make([]string, 0, len(r.Players))
-	for playerID := range r.Players {
-		players = append(players, playerID)
-	}
-	r.mu.RUnlock()
-
-	for _, playerID := range players {
+	// 使用 GetPlayerIDs 获取线程安全的玩家列表
+	for _, playerID := range r.GetPlayerIDs() {
 		if playerID == excludeID {
 			continue
 		}

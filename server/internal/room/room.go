@@ -46,6 +46,17 @@ func (r *Room) GetPlayers() map[string]*player.Player {
 	return r.Players
 }
 
+// GetPlayerIDs 获取所有玩家 ID 列表（线程安全）
+func (r *Room) GetPlayerIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.Players))
+	for id := range r.Players {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // AddBot 添加机器人
 func (r *Room) AddBot(difficulty ai.Difficulty, team string) *ai.Bot {
 	return r.BotManager.AddBot(difficulty, team)
@@ -296,7 +307,7 @@ func (m *Manager) FindAvailableRoom() *Room {
 
 func generateID() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
