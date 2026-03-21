@@ -8,7 +8,7 @@ func TestNewLeaderboard(t *testing.T) {
 	lb := NewLeaderboard()
 
 	if lb == nil {
-		t.Error("Leaderboard should not be nil")
+		t.Fatal("Leaderboard should not be nil")
 	}
 
 	if len(lb.entries) != 0 {
@@ -23,7 +23,7 @@ func TestLeaderboard_UpdateEntry(t *testing.T) {
 
 	entry := lb.GetEntry("player1")
 	if entry == nil {
-		t.Error("Entry should exist")
+		t.Fatal("Entry should exist")
 	}
 
 	if entry.Score != 100 {
@@ -124,7 +124,7 @@ func TestMatchLeaderboard_GetMVP(t *testing.T) {
 
 	mvp := ml.GetMVP()
 	if mvp == nil {
-		t.Error("MVP should not be nil")
+		t.Fatal("MVP should not be nil")
 	}
 
 	if mvp.PlayerID != "player1" {
