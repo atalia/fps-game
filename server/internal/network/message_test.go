@@ -158,7 +158,7 @@ func TestWS_Shoot(t *testing.T) {
 
 	Send(t, connA, "shoot", map[string]interface{}{
 		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
-		"rotation": map[string]float64{"x": 0.0, "y": 0.0, "z": 0.0},
+		"rotation": 0.0,
 	})
 
 	// A 不应收到 player_shot (excludeID=c.Player.ID)
