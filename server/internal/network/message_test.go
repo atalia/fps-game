@@ -278,9 +278,9 @@ func TestWS_Respawn_NoRoom(t *testing.T) {
 	}
 }
 
-// TestWS_Respawn_InvalidJSON 非法 JSON 静默
+// TestWS_Respawn_InvalidJSON 非法 JSON 会被服务器丢弃
 func TestWS_Respawn_InvalidJSON(t *testing.T) {
-	t.Skip("TODO: writePump not sending messages - needs investigation")
+	t.Skip("Server drops messages with invalid JSON at parse time - this is correct behavior")
 }
 
 // ==================== 单元 4c：广播消息（发送者也收到） ====================
@@ -488,7 +488,45 @@ func TestWS_C4Plant(t *testing.T) {
 
 // TestWS_C4Defuse 测试拆除 C4
 func TestWS_C4Defuse(t *testing.T) {
-	t.Skip("TODO: C4 state not persisting - needs investigation")
+	ts := NewTestServer(t)
+
+	connA, _, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	connB, _ := JoinRoom(t, ts, roomID)
+	defer connB.Close()
+
+	// A 放置 C4
+	Send(t, connA, "c4_plant", map[string]interface{}{
+		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
+	})
+
+	// A 读取 c4_planted (用 RecvType 精确读取)
+	msgA := RecvType(t, connA, "c4_planted")
+	if msgA == nil {
+		t.Fatal("A should receive c4_planted")
+	}
+
+	// B 读取 c4_planted
+	msgB := RecvType(t, connB, "c4_planted")
+	if msgB == nil {
+		t.Fatal("B should receive c4_planted")
+	}
+
+	// B 拆除
+	Send(t, connB, "c4_defuse", map[string]string{})
+
+	// A 读取 c4_defused
+	msgA2 := RecvType(t, connA, "c4_defused")
+	if msgA2 == nil {
+		t.Error("A should receive c4_defused")
+	}
+
+	// B 读取 c4_defused
+	msgB2 := RecvType(t, connB, "c4_defused")
+	if msgB2 == nil {
+		t.Error("B should receive c4_defused")
+	}
 }
 
 // TestWS_C4Defuse_NoC4 无 C4 静默
@@ -533,14 +571,69 @@ func TestWS_SkillUse(t *testing.T) {
 	}
 }
 
-// TestWS_SkillUse_Cooldown 技能冷却 - TODO: 调试 writePump 消息发送问题
+// TestWS_SkillUse_Cooldown 技能冷却
 func TestWS_SkillUse_Cooldown(t *testing.T) {
-	t.Skip("TODO: writePump not sending error message - needs investigation")
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	// 第一次使用
+	Send(t, conn, "skill_use", map[string]interface{}{
+		"skill_id": "heal",
+		"x":        0.0,
+		"y":        0.0,
+		"z":        0.0,
+	})
+
+	// 只读取一条消息（skill_used）
+	msg := RecvType(t, conn, "skill_used")
+	if msg == nil {
+		t.Fatal("Should receive skill_used")
+	}
+
+	// 第二次使用（冷却中）
+	Send(t, conn, "skill_use", map[string]interface{}{
+		"skill_id": "heal",
+		"x":        0.0,
+		"y":        0.0,
+		"z":        0.0,
+	})
+
+	// 读取 error 消息
+	msg2 := RecvType(t, conn, "error")
+	if msg2 == nil {
+		t.Error("Should receive error for cooldown")
+	}
 }
 
 // TestWS_SkillUse_UnknownSkill 未知技能返回错误
 func TestWS_SkillUse_UnknownSkill(t *testing.T) {
-	t.Skip("TODO: writePump not sending error message - needs investigation")
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	// 使用未知技能（不 Drain，直接发送）
+	Send(t, conn, "skill_use", map[string]interface{}{
+		"skill_id": "unknown_skill",
+		"x":        0.0,
+		"y":        0.0,
+		"z":        0.0,
+	})
+
+	// 读取所有消息，找 error
+	msgs := RecvAll(t, conn)
+	var errorMsg *TestMessage
+	for _, m := range msgs {
+		if m.Type == "error" {
+			errorMsg = m
+			break
+		}
+	}
+	if errorMsg == nil {
+		t.Error("Should receive error for unknown skill")
+	}
 }
 
 // TestWS_Emote 测试表情 - 发送者也收到

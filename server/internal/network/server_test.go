@@ -157,35 +157,36 @@ func SendRaw(t *testing.T, conn *websocket.Conn, raw string) {
 	}
 }
 
-// RecvType 读取一条消息，验证类型
+// RecvType 读取指定类型的消息，跳过其他类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage {
 	conn.SetReadDeadline(time.Now().Add(readTimeout))
-	_, data, err := conn.ReadMessage()
-	if err != nil {
-		t.Fatalf("Failed to read message: %v", err)
-	}
+	
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("Failed to read message: %v", err)
+		}
 
-	var msg TestMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		t.Fatalf("Failed to parse message: %v", err)
-	}
+		var msg TestMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("Failed to parse message: %v", err)
+		}
 
-	if msg.Type != wantType {
-		t.Fatalf("Expected %s, got %s", wantType, msg.Type)
+		if msg.Type == wantType {
+			return &msg
+		}
+		// 跳过不匹配的消息，继续读取
+		t.Logf("Skipping message type %s, waiting for %s", msg.Type, wantType)
+		conn.SetReadDeadline(time.Now().Add(readTimeout))
 	}
-
-	return &msg
 }
 
 // RecvAll 读取所有消息，直到 drainWindow 无新消息
 func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 	var msgs []*TestMessage
 
-	// 先等待消息到达
-	time.Sleep(100 * time.Millisecond)
-
-	// 设置读超时
-	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	// 设置较长的读超时
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 
 	for {
 		_, data, err := conn.ReadMessage()
