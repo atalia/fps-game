@@ -1,4 +1,4 @@
-// renderer.js - Three.js 3D 渲染器
+// renderer.js - Three.js 3D 渲染器（卡通风格）
 class Renderer {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -7,6 +7,7 @@ class Renderer {
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.players = new Map();
         this.projectiles = [];
+        this.effects = null;
 
         this.init();
     }
@@ -30,7 +31,7 @@ class Renderer {
         // 创建地面
         this.createGround();
 
-        // 创建简单的地图
+        // 创建地图
         this.createMap();
 
         // 创建天空盒
@@ -38,6 +39,9 @@ class Renderer {
 
         // 添加雾效
         this.scene.fog = new THREE.Fog(0x1a1a2e, 50, 150);
+
+        // 初始化特效系统
+        this.effects = new Effects(this.scene);
 
         // 窗口大小调整
         window.addEventListener('resize', () => this.onResize());
@@ -77,8 +81,6 @@ class Renderer {
         // 棋盘格地面
         const size = 100;
         const divisions = 20;
-        const halfSize = size / 2;
-        const squareSize = size / divisions;
 
         // 创建棋盘格纹理
         const canvas = document.createElement('canvas');
@@ -128,14 +130,14 @@ class Renderer {
     createMap() {
         // 创建障碍物，不同颜色区分
         const obstacles = [
-            { x: 10, z: 10, w: 4, h: 3, d: 4, color: 0x44aa44 },      // 绿色
-            { x: -10, z: -10, w: 4, h: 3, d: 4, color: 0xaa4444 },     // 红色
-            { x: 15, z: -15, w: 6, h: 2, d: 2, color: 0x4444aa },      // 蓝色
-            { x: -15, z: 15, w: 2, h: 2, d: 6, color: 0xaaaa44 },      // 黄色
-            { x: 0, z: 20, w: 8, h: 4, d: 2, color: 0x44aaaa },        // 青色
-            { x: 0, z: -20, w: 8, h: 4, d: 2, color: 0xaa44aa },       // 紫色
-            { x: 20, z: 0, w: 2, h: 4, d: 8, color: 0xdd8844 },        // 橙色
-            { x: -20, z: 0, w: 2, h: 4, d: 8, color: 0x8844dd },       // 紫罗兰
+            { x: 10, z: 10, w: 4, h: 3, d: 4, color: 0x44aa44 },
+            { x: -10, z: -10, w: 4, h: 3, d: 4, color: 0xaa4444 },
+            { x: 15, z: -15, w: 6, h: 2, d: 2, color: 0x4444aa },
+            { x: -15, z: 15, w: 2, h: 2, d: 6, color: 0xaaaa44 },
+            { x: 0, z: 20, w: 8, h: 4, d: 2, color: 0x44aaaa },
+            { x: 0, z: -20, w: 8, h: 4, d: 2, color: 0xaa44aa },
+            { x: 20, z: 0, w: 2, h: 4, d: 8, color: 0xdd8844 },
+            { x: -20, z: 0, w: 2, h: 4, d: 8, color: 0x8844dd },
         ];
 
         obstacles.forEach(obs => {
@@ -152,7 +154,7 @@ class Renderer {
             this.scene.add(box);
         });
 
-        // 添加一些装饰性的柱子
+        // 添加装饰柱子
         const pillarPositions = [
             { x: 25, z: 25 },
             { x: -25, z: 25 },
@@ -182,17 +184,16 @@ class Renderer {
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // 创建渐变
         const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        gradient.addColorStop(0, '#0a0a1a');      // 深蓝黑（顶部）
-        gradient.addColorStop(0.3, '#1a1a3a');    // 深蓝紫
-        gradient.addColorStop(0.6, '#2a2a4a');    // 蓝紫
-        gradient.addColorStop(1, '#1a1a2e');      // 深紫蓝（地平线）
+        gradient.addColorStop(0, '#0a0a1a');
+        gradient.addColorStop(0.3, '#1a1a3a');
+        gradient.addColorStop(0.6, '#2a2a4a');
+        gradient.addColorStop(1, '#1a1a2e');
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 添加星星效果
+        // 星星
         ctx.fillStyle = '#ffffff';
         for (let i = 0; i < 100; i++) {
             const x = Math.random() * canvas.width;
@@ -214,7 +215,6 @@ class Renderer {
     }
 
     createPlayer(id, position, isBot = false) {
-        // 玩家颜色
         const bodyColor = isBot ? 0xff6644 : 0x44aaff;
         const headColor = isBot ? 0xff4422 : 0x2288ff;
         
@@ -230,7 +230,6 @@ class Renderer {
             metalness: 0.5
         });
 
-        // 身体 - 更立体的胶囊形状
         const bodyGroup = new THREE.Group();
         
         // 躯干
@@ -255,7 +254,7 @@ class Renderer {
         head.position.y = 1.6;
         bodyGroup.add(head);
 
-        // 眼睛（机器人特征）
+        // 机器人眼睛
         if (isBot) {
             const eyeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
             const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
@@ -268,9 +267,7 @@ class Renderer {
             bodyGroup.add(rightEye);
         }
 
-        // 设置位置
         bodyGroup.position.set(position.x || 0, 0, position.z || 0);
-        bodyGroup.castShadow = true;
         bodyGroup.children.forEach(child => {
             child.castShadow = true;
         });
@@ -303,41 +300,42 @@ class Renderer {
         this.camera.rotation.y = rotation;
     }
 
-    addProjectile(from, to) {
-        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
-        const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-        const bullet = new THREE.Mesh(geometry, material);
-
-        bullet.position.set(from.x, from.y, from.z);
-        this.scene.add(bullet);
-
-        const direction = new THREE.Vector3(
-            to.x - from.x,
-            to.y - from.y,
-            to.z - from.z
-        ).normalize();
-
-        this.projectiles.push({
-            mesh: bullet,
-            direction,
-            distance: 0,
-            maxDistance: 100
-        });
+    // 特效接口
+    createMuzzleFlash(position, direction) {
+        if (this.effects) {
+            this.effects.createMuzzleFlash(position, direction);
+        }
     }
 
-    update() {
-        // 更新弹道
-        const speed = 2;
-        this.projectiles = this.projectiles.filter(p => {
-            p.mesh.position.add(p.direction.clone().multiplyScalar(speed));
-            p.distance += speed;
+    createImpact(position, hitbox) {
+        if (this.effects) {
+            this.effects.createImpact(position, hitbox);
+        }
+    }
 
-            if (p.distance >= p.maxDistance) {
-                this.scene.remove(p.mesh);
-                return false;
-            }
-            return true;
-        });
+    createDeathEffect(position) {
+        if (this.effects) {
+            this.effects.createDeathEffect(position);
+        }
+    }
+
+    createDamageNumber(position, damage, isHeadshot) {
+        if (this.effects) {
+            this.effects.createDamageNumber(position, damage, isHeadshot);
+        }
+    }
+
+    createBulletTrail(from, to) {
+        if (this.effects) {
+            this.effects.createBulletTrail(from, to);
+        }
+    }
+
+    update(deltaTime) {
+        // 更新特效
+        if (this.effects) {
+            this.effects.update(deltaTime);
+        }
     }
 
     render() {
