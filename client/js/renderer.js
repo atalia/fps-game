@@ -30,6 +30,9 @@ class Renderer {
         this.composer = null;
         this.bloomPass = null;
         
+        // 增强版地图系统
+        this.mapEnhanced = null;
+        
         this.init();
     }
 
@@ -55,6 +58,12 @@ class Renderer {
 
         // 创建地图
         this.createMap();
+        
+        // 初始化增强版地图系统
+        if (typeof MapEnhanced !== 'undefined') {
+            this.mapEnhanced = new MapEnhanced(this);
+            console.log('[RENDERER] MapEnhanced initialized');
+        }
 
         // 创建天空盒
         this.createSkybox();
@@ -124,6 +133,13 @@ class Renderer {
     }
 
     createGround() {
+        // 使用增强版地图系统
+        if (this.mapEnhanced) {
+            this.mapEnhanced.createGround(150, 'tech')
+            return
+        }
+        
+        // 后备实现
         const size = 100;
         
         // 高质量地面纹理
@@ -184,7 +200,46 @@ class Renderer {
     }
 
     createMap() {
-        // 卡通风格障碍物
+        // 使用增强版地图系统
+        if (this.mapEnhanced) {
+            // 中心建筑
+            this.mapEnhanced.createObstacle(0, 0, 15, 5, 15, 0x555566, { glowEdge: true })
+            
+            // 四角掩体
+            const corners = [
+                { x: 25, z: 25, color: 0x44cc66 },
+                { x: -25, z: 25, color: 0xcc4466 },
+                { x: 25, z: -25, color: 0x4466cc },
+                { x: -25, z: -25, color: 0xcccc44 }
+            ]
+            
+            corners.forEach(c => {
+                this.mapEnhanced.createObstacle(c.x, c.z, 6, 3, 6, c.color, { details: true })
+            })
+            
+            // 走廊掩体
+            const corridors = [
+                { x: 35, z: 0, w: 2, h: 4, d: 20, color: 0x444455 },
+                { x: -35, z: 0, w: 2, h: 4, d: 20, color: 0x444455 },
+                { x: 0, z: 35, w: 20, h: 4, d: 2, color: 0x444455 },
+                { x: 0, z: -35, w: 20, h: 4, d: 2, color: 0x444455 }
+            ]
+            
+            corridors.forEach(c => {
+                this.mapEnhanced.createObstacle(c.x, c.z, c.w, c.h, c.d, c.color, { details: false })
+            })
+            
+            // 生成随机装饰物
+            this.mapEnhanced.generateDecorations(40, { minX: -70, maxX: 70, minZ: -70, maxZ: 70 })
+            
+            // 创建边界墙
+            this.mapEnhanced.createBounds(-70, 70, -70, 70, 10)
+            
+            console.log('[RENDERER] Enhanced map created')
+            return
+        }
+        
+        // 后备实现 - 卡通风格障碍物
         const obstacles = [
             { x: 10, z: 10, w: 4, h: 3, d: 4, color: 0x44cc66 },
             { x: -10, z: -10, w: 4, h: 3, d: 4, color: 0xcc4466 },
