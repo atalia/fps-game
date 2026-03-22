@@ -2,7 +2,9 @@ package room
 
 import (
 	"testing"
+	"time"
 
+	"fps-game/internal/ai"
 	"fps-game/internal/player"
 )
 
@@ -101,6 +103,225 @@ func TestRoom_GetPlayerList(t *testing.T) {
 	list := r.GetPlayerList()
 	if len(list) != 2 {
 		t.Errorf("PlayerList length = %d, want 2", len(list))
+	}
+}
+
+// ==================== Bot 系统测试 ====================
+
+func TestRoom_AddBot(t *testing.T) {
+	r := NewRoom(10)
+
+	bot := r.AddBot(ai.DifficultyNormal, "red")
+	if bot == nil {
+		t.Fatal("Should be able to add bot")
+	}
+
+	// 检查机器人数量
+	if r.GetBotCount() != 1 {
+		t.Errorf("BotCount = %d, want 1", r.GetBotCount())
+	}
+}
+
+func TestRoom_RemoveBot(t *testing.T) {
+	r := NewRoom(10)
+
+	bot := r.AddBot(ai.DifficultyNormal, "red")
+	if bot == nil {
+		t.Fatal("Should be able to add bot")
+	}
+
+	r.RemoveBot(bot.ID)
+	if r.GetBotCount() != 0 {
+		t.Errorf("BotCount after remove = %d, want 0", r.GetBotCount())
+	}
+}
+
+func TestRoom_GetBots(t *testing.T) {
+	r := NewRoom(10)
+
+	r.AddBot(ai.DifficultyEasy, "red")
+	r.AddBot(ai.DifficultyHard, "blue")
+
+	bots := r.GetBots()
+	if len(bots) != 2 {
+		t.Errorf("GetBots length = %d, want 2", len(bots))
+	}
+}
+
+func TestRoom_GetBotCount(t *testing.T) {
+	r := NewRoom(10)
+
+	if r.GetBotCount() != 0 {
+		t.Errorf("Initial BotCount = %d, want 0", r.GetBotCount())
+	}
+
+	r.AddBot(ai.DifficultyNormal, "red")
+	r.AddBot(ai.DifficultyNormal, "blue")
+
+	if r.GetBotCount() != 2 {
+		t.Errorf("BotCount = %d, want 2", r.GetBotCount())
+	}
+}
+
+// ==================== C4 系统测试 ====================
+
+func TestRoom_SetC4Planted(t *testing.T) {
+	r := NewRoom(10)
+
+	pos := player.Position{X: 100, Y: 0, Z: 200}
+	r.SetC4Planted(true, "player1", pos)
+
+	if !r.C4Planted {
+		t.Error("C4Planted should be true")
+	}
+	if r.C4Planter != "player1" {
+		t.Errorf("C4Planter = %s, want player1", r.C4Planter)
+	}
+	if r.C4Position.X != 100 || r.C4Position.Z != 200 {
+		t.Errorf("C4Position = %v, want {100, 0, 200}", r.C4Position)
+	}
+}
+
+func TestRoom_IsC4Planted(t *testing.T) {
+	r := NewRoom(10)
+
+	if r.IsC4Planted() {
+		t.Error("C4 should not be planted initially")
+	}
+
+	r.SetC4Planted(true, "player1", player.Position{})
+	if !r.IsC4Planted() {
+		t.Error("C4 should be planted")
+	}
+
+	r.SetC4Planted(false, "", player.Position{})
+	if r.IsC4Planted() {
+		t.Error("C4 should not be planted after defuse")
+	}
+}
+
+func TestRoom_GetC4Position(t *testing.T) {
+	r := NewRoom(10)
+
+	pos := player.Position{X: 50, Y: 1, Z: 75}
+	r.SetC4Planted(true, "player1", pos)
+
+	gotPos := r.GetC4Position()
+	if gotPos.X != 50 || gotPos.Y != 1 || gotPos.Z != 75 {
+		t.Errorf("C4Position = %v, want {50, 1, 75}", gotPos)
+	}
+}
+
+func TestRoom_GetC4Planter(t *testing.T) {
+	r := NewRoom(10)
+
+	r.SetC4Planted(true, "test-player", player.Position{})
+	if r.GetC4Planter() != "test-player" {
+		t.Errorf("C4Planter = %s, want test-player", r.GetC4Planter())
+	}
+}
+
+func TestRoom_GetC4TimeRemaining(t *testing.T) {
+	r := NewRoom(10)
+
+	// 未放置时
+	if r.GetC4TimeRemaining() != 0 {
+		t.Error("C4TimeRemaining should be 0 when not planted")
+	}
+
+	// 放置后
+	r.SetC4Planted(true, "player1", player.Position{})
+	time.Sleep(100 * time.Millisecond)
+
+	remaining := r.GetC4TimeRemaining()
+	if remaining <= 0 || remaining > 40 {
+		t.Errorf("C4TimeRemaining = %f, expected between 0 and 40", remaining)
+	}
+}
+
+// ==================== 游戏模式测试 ====================
+
+func TestRoom_SetGameMode(t *testing.T) {
+	r := NewRoom(10)
+
+	r.SetGameMode("deathmatch")
+	if r.GameMode != "deathmatch" {
+		t.Errorf("GameMode = %s, want deathmatch", r.GameMode)
+	}
+}
+
+func TestRoom_GetGameMode(t *testing.T) {
+	r := NewRoom(10)
+
+	// 默认空
+	if r.GetGameMode() != "" {
+		t.Errorf("Initial GameMode = %s, want empty", r.GetGameMode())
+	}
+
+	r.SetGameMode("team_deathmatch")
+	if r.GetGameMode() != "team_deathmatch" {
+		t.Errorf("GameMode = %s, want team_deathmatch", r.GetGameMode())
+	}
+}
+
+// ==================== 房间状态测试 ====================
+
+func TestRoom_IsActive(t *testing.T) {
+	r := NewRoom(10)
+
+	if r.IsActive() {
+		t.Error("Empty room should not be active")
+	}
+
+	r.AddPlayer(player.NewPlayer())
+	if !r.IsActive() {
+		t.Error("Room with players should be active")
+	}
+}
+
+func TestRoom_Update(t *testing.T) {
+	r := NewRoom(10)
+	p := player.NewPlayer()
+	r.AddPlayer(p)
+
+	// Update 不应 panic
+	r.Update()
+}
+
+func TestRoom_Broadcast(t *testing.T) {
+	r := NewRoom(10)
+
+	// Broadcast 是占位函数，不应 panic
+	r.Broadcast("test", map[string]string{"msg": "hello"}, "")
+}
+
+// ==================== 列表查询测试 ====================
+
+func TestRoom_GetPlayers(t *testing.T) {
+	r := NewRoom(10)
+	p1 := player.NewPlayer()
+	p2 := player.NewPlayer()
+
+	r.AddPlayer(p1)
+	r.AddPlayer(p2)
+
+	players := r.GetPlayers()
+	if len(players) != 2 {
+		t.Errorf("GetPlayers length = %d, want 2", len(players))
+	}
+}
+
+func TestRoom_GetPlayerIDs(t *testing.T) {
+	r := NewRoom(10)
+	p1 := player.NewPlayer()
+	p2 := player.NewPlayer()
+
+	r.AddPlayer(p1)
+	r.AddPlayer(p2)
+
+	ids := r.GetPlayerIDs()
+	if len(ids) != 2 {
+		t.Errorf("GetPlayerIDs length = %d, want 2", len(ids))
 	}
 }
 
@@ -232,6 +453,40 @@ func TestManager_LeaveRoom(t *testing.T) {
 
 	if m.GetPlayerRoom(p.ID) != nil {
 		t.Error("Player should have left room")
+	}
+}
+
+// ==================== Manager 列表查询测试 ====================
+
+func TestManager_GetAllRooms(t *testing.T) {
+	m := NewManager(10, 10)
+
+	m.CreateRoom()
+	m.CreateRoom()
+	m.CreateRoom()
+
+	rooms := m.GetAllRooms()
+	if len(rooms) != 3 {
+		t.Errorf("GetAllRooms length = %d, want 3", len(rooms))
+	}
+}
+
+func TestManager_ListRooms(t *testing.T) {
+	m := NewManager(10, 10)
+	r := m.CreateRoom()
+	r.AddPlayer(player.NewPlayer())
+
+	list := m.ListRooms()
+	if len(list) != 1 {
+		t.Fatalf("ListRooms length = %d, want 1", len(list))
+	}
+
+	roomInfo := list[0]
+	if roomInfo["id"] != r.ID {
+		t.Errorf("Room id = %v, want %s", roomInfo["id"], r.ID)
+	}
+	if roomInfo["player_count"] != 1 {
+		t.Errorf("Room player_count = %v, want 1", roomInfo["player_count"])
 	}
 }
 

@@ -1307,3 +1307,149 @@ func BenchmarkWS_MessageThroughput(b *testing.B) {
 	// 需要在 testing.B 中使用 T，这里用 T 创建服务器
 	// 实际使用时需要调整
 }
+
+// ==================== Bot 系统测试 ====================
+
+// TestWS_AddBot 添加机器人测试
+func TestWS_AddBot(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	// 添加机器人
+	Send(t, conn, "add_bot", map[string]string{
+		"difficulty": "normal",
+		"team":       "red",
+	})
+
+	// 应收到 player_joined 消息
+	msg := RecvType(t, conn, "player_joined")
+	var data struct {
+		PlayerID   string `json:"player_id"`
+		Name       string `json:"name"`
+		IsBot      bool   `json:"is_bot"`
+		Difficulty string `json:"difficulty"`
+	}
+	if err := json.Unmarshal(msg.Data, &data); err != nil {
+		t.Fatalf("Failed to parse player_joined: %v", err)
+	}
+
+	if !data.IsBot {
+		t.Error("Expected is_bot to be true")
+	}
+	if data.Difficulty != "normal" {
+		t.Errorf("Expected difficulty 'normal', got '%s'", data.Difficulty)
+	}
+
+	t.Logf("Add bot test passed: bot_id=%s", data.PlayerID)
+}
+
+// TestWS_AddBot_DefaultDifficulty 默认难度测试
+func TestWS_AddBot_DefaultDifficulty(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	// 不指定难度
+	Send(t, conn, "add_bot", map[string]string{
+		"team": "blue",
+	})
+
+	msg := RecvType(t, conn, "player_joined")
+	var data struct {
+		Difficulty string `json:"difficulty"`
+	}
+	if err := json.Unmarshal(msg.Data, &data); err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if data.Difficulty != "normal" {
+		t.Errorf("Expected default difficulty 'normal', got '%s'", data.Difficulty)
+	}
+}
+
+// TestWS_AddBot_NoRoom 无房间测试
+func TestWS_AddBot_NoRoom(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _ := Connect(t, ts)
+	defer conn.Close()
+
+	// 未加入房间时添加机器人
+	Send(t, conn, "add_bot", map[string]string{
+		"difficulty": "easy",
+	})
+
+	// 不应收到任何消息
+	NoMessage(t, conn)
+}
+
+// TestWS_RemoveBot 移除机器人测试
+func TestWS_RemoveBot(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	// 先添加机器人
+	Send(t, conn, "add_bot", map[string]string{
+		"difficulty": "hard",
+		"team":       "red",
+	})
+
+	msg := RecvType(t, conn, "player_joined")
+	var data struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &data); err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// 移除机器人
+	Send(t, conn, "remove_bot", map[string]string{
+		"bot_id": data.PlayerID,
+	})
+
+	// 应收到 player_left 消息
+	leftMsg := RecvType(t, conn, "player_left")
+	var leftData struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(leftMsg.Data, &leftData); err != nil {
+		t.Fatalf("Failed to parse player_left: %v", err)
+	}
+
+	if leftData.PlayerID != data.PlayerID {
+		t.Errorf("Expected player_id '%s', got '%s'", data.PlayerID, leftData.PlayerID)
+	}
+
+	t.Logf("Remove bot test passed")
+}
+
+// TestWS_RemoveBot_NoRoom 无房间移除测试
+func TestWS_RemoveBot_NoRoom(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _ := Connect(t, ts)
+	defer conn.Close()
+
+	Send(t, conn, "remove_bot", map[string]string{
+		"bot_id": "nonexistent",
+	})
+
+	NoMessage(t, conn)
+}
+
+// TestWS_RemoveBot_InvalidJSON 无效 JSON 测试
+func TestWS_RemoveBot_InvalidJSON(t *testing.T) {
+	ts := NewTestServer(t)
+
+	conn, _, _ := CreateRoom(t, ts)
+	defer conn.Close()
+
+	SendRaw(t, conn, `{"type":"remove_bot","data":"invalid"}`)
+
+	NoMessage(t, conn)
+}
