@@ -52,7 +52,7 @@ class PerformanceMonitor {
     }
 
     // 每帧调用
-    tick() {
+    update() {
         const now = performance.now()
         const delta = now - this.lastTime
         this.lastTime = now
@@ -66,6 +66,11 @@ class PerformanceMonitor {
             this.updateFPS()
             this.frames = []
         }
+    }
+    
+    // 别名
+    tick() {
+        this.update()
     }
 
     updateFPS() {
