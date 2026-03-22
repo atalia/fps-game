@@ -59,6 +59,16 @@ async function init() {
         window.renderer = new Renderer('game-container');
         console.log('✅ Renderer initialized');
 
+        // 初始化特效系统
+        loadingText.textContent = '初始化特效系统...';
+        if (typeof EffectsSystem !== 'undefined' && typeof PerformanceMonitor !== 'undefined') {
+            window.performanceMonitor = new PerformanceMonitor();
+            window.effectsSystem = new EffectsSystem(window.renderer);
+            console.log('✅ Effects system initialized');
+        } else {
+            console.warn('⚠️ Effects system not loaded, using fallback');
+        }
+
         // 初始化网络
         loadingText.textContent = '连接服务器...';
         if (typeof Network === 'undefined') {
@@ -212,23 +222,33 @@ function setupNetworkHandlers() {
             window.game.player.health = data.remaining_health;
             window.uiManager.updateHealth(data.remaining_health);
 
-            // 屏幕闪红
+            // 屏幕闪红 + 受击指示
             if (window.screenEffects) {
                 window.screenEffects.flashDamage();
             }
+            if (window.hitIndicator && data.attacker_position) {
+                window.hitIndicator.show(data.attacker_position, data.damage);
+            }
         } else {
             // 显示命中标记 (射击者视角)
-            if (data.attacker_id === window.game?.player?.id && window.hitEffects) {
-                window.hitEffects.showHitMarker(
-                    new THREE.Vector3(data.position.x, data.position.y, data.position.z),
-                    data.hitbox,
-                    data.damage
-                );
-                window.hitEffects.showDamageNumber(
-                    data.position,
-                    data.damage,
-                    data.hitbox === 'head'
-                );
+            if (data.attacker_id === window.game?.player?.id) {
+                // 新特效系统
+                if (window.damageNumber) {
+                    window.damageNumber.show(data.damage, data.position, {
+                        isHeadshot: data.hitbox === 'head'
+                    });
+                }
+                if (window.dynamicCrosshair) {
+                    window.dynamicCrosshair.showHit();
+                }
+                // 兼容旧系统
+                if (window.hitEffects) {
+                    window.hitEffects.showHitMarker(
+                        new THREE.Vector3(data.position.x, data.position.y, data.position.z),
+                        data.hitbox,
+                        data.damage
+                    );
+                }
             }
         }
     });
@@ -246,6 +266,17 @@ function setupNetworkHandlers() {
             // 击杀音效
             if (window.audioManager) {
                 window.audioManager.playKill();
+            }
+            
+            // 新特效系统
+            if (window.killNotice) {
+                window.killNotice.show(data.victim_id, { isHeadshot: data.is_headshot });
+            }
+            if (window.killstreakEnhanced) {
+                window.killstreakEnhanced.addKill();
+            }
+            if (window.screenEffects) {
+                window.screenEffects.flashKill();
             }
         }
 

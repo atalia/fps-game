@@ -85,9 +85,20 @@ class Game {
       window.network.send('move', { ...position, rotation })
     }
 
+    // 更新性能监控
+    if (window.performanceMonitor) {
+      window.performanceMonitor.update()
+    }
+
     // 更新特效
     this.effects.update(deltaTime)
     this.effects.render(this.renderer.scene)
+
+    // 更新准星扩散
+    if (window.dynamicCrosshair) {
+      window.dynamicCrosshair.setMoving(this.keys && (this.keys.w || this.keys.a || this.keys.s || this.keys.d))
+      window.dynamicCrosshair.update(deltaTime)
+    }
 
     // 更新渲染器
     this.renderer.update()

@@ -1,5 +1,6 @@
-// Effects Manager - 视觉特效管理
-console.log('[EFFECTS] effects.js loading...')
+// Effects Manager - 视觉特效管理（向后兼容层）
+console.log('[DEPRECATED] effects.js is deprecated. Use effects/index.js instead.')
+console.log('[EFFECTS] Loading backward compatibility layer...')
 
 class EffectsManager {
   constructor(renderer) {
@@ -12,6 +13,12 @@ class EffectsManager {
 
   // 创建枪口火焰
   createMuzzleFlash(position, rotation) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createMuzzleFlash(position, rotation)
+      return
+    }
+    // 后备实现
     const flash = {
       type: 'muzzle_flash',
       position: { ...position },
@@ -26,6 +33,11 @@ class EffectsManager {
 
   // 创建命中特效
   createHitEffect(position) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createHitBurst(position, false)
+      return
+    }
     const effect = {
       type: 'hit',
       position: { ...position },
@@ -38,6 +50,11 @@ class EffectsManager {
 
   // 创建击杀特效
   createKillEffect(position) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createExplosion(position)
+      return
+    }
     const effect = {
       type: 'kill',
       position: { ...position },
@@ -50,6 +67,11 @@ class EffectsManager {
 
   // 创建爆炸特效
   createExplosion(position) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createExplosion(position)
+      return
+    }
     const effect = {
       type: 'explosion',
       position: { ...position },
@@ -62,6 +84,11 @@ class EffectsManager {
 
   // 创建子弹轨迹
   createBulletTrail(from, to) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createBulletTrail(from, to)
+      return
+    }
     const effect = {
       type: 'bullet_trail',
       from: { ...from },
@@ -74,6 +101,11 @@ class EffectsManager {
 
   // 创建血迹效果
   createBloodSplatter(position) {
+    // 委托给新系统
+    if (window.effectsSystem?.core) {
+      window.effectsSystem.core.createBloodSplatter(position)
+      return
+    }
     const effect = {
       type: 'blood',
       position: { ...position },
@@ -114,6 +146,12 @@ class EffectsManager {
 
   // 更新特效
   update(deltaTime) {
+    // 委托给新系统
+    if (window.effectsSystem) {
+      window.effectsSystem.update(deltaTime)
+      return
+    }
+    
     this.effects = this.effects.filter(effect => {
       effect.life -= deltaTime
       
@@ -133,6 +171,12 @@ class EffectsManager {
 
   // 渲染特效（在主渲染循环中调用）
   render(scene) {
+    // 委托给新系统
+    if (window.effectsSystem) {
+      window.effectsSystem.render(scene)
+      return
+    }
+    
     this.effects.forEach(effect => {
       if (effect.type === 'muzzle_flash') {
         this.renderMuzzleFlash(scene, effect)
@@ -205,13 +249,23 @@ class EffectsManager {
 
   // 清除所有特效
   clear() {
+    // 委托给新系统
+    if (window.effectsSystem) {
+      window.effectsSystem.clear()
+      return
+    }
     this.effects = []
   }
 }
 
-// 屏幕特效
+// 屏幕特效（向后兼容）
 class ScreenEffects {
   constructor() {
+    // 委托给新系统
+    if (window.screenEffectsEnhanced) {
+      return window.screenEffectsEnhanced
+    }
+    
     this.overlay = document.createElement('div')
     this.overlay.style.cssText = `
       position: fixed;
@@ -224,13 +278,14 @@ class ScreenEffects {
       transition: background-color 0.1s;
     `
     document.body.appendChild(this.overlay)
-    
-    this.damageOverlay = null
-    this.healOverlay = null
   }
 
   // 受伤闪红
   showDamage(intensity = 0.5) {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.flashDamage(intensity)
+      return
+    }
     this.overlay.style.backgroundColor = `rgba(255, 0, 0, ${intensity})`
     setTimeout(() => {
       this.overlay.style.backgroundColor = 'transparent'
@@ -239,6 +294,10 @@ class ScreenEffects {
 
   // 击杀闪绿
   showKill() {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.flashKill()
+      return
+    }
     this.overlay.style.backgroundColor = 'rgba(0, 255, 0, 0.2)'
     setTimeout(() => {
       this.overlay.style.backgroundColor = 'transparent'
@@ -247,6 +306,10 @@ class ScreenEffects {
 
   // 治愈闪蓝
   showHeal() {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.flashHeal()
+      return
+    }
     this.overlay.style.backgroundColor = 'rgba(0, 100, 255, 0.2)'
     setTimeout(() => {
       this.overlay.style.backgroundColor = 'transparent'
@@ -255,16 +318,29 @@ class ScreenEffects {
 
   // 死亡变暗
   showDeath() {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.showDeath()
+      return
+    }
     this.overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'
   }
 
   // 重生恢复
   hideDeath() {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.hideDeath()
+      return
+    }
     this.overlay.style.backgroundColor = 'transparent'
   }
 
   // 震动效果
   shake(intensity = 10, duration = 100) {
+    if (window.screenEffectsEnhanced) {
+      window.screenEffectsEnhanced.shake(intensity, duration)
+      return
+    }
+    
     const gameContainer = document.getElementById('game-container')
     if (!gameContainer) return
 
@@ -290,6 +366,5 @@ class ScreenEffects {
 }
 
 window.EffectsManager = EffectsManager
-console.log('[EFFECTS] EffectsManager class exported to window')
-// 不要自动创建实例，由 main.js 控制
-// window.screenEffects = new ScreenEffects()
+window.ScreenEffects = ScreenEffects
+console.log('[EFFECTS] Backward compatibility layer loaded')
