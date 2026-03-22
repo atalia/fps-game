@@ -127,6 +127,67 @@ func JoinRoom(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, str
 	return conn, playerID
 }
 
+// JoinRoomSafe 加入已存在房间（线程安全版本，不会 Fatalf）
+func JoinRoomSafe(t *testing.T, ts *TestServer, roomID string) (*websocket.Conn, error) {
+	conn, _, err := websocket.DefaultDialer.Dial(ts.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// 读取 welcome
+	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	var msg TestMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if msg.Type != "welcome" {
+		conn.Close()
+		return nil, err
+	}
+
+	// 发送 join_room
+	joinMsg := map[string]interface{}{
+		"type": "join_room",
+		"data": map[string]string{"room_id": roomID, "name": "player"},
+	}
+	jsonData, _ := json.Marshal(joinMsg)
+	if err := conn.WriteMessage(websocket.TextMessage, jsonData); err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	// 读取 room_joined
+	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+	_, data, err = conn.ReadMessage()
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	// 处理可能的换行分隔多消息
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+		if err := json.Unmarshal(line, &msg); err != nil {
+			continue
+		}
+		if msg.Type == "room_joined" {
+			return conn, nil
+		}
+	}
+
+	conn.Close()
+	return nil, err
+}
+
 // CloseConn 关闭连接
 func CloseConn(t *testing.T, conn *websocket.Conn) {
 	conn.Close()
@@ -167,16 +228,22 @@ func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage 
 			t.Fatalf("Failed to read message: %v", err)
 		}
 
-		var msg TestMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			t.Fatalf("Failed to parse message: %v", err)
-		}
+		// 处理可能的换行分隔多消息
+		for _, line := range bytes.Split(data, []byte{'\n'}) {
+			if len(line) == 0 {
+				continue
+			}
+			var msg TestMessage
+			if err := json.Unmarshal(line, &msg); err != nil {
+				t.Fatalf("Failed to parse message: %v (data: %s)", err, string(line))
+			}
 
-		if msg.Type == wantType {
-			return &msg
+			if msg.Type == wantType {
+				return &msg
+			}
+			// 跳过不匹配的消息，继续读取
+			t.Logf("Skipping message type %s, waiting for %s", msg.Type, wantType)
 		}
-		// 跳过不匹配的消息，继续读取
-		t.Logf("Skipping message type %s, waiting for %s", msg.Type, wantType)
 		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 	}
 }
@@ -207,6 +274,37 @@ func RecvAll(t *testing.T, conn *websocket.Conn) []*TestMessage {
 
 		// 设置下一次读取的超时
 		_ = conn.SetReadDeadline(time.Now().Add(drainWindow))
+	}
+
+	return msgs
+}
+
+// RecvAllNonBlocking 非阻塞读取所有可用消息
+func RecvAllNonBlocking(t *testing.T, conn *websocket.Conn) []*TestMessage {
+	var msgs []*TestMessage
+
+	// 设置短超时
+	_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		// 处理可能的换行分隔多消息
+		for _, line := range bytes.Split(data, []byte{'\n'}) {
+			if len(line) == 0 {
+				continue
+			}
+			var msg TestMessage
+			if err := json.Unmarshal(line, &msg); err == nil {
+				msgs = append(msgs, &msg)
+			}
+		}
+
+		// 设置下一次读取的超时
+		_ = conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 	}
 
 	return msgs
