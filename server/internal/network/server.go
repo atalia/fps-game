@@ -114,17 +114,24 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	playerIDs := r.GetPlayerIDs()
+	log.Printf("[DEBUG] BroadcastToRoom: type=%s, players=%d, exclude=%s", msgType, len(playerIDs), excludeID)
+
 	// 使用 GetPlayerIDs 获取线程安全的玩家列表
-	for _, playerID := range r.GetPlayerIDs() {
+	for _, playerID := range playerIDs {
 		if playerID == excludeID {
+			log.Printf("[DEBUG] BroadcastToRoom: skipping %s (excluded)", playerID)
 			continue
 		}
 		if client, ok := h.clientMap[playerID]; ok {
 			select {
 			case client.Send <- msg.ToJSON():
+				log.Printf("[DEBUG] BroadcastToRoom: sent to %s", playerID)
 			default:
-				// 缓冲区满，跳过
+				log.Printf("[DEBUG] BroadcastToRoom: buffer full for %s", playerID)
 			}
+		} else {
+			log.Printf("[DEBUG] BroadcastToRoom: client %s not in clientMap", playerID)
 		}
 	}
 }
@@ -649,6 +656,7 @@ func (c *Client) handleReload() {
 
 func (c *Client) handleChat(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil {
+		log.Printf("[DEBUG] handleChat: client not in room")
 		return
 	}
 
@@ -656,9 +664,11 @@ func (c *Client) handleChat(data json.RawMessage, roomManager *room.Manager) {
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(data, &chat); err != nil {
+		log.Printf("[DEBUG] handleChat unmarshal error: %v", err)
 		return
 	}
 
+	log.Printf("[DEBUG] handleChat: %s says: %s, broadcasting to room", c.Player.Name, chat.Message)
 	// 广播聊天消息
 	c.hub.BroadcastToRoom(c.Room, "chat", map[string]string{
 		"player_id": c.Player.ID,
