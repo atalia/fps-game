@@ -949,15 +949,19 @@ func (c *Client) handlePing(data json.RawMessage, roomManager *room.Manager) {
 
 // handleAddBot 处理添加机器人
 func (c *Client) handleAddBot(data json.RawMessage) {
+	log.Printf("[DEBUG] handleAddBot called, data: %s", string(data))
+	
 	var req struct {
 		Difficulty string `json:"difficulty"`
 		Team       string `json:"team"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
+		log.Printf("[DEBUG] handleAddBot unmarshal error: %v", err)
 		return
 	}
 
 	if c.Room == nil {
+		log.Printf("[DEBUG] handleAddBot: client not in room")
 		return
 	}
 
@@ -966,14 +970,17 @@ func (c *Client) handleAddBot(data json.RawMessage) {
 		difficulty = ai.DifficultyNormal
 	}
 
+	log.Printf("[DEBUG] Adding bot with difficulty: %s", difficulty)
 	bot := c.Room.AddBot(difficulty, req.Team)
 	if bot == nil {
+		log.Printf("[DEBUG] handleAddBot: failed to add bot")
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Cannot add more bots",
 		}).ToJSON()
 		return
 	}
 
+	log.Printf("[DEBUG] Bot added: %s, broadcasting player_joined", bot.ID)
 	// 广播机器人加入
 	c.hub.BroadcastToRoom(c.Room, "player_joined", map[string]interface{}{
 		"player_id":  bot.ID,
