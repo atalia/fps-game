@@ -115,21 +115,36 @@ class Game {
 
   setupChat() {
     const input = document.getElementById('chat-input')
+    if (!input) {
+      console.error('[GAME] Chat input not found!')
+      return
+    }
     
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.repeat) {
-        if (document.activeElement === input) {
-          const message = input.value.trim()
-          if (message) {
-            console.log('[GAME] Sending chat message:', message)
-            window.network.send('chat', { message })
-            input.value = ''
-          }
-          input.blur()
-        } else {
-          input.focus()
-          e.preventDefault()
+    console.log('[GAME] Setting up chat, input element:', input.id)
+    
+    // 点击输入框时暂停游戏控制
+    input.addEventListener('focus', () => {
+      console.log('[GAME] Chat input focused')
+      this.chatFocused = true
+    })
+    
+    input.addEventListener('blur', () => {
+      console.log('[GAME] Chat input blurred')
+      this.chatFocused = false
+    })
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        
+        const message = input.value.trim()
+        if (message) {
+          console.log('[GAME] Sending chat message:', message)
+          window.network.send('chat', { message })
+          input.value = ''
         }
+        input.blur()
       }
     })
   }
