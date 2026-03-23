@@ -542,6 +542,11 @@ class Renderer {
         return bodyGroup;
     }
 
+    // 添加玩家（兼容 main.js 调用）
+    addPlayer(id, position, isBot = false) {
+        return this.createPlayer(id, position, isBot);
+    }
+
     removePlayer(id) {
         const player = this.players.get(id);
         if (player) {

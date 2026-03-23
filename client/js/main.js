@@ -145,6 +145,34 @@ function setupNetworkHandlers() {
         if (!gameStarted) {
             startGame(data.player_id);
         }
+        
+        // 创建房间内现有玩家的模型（排除自己）
+        if (data.players && Array.isArray(data.players)) {
+            console.log('Room has', data.players.length, 'players');
+            data.players.forEach(player => {
+                if (player.id !== data.player_id) {
+                    console.log('Creating existing player:', player.id, 'position:', player.position);
+                    const position = player.position || { x: 0, y: 0, z: 0 };
+                    window.renderer.addPlayer(player.id, position, player.is_bot || false);
+                    
+                    // 如果是机器人，显示 AI 标签
+                    if (player.is_bot && window.aiLabels) {
+                        window.aiLabels.createLabel(player.id, player.name, player.difficulty);
+                    }
+                    
+                    // 同步到 game.players Map
+                    if (window.game && window.game.players) {
+                        window.game.players.set(player.id, {
+                            id: player.id,
+                            name: player.name,
+                            position: position,
+                            rotation: player.rotation || 0,
+                            is_bot: player.is_bot
+                        });
+                    }
+                }
+            });
+        }
     });
 
     // 玩家加入
