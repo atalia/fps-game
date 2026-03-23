@@ -154,6 +154,13 @@ class Game {
           window.audioManager.playReload()
           window.network.send('reload', {})
           break
+        case 'b':
+        case 'B':
+          // 添加机器人
+          console.log('[GAME] Adding bot...')
+          window.network.send('add_bot', { difficulty: 'normal' })
+          window.uiManager.showMessage('已添加 AI 机器人')
+          break
       }
     })
   }
