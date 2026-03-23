@@ -229,11 +229,15 @@ func (c *Client) readPump(roomManager *room.Manager) {
 			break
 		}
 
+		// 调试：打印接收到的消息
+		log.Printf("[DEBUG] Received message: %s", string(message))
+
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err != nil {
 			continue
 		}
 
+		log.Printf("[DEBUG] Parsed message type: %s", msg.Type)
 		c.handleMessage(msg, roomManager)
 	}
 }

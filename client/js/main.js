@@ -329,6 +329,7 @@ function setupNetworkHandlers() {
 
     // 聊天消息
     window.network.on('chat', (data) => {
+        console.log('[MAIN] Received chat message:', data);
         window.uiManager.addChatMessage(data.name, data.message);
     });
 

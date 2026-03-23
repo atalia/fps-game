@@ -121,6 +121,7 @@ class Game {
         if (document.activeElement === input) {
           const message = input.value.trim()
           if (message) {
+            console.log('[GAME] Sending chat message:', message)
             window.network.send('chat', { message })
             input.value = ''
           }
