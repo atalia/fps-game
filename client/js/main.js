@@ -134,12 +134,35 @@ async function init() {
 }
 
 function setupNetworkHandlers() {
+    // 辅助函数：刷新玩家列表 UI
+    function refreshPlayerList() {
+        if (!window.game || !window.game.players) return
+        const players = Array.from(window.game.players.values())
+        // 添加自己
+        if (window.game.player) {
+            const selfInList = players.find(p => p.id === window.game.player.id)
+            if (!selfInList) {
+                players.unshift({
+                    id: window.game.player.id,
+                    name: window.game.player.name || 'You',
+                    kills: window.game.player.kills || 0,
+                    health: window.game.player.health || 100,
+                    is_bot: false
+                })
+            }
+        }
+        window.uiManager.updatePlayerList(players)
+    }
+    
     // 房间加入成功
     window.network.on('room_joined', (data) => {
         console.log('✅ Joined room:', data.room_id);
         
         window.uiManager.updateRoom(data.room_id, data.player_count);
         window.uiManager.showMessage(`已加入房间 ${data.room_id}`);
+        
+        // 设置当前玩家 ID
+        window.uiManager.setSelfPlayerId(data.player_id);
 
         // 初始化游戏
         if (!gameStarted) {
@@ -149,6 +172,10 @@ function setupNetworkHandlers() {
         // 创建房间内现有玩家的模型（排除自己）
         if (data.players && Array.isArray(data.players)) {
             console.log('Room has', data.players.length, 'players');
+            
+            // 更新玩家列表 UI
+            window.uiManager.updatePlayerList(data.players);
+            
             data.players.forEach(player => {
                 if (player.id !== data.player_id) {
                     console.log('Creating existing player:', player.id, 'position:', player.position);
@@ -167,7 +194,9 @@ function setupNetworkHandlers() {
                             name: player.name,
                             position: position,
                             rotation: player.rotation || 0,
-                            is_bot: player.is_bot
+                            is_bot: player.is_bot,
+                            kills: player.kills || 0,
+                            health: player.health || 100
                         });
                     }
                 }
@@ -196,9 +225,14 @@ function setupNetworkHandlers() {
                 name: data.name,
                 position: position,
                 rotation: 0,
-                is_bot: data.is_bot
+                is_bot: data.is_bot,
+                kills: data.kills || 0,
+                health: data.health || 100
             });
         }
+        
+        // 更新玩家列表 UI
+        if (typeof refreshPlayerList === 'function') refreshPlayerList();
     });
 
     // 玩家离开
@@ -211,12 +245,15 @@ function setupNetworkHandlers() {
             window.aiLabels.removeLabel(data.player_id);
         }
         
-        window.uiManager.addKillFeed(`玩家离开了游戏`);
+        window.uiManager.addKillFeed(`${data.name || data.player_id} 离开了游戏`);
         
         // 从 game.players Map 移除
         if (window.game && window.game.players) {
             window.game.players.delete(data.player_id);
         }
+        
+        // 更新玩家列表 UI
+        if (typeof refreshPlayerList === 'function') refreshPlayerList();
     });
 
     // 玩家移动

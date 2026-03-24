@@ -14,12 +14,57 @@ class UIManager {
       currentWeapon: document.getElementById('current-weapon'),
       roomId: document.getElementById('room-id'),
       playerCount: document.getElementById('player-count'),
+      playersContainer: document.getElementById('players-container'),
       connectionStatus: document.getElementById('connection-status'),
       chatMessages: document.getElementById('chat-messages'),
       chatInput: document.getElementById('chat-input'),
       killFeed: document.getElementById('kill-feed'),
       scoreboard: document.getElementById('scoreboard'),
       scoreboardBody: document.getElementById('scoreboard-rows')
+    }
+    
+    // 当前玩家 ID
+    this.selfPlayerId = null
+  }
+  
+  // 设置当前玩家 ID
+  setSelfPlayerId(id) {
+    this.selfPlayerId = id
+  }
+  
+  // 更新玩家列表
+  updatePlayerList(players) {
+    if (!this.elements.playersContainer) return
+    
+    this.elements.playersContainer.innerHTML = ''
+    
+    players.forEach(player => {
+      const div = document.createElement('div')
+      div.className = 'player-item'
+      
+      if (player.id === this.selfPlayerId) {
+        div.classList.add('self')
+      }
+      if (player.is_bot) {
+        div.classList.add('bot')
+      }
+      
+      const name = player.name || player.id.substring(0, 8)
+      const kills = player.kills || 0
+      const health = player.health || 100
+      
+      div.innerHTML = `
+        <span class="name">${this.escapeHtml(name)}${player.is_bot ? ' 🤖' : ''}</span>
+        <span class="kills">${kills}杀</span>
+        <span class="health">${health}HP</span>
+      `
+      
+      this.elements.playersContainer.appendChild(div)
+    })
+    
+    // 更新玩家计数
+    if (this.elements.playerCount) {
+      this.elements.playerCount.textContent = `玩家: ${players.length}/10`
     }
   }
 

@@ -261,6 +261,69 @@
             font-size: 12px;
             color: #aaa;
         }
+        
+        /* 玩家列表 */
+        #player-list {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            min-width: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .player-list-header {
+            font-size: 12px;
+            color: #888;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .player-item {
+            display: flex;
+            align-items: center;
+            padding: 5px 0;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .player-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-item.self {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        
+        .player-item.bot {
+            color: #ffaa00;
+        }
+        
+        .player-item .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .player-item .kills {
+            color: #ff4444;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        
+        .player-item .health {
+            color: #44ff44;
+            font-size: 11px;
+            margin-left: 5px;
+        }
 
         /* 伤害闪烁 */
         #damage-overlay {
@@ -386,6 +449,12 @@
         <div id="room-info">
             <div id="room-id">等待加入...</div>
             <div id="player-count">玩家: 0/10</div>
+        </div>
+        
+        <!-- 玩家列表 -->
+        <div id="player-list">
+            <div class="player-list-header">房间玩家</div>
+            <div id="players-container"></div>
         </div>
 
         <div id="ammo-display">
