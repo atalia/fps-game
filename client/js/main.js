@@ -300,14 +300,30 @@ function setupNetworkHandlers() {
         } else {
             // 显示命中标记 (射击者视角)
             if (data.attacker_id === window.game?.player?.id) {
-                // 新特效系统
+                // 命中粒子效果
+                if (window.effectsSystem && window.effectsSystem.core) {
+                    window.effectsSystem.core.createHitBurst(
+                        data.position,
+                        data.hitbox === 'head'
+                    );
+                }
+                // 血迹效果
+                if (window.effectsSystem && window.effectsSystem.core) {
+                    window.effectsSystem.core.createBloodSplatter(data.position);
+                }
+                // 伤害数字
                 if (window.damageNumber) {
                     window.damageNumber.show(data.damage, data.position, {
                         isHeadshot: data.hitbox === 'head'
                     });
                 }
+                // 准星命中反馈
                 if (window.dynamicCrosshair) {
                     window.dynamicCrosshair.showHit();
+                }
+                // 命中音效
+                if (window.audioManager) {
+                    window.audioManager.playHit();
                 }
                 // 兼容旧系统
                 if (window.hitEffects) {
