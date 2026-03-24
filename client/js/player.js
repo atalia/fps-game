@@ -115,7 +115,13 @@ class PlayerController {
     shoot() {
         const now = Date.now();
         if (now - this.lastShot < this.shootCooldown) return false;
-        if (this.ammo <= 0) return false;
+        if (this.ammo <= 0) {
+            // 播放空弹夹音效
+            if (window.audioManager) {
+                window.audioManager.playEmpty();
+            }
+            return false;
+        }
 
         this.lastShot = now;
         this.ammo--;
@@ -134,6 +140,43 @@ class PlayerController {
             case 'sniper':
                 this.shootCooldown = 1500;
                 break;
+        }
+
+        // === 射击视觉反馈 ===
+        
+        // 1. 枪口火焰
+        if (window.effectsSystem && window.effectsSystem.core) {
+            window.effectsSystem.core.createMuzzleFlash(
+                { x: this.position.x, y: this.position.y + 1.5, z: this.position.z },
+                this.rotation
+            );
+        }
+        
+        // 2. 准星扩散动画
+        if (window.dynamicCrosshair) {
+            window.dynamicCrosshair.setShooting(true);
+            setTimeout(() => {
+                if (window.dynamicCrosshair) {
+                    window.dynamicCrosshair.setShooting(false);
+                }
+            }, 100);
+        }
+        
+        // 3. 屏幕震动（狙击枪）
+        if (this.weapon === 'sniper' && window.screenEffectsEnhanced) {
+            window.screenEffectsEnhanced.shake(8, 150);
+        } else if (window.screenEffectsEnhanced) {
+            window.screenEffectsEnhanced.shake(3, 50);
+        }
+        
+        // 4. 音效
+        if (window.audioManager) {
+            window.audioManager.playShoot(this.weapon);
+        }
+        
+        // 5. 弹药动画
+        if (window.ammoDisplayEnhanced) {
+            window.ammoDisplayEnhanced.update(this.ammo, this.ammoReserve);
         }
 
         // 发送射击消息到服务器
