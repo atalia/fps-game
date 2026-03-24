@@ -101,6 +101,9 @@ async function init() {
         }
         window.lobby = new Lobby();
 
+        // 设置退出房间按钮
+        setupLeaveRoomButton();
+
         // 隐藏加载画面
         loading.style.display = 'none';
 
@@ -398,6 +401,71 @@ async function startGame(playerId) {
     if (window.lobby) {
         window.lobby.hide();
     }
+    
+    // 显示退出按钮
+    const leaveBtn = document.getElementById('leave-room-btn');
+    if (leaveBtn) {
+        leaveBtn.style.display = 'block';
+    }
+}
+
+// 设置退出房间按钮
+function setupLeaveRoomButton() {
+    const leaveBtn = document.getElementById('leave-room-btn');
+    if (!leaveBtn) return;
+    
+    // 点击按钮退出房间
+    leaveBtn.addEventListener('click', leaveRoom);
+    
+    // ESC 键退出房间
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !e.repeat && gameStarted) {
+            leaveRoom();
+        }
+    });
+}
+
+// 退出房间
+function leaveRoom() {
+    console.log('[MAIN] Leaving room...');
+    
+    // 发送离开消息
+    if (window.network && window.network.connected) {
+        window.network.send('leave_room', {});
+    }
+    
+    // 清理本地状态
+    if (window.game) {
+        window.game.running = false;
+        window.game.roomId = null;
+        if (window.game.players) {
+            window.game.players.clear();
+        }
+    }
+    
+    // 清理渲染器中的其他玩家
+    if (window.renderer) {
+        window.renderer.clearPlayers();
+    }
+    
+    // 隐藏退出按钮
+    const leaveBtn = document.getElementById('leave-room-btn');
+    if (leaveBtn) {
+        leaveBtn.style.display = 'none';
+    }
+    
+    // 显示大厅
+    if (window.lobby) {
+        window.lobby.show();
+    }
+    
+    // 更新 UI
+    window.uiManager.updateRoom('等待加入...', 0);
+    window.uiManager.updatePlayerList([]);
+    
+    gameStarted = false;
+    
+    console.log('[MAIN] Left room successfully');
 }
 
 // 启动

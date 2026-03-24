@@ -6,33 +6,33 @@ class Renderer {
         console.log('[RENDERER] Constructor called, containerId:', containerId);
         this.container = document.getElementById(containerId);
         console.log('[RENDERER] Container found:', !!this.container);
-        
+
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.renderer = new THREE.WebGLRenderer({ 
+        this.renderer = new THREE.WebGLRenderer({
             antialias: true,
             powerPreference: "high-performance"
         });
-        
+
         this.players = new Map();
         this.projectiles = [];
         this.clock = new THREE.Clock();
         this.time = 0;
-        
+
         // 动态天空参数
         this.dayNightCycle = true;
         this.dayTime = 0.3; // 0-1, 0.5 = 正午
-        
+
         // 粒子系统
         this.particles = [];
-        
+
         // 后处理
         this.composer = null;
         this.bloomPass = null;
-        
+
         // 增强版地图系统
         this.mapEnhanced = null;
-        
+
         this.init();
     }
 
@@ -58,7 +58,7 @@ class Renderer {
 
         // 创建地图
         this.createMap();
-        
+
         // 初始化增强版地图系统
         if (typeof MapEnhanced !== 'undefined') {
             this.mapEnhanced = new MapEnhanced(this);
@@ -79,7 +79,7 @@ class Renderer {
 
         // 窗口大小调整
         window.addEventListener('resize', () => this.onResize());
-        
+
         console.log('[RENDERER] Initialization complete');
     }
 
@@ -138,10 +138,10 @@ class Renderer {
             this.mapEnhanced.createGround(150, 'tech')
             return
         }
-        
+
         // 后备实现
         const size = 100;
-        
+
         // 高质量地面纹理
         const canvas = document.createElement('canvas');
         canvas.width = 1024;
@@ -156,7 +156,7 @@ class Renderer {
         const gridSize = 64;
         ctx.strokeStyle = '#2a2a3a';
         ctx.lineWidth = 1;
-        
+
         for (let i = 0; i <= 1024; i += gridSize) {
             ctx.beginPath();
             ctx.moveTo(i, 0);
@@ -190,12 +190,12 @@ class Renderer {
             metalness: 0.05,
             envMapIntensity: 0.5
         });
-        
+
         const ground = new THREE.Mesh(geometry, material);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         this.scene.add(ground);
-        
+
         this.ground = ground;
     }
 
@@ -204,7 +204,7 @@ class Renderer {
         if (this.mapEnhanced) {
             // 中心建筑
             this.mapEnhanced.createObstacle(0, 0, 15, 5, 15, 0x555566, { glowEdge: true })
-            
+
             // 四角掩体
             const corners = [
                 { x: 25, z: 25, color: 0x44cc66 },
@@ -212,11 +212,11 @@ class Renderer {
                 { x: 25, z: -25, color: 0x4466cc },
                 { x: -25, z: -25, color: 0xcccc44 }
             ]
-            
+
             corners.forEach(c => {
                 this.mapEnhanced.createObstacle(c.x, c.z, 6, 3, 6, c.color, { details: true })
             })
-            
+
             // 走廊掩体
             const corridors = [
                 { x: 35, z: 0, w: 2, h: 4, d: 20, color: 0x444455 },
@@ -224,21 +224,21 @@ class Renderer {
                 { x: 0, z: 35, w: 20, h: 4, d: 2, color: 0x444455 },
                 { x: 0, z: -35, w: 20, h: 4, d: 2, color: 0x444455 }
             ]
-            
+
             corridors.forEach(c => {
                 this.mapEnhanced.createObstacle(c.x, c.z, c.w, c.h, c.d, c.color, { details: false })
             })
-            
+
             // 生成随机装饰物
             this.mapEnhanced.generateDecorations(40, { minX: -70, maxX: 70, minZ: -70, maxZ: 70 })
-            
+
             // 创建边界墙
             this.mapEnhanced.createBounds(-70, 70, -70, 70, 10)
-            
+
             console.log('[RENDERER] Enhanced map created')
             return
         }
-        
+
         // 后备实现 - 卡通风格障碍物
         const obstacles = [
             { x: 10, z: 10, w: 4, h: 3, d: 4, color: 0x44cc66 },
@@ -262,10 +262,10 @@ class Renderer {
             box.castShadow = true;
             box.receiveShadow = true;
             this.scene.add(box);
-            
+
             // 添加发光边缘效果
             const edgeGeometry = new THREE.EdgesGeometry(geometry);
-            const edgeMaterial = new THREE.LineBasicMaterial({ 
+            const edgeMaterial = new THREE.LineBasicMaterial({
                 color: obs.color,
                 transparent: true,
                 opacity: 0.5
@@ -293,7 +293,7 @@ class Renderer {
             pillar.castShadow = true;
             pillar.receiveShadow = true;
             this.scene.add(pillar);
-            
+
             // 顶部发光球
             const glowGeometry = new THREE.SphereGeometry(0.5, 16, 16);
             const glowMaterial = new THREE.MeshBasicMaterial({
@@ -304,7 +304,7 @@ class Renderer {
             const glowSphere = new THREE.Mesh(glowGeometry, glowMaterial);
             glowSphere.position.set(pos.x, 6.5, pos.z);
             this.scene.add(glowSphere);
-            
+
             // 点光源
             const light = new THREE.PointLight(0x4488ff, 0.5, 15);
             light.position.set(pos.x, 6.5, pos.z);
@@ -315,7 +315,7 @@ class Renderer {
     createSkybox() {
         // 动态天空着色器
         const skyGeometry = new THREE.SphereGeometry(400, 32, 32);
-        
+
         const skyMaterial = new THREE.ShaderMaterial({
             uniforms: {
                 topColor: { value: new THREE.Color(0x0a0a2a) },
@@ -339,22 +339,22 @@ class Renderer {
                 uniform float exponent;
                 uniform float time;
                 varying vec3 vWorldPosition;
-                
+
                 float random(vec2 st) {
                     return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
                 }
-                
+
                 void main() {
                     float h = normalize(vWorldPosition + offset).y;
                     float t = max(pow(max(h, 0.0), exponent), 0.0);
                     vec3 skyColor = mix(bottomColor, topColor, t);
-                    
+
                     // 添加星星
                     vec2 starUV = vWorldPosition.xz * 0.01;
                     float star = step(0.998, random(floor(starUV * 100.0)));
                     float twinkle = sin(time * 2.0 + random(starUV) * 6.28) * 0.5 + 0.5;
                     skyColor += vec3(star * twinkle * (1.0 - t));
-                    
+
                     gl_FragColor = vec4(skyColor, 1.0);
                 }
             `,
@@ -423,37 +423,37 @@ class Renderer {
         const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256);
         const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
         this.scene.add(cubeCamera);
-        
+
         this.envMap = cubeRenderTarget.texture;
         this.cubeCamera = cubeCamera;
     }
 
     updateDayNight(deltaTime) {
         if (!this.dayNightCycle) return;
-        
+
         this.dayTime += deltaTime * 0.01; // 缓慢循环
         if (this.dayTime > 1) this.dayTime = 0;
-        
+
         // 太阳位置
         const sunAngle = this.dayTime * Math.PI * 2 - Math.PI / 2;
         this.sunLight.position.x = Math.cos(sunAngle) * 100;
         this.sunLight.position.y = Math.sin(sunAngle) * 100;
-        
+
         // 光照强度随时间变化
         const dayFactor = Math.max(0, Math.sin(this.dayTime * Math.PI));
         this.sunLight.intensity = dayFactor * 1.5;
         this.moonLight.intensity = (1 - dayFactor) * 0.5;
         this.ambientLight.intensity = 0.1 + dayFactor * 0.2;
-        
+
         // 天空颜色变化
         const nightTop = new THREE.Color(0x050510);
         const nightBottom = new THREE.Color(0x0a0a1a);
         const dayTop = new THREE.Color(0x1a3a6a);
         const dayBottom = new THREE.Color(0x3a5a8a);
-        
+
         const topColor = new THREE.Color().lerpColors(nightTop, dayTop, dayFactor);
         const bottomColor = new THREE.Color().lerpColors(nightBottom, dayBottom, dayFactor);
-        
+
         this.sky.material.uniforms.topColor.value = topColor;
         this.sky.material.uniforms.bottomColor.value = bottomColor;
     }
@@ -466,7 +466,7 @@ class Renderer {
                 positions[i] += Math.sin(this.time + i) * 0.01;
                 positions[i + 1] += Math.cos(this.time * 0.5 + i) * 0.005;
                 positions[i + 2] += Math.cos(this.time + i) * 0.01;
-                
+
                 // 边界检查
                 if (positions[i + 1] > 20) positions[i + 1] = 0;
                 if (positions[i + 1] < 0) positions[i + 1] = 20;
@@ -484,12 +484,12 @@ class Renderer {
         // 卡通风格角色
         const bodyColor = isBot ? 0xff5533 : 0x3399ff;
         const headColor = isBot ? 0xffaa88 : 0xffddaa;
-        
+
         const bodyMaterial = new THREE.MeshToonMaterial({ color: bodyColor });
         const headMaterial = new THREE.MeshToonMaterial({ color: headColor });
 
         const bodyGroup = new THREE.Group();
-        
+
         // 大头小身比例（卡通风格）
         // 躯干
         const torsoGeometry = new THREE.CapsuleGeometry(0.35, 0.6, 8, 16);
@@ -507,14 +507,14 @@ class Renderer {
 
         // 眼睛
         const eyeGeometry = new THREE.SphereGeometry(0.06, 8, 8);
-        const eyeMaterial = new THREE.MeshBasicMaterial({ 
-            color: isBot ? 0xff0000 : 0x000000 
+        const eyeMaterial = new THREE.MeshBasicMaterial({
+            color: isBot ? 0xff0000 : 0x000000
         });
-        
+
         const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
         leftEye.position.set(-0.12, 1.5, 0.3);
         bodyGroup.add(leftEye);
-        
+
         const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
         rightEye.position.set(0.12, 1.5, 0.3);
         bodyGroup.add(rightEye);
@@ -526,7 +526,7 @@ class Renderer {
             const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
             antenna.position.set(0, 1.85, 0);
             bodyGroup.add(antenna);
-            
+
             const antennaBall = new THREE.Mesh(
                 new THREE.SphereGeometry(0.05, 8, 8),
                 new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -571,7 +571,7 @@ class Renderer {
 
     addProjectile(from, to) {
         const geometry = new THREE.SphereGeometry(0.08, 8, 8);
-        const material = new THREE.MeshBasicMaterial({ 
+        const material = new THREE.MeshBasicMaterial({
             color: 0xffff00,
             transparent: true,
             opacity: 0.9
@@ -604,7 +604,16 @@ class Renderer {
             maxDistance: 100
         });
     }
-
+    
+    // 清除所有其他玩家
+    clearPlayers() {
+        this.players.forEach((player, id) => {
+            this.scene.remove(player);
+        });
+        this.players.clear();
+        console.log('[RENDERER] Cleared all players');
+    }
+    
     update() {
         const deltaTime = this.clock.getDelta();
         this.time += deltaTime;
