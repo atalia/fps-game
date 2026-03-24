@@ -26,7 +26,8 @@ class Lobby {
 
                 <div id="room-actions">
                     <button id="quick-join-btn" class="btn primary">快速加入</button>
-                    <button id="create-room-btn" class="btn">创建房间</button>
+                    <button id="join-room-btn" class="btn success">加入选中房间</button>
+                    <button id="create-room-btn" class="btn">创建新房间</button>
                 </div>
 
                 <div id="rooms-list">
@@ -34,6 +35,7 @@ class Lobby {
                     <div id="rooms-container"></div>
                 </div>
 
+                
                 <div id="lobby-status">
                     <span id="online-count">在线: 0</span>
                     <span id="room-count-total">房间: 0</span>
@@ -123,6 +125,15 @@ class Lobby {
                 .btn.primary:hover {
                     background: #29b6f6;
                 }
+                
+                .btn.success {
+                    background: #4caf50;
+                    color: #fff;
+                }
+
+                .btn.success:hover {
+                    background: #43a047;
+                }
 
                 #rooms-list h3 {
                     margin-bottom: 10px;
@@ -195,7 +206,11 @@ class Lobby {
 
         // 事件绑定
         document.getElementById('quick-join-btn').onclick = () => this.quickJoin();
+        document.getElementById('join-room-btn').onclick = () => this.joinSelectedRoom();
         document.getElementById('create-room-btn').onclick = () => this.createRoom();
+        
+        // 初始状态：禁用加入按钮
+        document.getElementById('join-room-btn').disabled = true;
 
         // 加载保存的名字
         const savedName = localStorage.getItem('player_name');
@@ -245,6 +260,12 @@ class Lobby {
     selectRoom(roomId) {
         this.selectedRoom = roomId;
         this.renderRooms();
+        
+        // 更新加入按钮状态
+        const joinBtn = document.getElementById('join-room-btn');
+        if (joinBtn) {
+            joinBtn.disabled = !roomId;
+        }
     }
 
     getPlayerName() {
@@ -257,18 +278,35 @@ class Lobby {
     quickJoin() {
         const name = this.getPlayerName();
         
+        // 如果选中了房间，加入选中的房间
+        const roomId = this.selectedRoom || '';
+        
         if (window.network && window.network.connected) {
+            console.log('[LOBBY] Joining room:', roomId || 'new room');
             window.network.send('join_room', {
-                room_id: '',
+                room_id: roomId,
                 name: name
             });
             this.hide();
+            
+            // 清除选中状态
+            this.selectedRoom = null;
         } else {
             console.error('Network not connected');
         }
     }
-
+    
+    joinSelectedRoom() {
+        if (!this.selectedRoom) {
+            console.warn('[LOBBY] No room selected');
+            return;
+        }
+        this.quickJoin();
+    }
+    
     createRoom() {
+        // 创建新房间（发送空 room_id）
+        this.selectedRoom = null;
         this.quickJoin();
     }
 
