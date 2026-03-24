@@ -6,24 +6,46 @@ class Network {
         this.connected = false;
         this.playerId = null;
         this.handlers = new Map();
+        this.heartbeatInterval = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
 
         this.connect();
     }
 
     connect() {
+        if (this.ws) {
+            this.ws.onclose = null;
+            this.ws.onerror = null;
+            this.ws.onmessage = null;
+            this.ws.onopen = null;
+        }
+
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
             console.log('✅ WebSocket connected');
             this.connected = true;
+            this.reconnectAttempts = 0;
+            this.startHeartbeat();
             if (this.onConnect) this.onConnect();
         };
 
-        this.ws.onclose = () => {
-            console.log('❌ WebSocket disconnected');
+        this.ws.onclose = (event) => {
+            console.log('❌ WebSocket disconnected, code:', event.code);
             this.connected = false;
+            this.stopHeartbeat();
+            
             // 自动重连
-            setTimeout(() => this.connect(), 3000);
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+                console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
+                setTimeout(() => this.connect(), delay);
+            } else {
+                console.error('Max reconnect attempts reached');
+                if (this.onError) this.onError(new Error('连接断开，请刷新页面重试'));
+            }
         };
 
         this.ws.onerror = (error) => {
@@ -34,6 +56,24 @@ class Network {
         this.ws.onmessage = (event) => {
             this.handleMessage(event.data);
         };
+    }
+    
+    startHeartbeat() {
+        this.stopHeartbeat();
+        
+        // 每30秒发送一次心跳
+        this.heartbeatInterval = setInterval(() => {
+            if (this.connected) {
+                this.send('heartbeat', { time: Date.now() });
+            }
+        }, 30000);
+    }
+    
+    stopHeartbeat() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
     }
 
     handleMessage(data) {

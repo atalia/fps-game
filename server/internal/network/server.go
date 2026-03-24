@@ -19,7 +19,7 @@ import (
 
 const (
 	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
+	pongWait       = 90 * time.Second  // 增加到 90 秒
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 4096
 )
@@ -115,23 +115,24 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	defer h.mu.RUnlock()
 
 	playerIDs := r.GetPlayerIDs()
-	log.Printf("[DEBUG] BroadcastToRoom: type=%s, players=%d, exclude=%s", msgType, len(playerIDs), excludeID)
+	
+	// 只在非移动消息时打印日志
+	if msgType != "player_moved" && msgType != "move" {
+		log.Printf("[DEBUG] BroadcastToRoom: type=%s, players=%d", msgType, len(playerIDs))
+	}
 
 	// 使用 GetPlayerIDs 获取线程安全的玩家列表
 	for _, playerID := range playerIDs {
 		if playerID == excludeID {
-			log.Printf("[DEBUG] BroadcastToRoom: skipping %s (excluded)", playerID)
 			continue
 		}
 		if client, ok := h.clientMap[playerID]; ok {
 			select {
 			case client.Send <- msg.ToJSON():
-				log.Printf("[DEBUG] BroadcastToRoom: sent to %s", playerID)
+				// 成功发送
 			default:
-				log.Printf("[DEBUG] BroadcastToRoom: buffer full for %s", playerID)
+				log.Printf("[WARN] BroadcastToRoom: buffer full for %s, dropping message", playerID)
 			}
-		} else {
-			log.Printf("[DEBUG] BroadcastToRoom: client %s not in clientMap", playerID)
 		}
 	}
 }
@@ -167,8 +168,8 @@ func mustMarshal(v interface{}) json.RawMessage {
 // ServeWS 处理 WebSocket 连接
 func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, w http.ResponseWriter, r *http.Request) {
 	var upgrader = websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
+		ReadBufferSize:  8192,
+		WriteBufferSize: 8192,
 		CheckOrigin: func(r *http.Request) bool {
 			return true // 允许所有来源
 		},
@@ -188,9 +189,11 @@ func HandleConnection(conn *websocket.Conn, hub *Hub, roomManager *room.Manager)
 	client := &Client{
 		Conn:   conn,
 		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 256),
+		Send:   make(chan []byte, 512),  // 增加缓冲区
 		hub:    hub,
 	}
+
+	log.Printf("[DEBUG] New connection, player ID: %s", client.Player.ID)
 
 	// 注册客户端
 	hub.register <- client
@@ -226,18 +229,21 @@ func (c *Client) readPump(roomManager *room.Manager) {
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
+			log.Printf("[DEBUG] Read error from %s: %v", c.Player.ID, err)
 			break
 		}
 
-		// 调试：打印接收到的消息
-		log.Printf("[DEBUG] Received message: %s", string(message))
-
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("[WARN] Unmarshal error: %v", err)
 			continue
 		}
 
-		log.Printf("[DEBUG] Parsed message type: %s", msg.Type)
+		// 只在非移动消息时打印日志
+		if msg.Type != "move" && msg.Type != "heartbeat" {
+			log.Printf("[DEBUG] Message: %s from %s", msg.Type, c.Player.ID)
+		}
+		
 		c.handleMessage(msg, roomManager)
 	}
 }
@@ -287,6 +293,11 @@ func (c *Client) writePump() {
 // handleMessage 处理消息
 func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	switch msg.Type {
+	case "heartbeat":
+		// 心跳消息，只记录日志
+		log.Printf("[DEBUG] Heartbeat from %s", c.Player.ID)
+		// 重置读取超时
+		_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	case "join_room":
 		c.handleJoinRoom(msg.Data, roomManager)
 	case "leave_room":
