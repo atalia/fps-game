@@ -182,3 +182,5 @@ class AudioManager {
 }
 
 window.audioManager = new AudioManager()
+
+export default AudioManager

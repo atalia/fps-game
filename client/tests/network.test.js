@@ -1,135 +1,110 @@
-// Network Tests
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Mock Network class
-class Network {
-  constructor() {
-    this.ws = null
-    this.playerId = null
-    this.connected = false
-    this.messageHandlers = {}
-  }
+const originalWindow = global.window
+const originalWebSocket = global.WebSocket
 
-  connect(url) {
-    return new Promise((resolve, reject) => {
-      // Mock WebSocket
-      this.ws = {
-        readyState: 1, // OPEN
-        send: vi.fn(),
-        close: vi.fn(),
-        onopen: null,
-        onclose: null,
-        onerror: null,
-        onmessage: null
-      }
+class MockWebSocket {
+  static instances = []
 
-      // Simulate connection
-      setTimeout(() => {
-        this.connected = true
-        this.playerId = 'test-player-id'
-        this.ws.onopen?.()
-        resolve()
-      }, 10)
-    })
-  }
-
-  disconnect() {
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-      this.connected = false
-    }
-  }
-
-  send(type, data = {}) {
-    if (!this.connected) return
-    const message = JSON.stringify({ type, data })
-    this.ws?.send(message)
-  }
-
-  handleMessage(message) {
-    const { type, data } = message
-    if (this.messageHandlers[type]) {
-      this.messageHandlers[type](data)
-    }
-  }
-
-  on(type, handler) {
-    this.messageHandlers[type] = handler
-  }
-
-  updateConnectionStatus(connected) {
-    this.connected = connected
+  constructor(url) {
+    this.url = url
+    this.send = vi.fn()
+    this.close = vi.fn()
+    this.onopen = null
+    this.onclose = null
+    this.onerror = null
+    this.onmessage = null
+    MockWebSocket.instances.push(this)
   }
 }
 
+function loadNetworkClass() {
+  vi.resetModules()
+  global.window = {}
+  global.WebSocket = MockWebSocket
+  return import('../js/network.js').then(() => window.Network)
+}
+
 describe('Network', () => {
-  let network
+  let Network
 
-  beforeEach(() => {
-    network = new Network()
+  beforeEach(async () => {
+    MockWebSocket.instances = []
+    vi.useFakeTimers()
+    Network = await loadNetworkClass()
   })
 
-  describe('Connection', () => {
-    it('should connect successfully', async () => {
-      await network.connect('ws://localhost:8080')
-      expect(network.connected).toBe(true)
-      expect(network.playerId).toBe('test-player-id')
-    })
-
-    it('should disconnect properly', async () => {
-      await network.connect('ws://localhost:8080')
-      network.disconnect()
-      expect(network.connected).toBe(false)
-      expect(network.ws).toBeNull()
-    })
+  afterEach(() => {
+    vi.useRealTimers()
+    global.window = originalWindow
+    global.WebSocket = originalWebSocket
   })
 
-  describe('Messaging', () => {
-    beforeEach(async () => {
-      await network.connect('ws://localhost:8080')
-    })
-
-    it('should send message', () => {
-      network.send('test', { value: 1 })
-      expect(network.ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'test', data: { value: 1 } }))
-    })
-
-    it('should not send when disconnected', () => {
-      network.connected = false
-      network.send('test', { value: 1 })
-      expect(network.ws.send).not.toHaveBeenCalled()
-    })
+  it('connects immediately on construction', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(MockWebSocket.instances[0].url).toBe('ws://localhost:8080/ws')
+    expect(network.connected).toBe(false)
   })
 
-  describe('Message Handlers', () => {
-    it('should register handler', () => {
-      const handler = vi.fn()
-      network.on('test', handler)
-      expect(network.messageHandlers['test']).toBe(handler)
-    })
+  it('marks connected and starts heartbeat on open', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    const ws = MockWebSocket.instances[0]
 
-    it('should handle message', () => {
-      const handler = vi.fn()
-      network.on('test', handler)
-      network.handleMessage({ type: 'test', data: { value: 1 } })
-      expect(handler).toHaveBeenCalledWith({ value: 1 })
-    })
+    ws.onopen()
+    expect(network.connected).toBe(true)
 
-    it('should not throw for unhandled message type', () => {
-      expect(() => {
-        network.handleMessage({ type: 'unknown', data: {} })
-      }).not.toThrow()
-    })
+    network.send = vi.fn()
+    vi.advanceTimersByTime(30000)
+    expect(network.send).toHaveBeenCalledWith('heartbeat', expect.objectContaining({ time: expect.any(Number) }))
   })
 
-  describe('Connection Status', () => {
-    it('should update connection status', () => {
-      network.updateConnectionStatus(true)
-      expect(network.connected).toBe(true)
-      
-      network.updateConnectionStatus(false)
-      expect(network.connected).toBe(false)
-    })
+  it('registers handlers and dispatches parsed messages', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    const handler = vi.fn()
+    network.on('player_joined', handler)
+
+    network.handleMessage('{"type":"player_joined","data":{"id":"p1"}}\n')
+    expect(handler).toHaveBeenCalledWith({ id: 'p1' })
+  })
+
+  it('handles welcome messages by storing player id', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    network.handleMessage('{"type":"welcome","data":{"player_id":"abc123"}}\n')
+    expect(network.playerId).toBe('abc123')
+  })
+
+  it('sends serialized messages only when connected', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    const ws = MockWebSocket.instances[0]
+
+    network.send('move', { x: 1 })
+    expect(ws.send).not.toHaveBeenCalled()
+
+    network.connected = true
+    network.send('move', { x: 1 })
+    expect(ws.send).toHaveBeenCalledWith(expect.stringContaining('"type":"move"'))
+    expect(ws.send).toHaveBeenCalledWith(expect.stringContaining('"x":1'))
+  })
+
+  it('reconnects after close until max attempts', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    const firstSocket = MockWebSocket.instances[0]
+
+    firstSocket.onclose({ code: 1006 })
+    expect(network.connected).toBe(false)
+    expect(network.reconnectAttempts).toBe(1)
+
+    vi.advanceTimersByTime(2000)
+    expect(MockWebSocket.instances).toHaveLength(2)
+  })
+
+  it('surfaces an error after max reconnect attempts', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    network.reconnectAttempts = network.maxReconnectAttempts
+    network.onError = vi.fn()
+
+    MockWebSocket.instances[0].onclose({ code: 1006 })
+    expect(network.onError).toHaveBeenCalled()
   })
 })

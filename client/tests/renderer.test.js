@@ -1,150 +1,185 @@
-// Renderer Tests
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Mock THREE
-global.THREE = {
-  Scene: vi.fn().mockImplementation(() => ({
+const originalWindow = global.window
+const originalTHREE = global.THREE
+const originalGetContext = HTMLCanvasElement.prototype.getContext
+
+function createMockMesh() {
+  return {
+    position: { set: vi.fn(), x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { set: vi.fn() },
     add: vi.fn(),
-    background: null,
-    fog: null
-  })),
-  PerspectiveCamera: vi.fn().mockImplementation(() => ({
-    position: { set: vi.fn() },
-    rotation: { y: 0 },
-    aspect: 1,
-    updateProjectionMatrix: vi.fn()
-  })),
-  WebGLRenderer: vi.fn().mockImplementation(() => ({
-    setSize: vi.fn(),
-    shadowMap: { enabled: false, type: null },
-    render: vi.fn(),
-    domElement: document.createElement('canvas')
-  })),
-  AmbientLight: vi.fn(),
-  DirectionalLight: vi.fn().mockImplementation(() => ({
-    position: { set: vi.fn() },
+    remove: vi.fn(),
     castShadow: false,
-    shadow: { mapSize: { width: 0, height: 0 } }
-  })),
-  PlaneGeometry: vi.fn(),
-  BoxGeometry: vi.fn(),
-  SphereGeometry: vi.fn(),
-  MeshStandardMaterial: vi.fn(),
-  MeshBasicMaterial: vi.fn(),
-  Mesh: vi.fn().mockImplementation(() => ({
-    position: { set: vi.fn() },
-    rotation: { x: 0, y: 0 },
-    castShadow: false,
-    receiveShadow: false
-  })),
-  Color: vi.fn(),
-  Fog: vi.fn()
+    receiveShadow: false,
+    userData: {}
+  }
 }
 
-// Mock Renderer class
-class MockRenderer {
-  constructor(container) {
-    this.container = container
-    this.scene = { add: vi.fn() }
-    this.camera = { position: { set: vi.fn() } }
-    this.renderer = { render: vi.fn(), setSize: vi.fn() }
-    this.players = new Map()
-    this.bullets = []
+function createCanvasContextMock() {
+  return {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 0,
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(1024 * 1024 * 4) })),
+    putImageData: vi.fn()
   }
+}
 
-  addPlayer(id, position, isLocal) {
-    if (this.players.has(id)) return
-    this.players.set(id, { mesh: {}, position, rotation: 0 })
-  }
-
-  removePlayer(id) {
-    this.players.delete(id)
-  }
-
-  updatePlayer(id, position, rotation) {
-    const player = this.players.get(id)
-    if (player) {
-      player.position = position
-      player.rotation = rotation
+function createThreeMock() {
+  class MockScene {
+    constructor() {
+      this.add = vi.fn()
+      this.remove = vi.fn()
+      this.fog = null
     }
   }
 
-  updateCamera(position, rotation) {
-    this.camera.position.set(position.x, position.y + 2, position.z)
+  class MockPerspectiveCamera {
+    constructor() {
+      this.position = { set: vi.fn(), x: 0, y: 0, z: 0 }
+      this.rotation = { x: 0, y: 0, z: 0 }
+      this.aspect = 1
+      this.lookAt = vi.fn()
+      this.updateProjectionMatrix = vi.fn()
+    }
   }
 
-  addBullet(from, to) {
-    this.bullets.push({ from, to, life: 100 })
+  class MockWebGLRenderer {
+    constructor() {
+      this.domElement = document.createElement('canvas')
+      this.shadowMap = { enabled: false, type: null }
+      this.setSize = vi.fn()
+      this.setPixelRatio = vi.fn()
+      this.render = vi.fn()
+    }
   }
 
-  update() {
-    this.bullets = this.bullets.filter(b => {
-      b.life--
-      return b.life > 0
-    })
+  class MockClock {
+    getDelta() {
+      return 0.016
+    }
   }
 
-  render() {
-    this.renderer.render(this.scene, this.camera)
+  class MockColor {
+    constructor(value) {
+      this.value = value
+    }
+    setHSL() {}
+    copy() { return this }
+    lerp() { return this }
+  }
+
+  class MockVector3 {
+    constructor(x = 0, y = 0, z = 0) {
+      this.x = x
+      this.y = y
+      this.z = z
+    }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this }
+    copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this }
+    clone() { return new MockVector3(this.x, this.y, this.z) }
+    add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this }
+    subVectors(a, b) { this.x = a.x - b.x; this.y = a.y - b.y; this.z = a.z - b.z; return this }
+    multiplyScalar(s) { this.x *= s; this.y *= s; this.z *= s; return this }
+    normalize() { return this }
+    lerpVectors(a, b) { this.x = (a.x + b.x) / 2; this.y = (a.y + b.y) / 2; this.z = (a.z + b.z) / 2; return this }
+  }
+
+  return {
+    Scene: MockScene,
+    PerspectiveCamera: MockPerspectiveCamera,
+    WebGLRenderer: MockWebGLRenderer,
+    Clock: MockClock,
+    AmbientLight: class { constructor() {} },
+    DirectionalLight: class { constructor() { this.position = { set: vi.fn() }; this.shadow = { mapSize: {}, camera: {} } } },
+    HemisphereLight: class { constructor() {} },
+    PointLight: class { constructor() { this.position = { set: vi.fn() } } },
+    FogExp2: class { constructor() {} },
+    PlaneGeometry: class { constructor() {} },
+    BoxGeometry: class { constructor() {} },
+    SphereGeometry: class { constructor() {} },
+    CylinderGeometry: class { constructor() {} },
+    CapsuleGeometry: class { constructor() {} },
+    EdgesGeometry: class { constructor() {} },
+    LineBasicMaterial: class { constructor() {} },
+    LineSegments: class { constructor() { return createMockMesh() } },
+    MeshStandardMaterial: class { constructor() {} },
+    MeshToonMaterial: class { constructor() {} },
+    MeshBasicMaterial: class { constructor() {} },
+    ShaderMaterial: class { constructor() {} },
+    CanvasTexture: class { constructor() { this.wrapS = null; this.wrapT = null; this.repeat = { set: vi.fn() } } },
+    Mesh: class { constructor() { return createMockMesh() } },
+    Group: class { constructor() { return createMockMesh() } },
+    Color: MockColor,
+    Vector3: MockVector3,
+    RepeatWrapping: 'RepeatWrapping',
+    PCFSoftShadowMap: 'PCFSoftShadowMap',
+    ACESFilmicToneMapping: 'ACESFilmicToneMapping',
+    sRGBEncoding: 'sRGBEncoding'
   }
 }
 
+async function loadRenderer() {
+  vi.resetModules()
+
+  document.body.innerHTML = '<div id="game-container"></div>'
+
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => createCanvasContextMock())
+
+  global.window = {
+    innerWidth: 1280,
+    innerHeight: 720,
+    devicePixelRatio: 1,
+    addEventListener: vi.fn(),
+    __FPS_RENDERER_TEST_MODE__: true
+  }
+
+  global.THREE = createThreeMock()
+
+  const mod = await import('../js/renderer.js')
+  return mod.default || window.Renderer
+}
+
 describe('Renderer', () => {
-  let renderer
-  let container
+  let Renderer
 
-  beforeEach(() => {
-    container = document.createElement('div')
-    renderer = new MockRenderer(container)
+  beforeEach(async () => {
+    Renderer = await loadRenderer()
   })
 
-  describe('Player Management', () => {
-    it('should add player', () => {
-      renderer.addPlayer('player1', { x: 0, y: 0, z: 0 }, false)
-      expect(renderer.players.has('player1')).toBe(true)
-    })
-
-    it('should not add duplicate player', () => {
-      renderer.addPlayer('player1', { x: 0, y: 0, z: 0 }, false)
-      renderer.addPlayer('player1', { x: 10, y: 0, z: 10 }, false)
-      expect(renderer.players.size).toBe(1)
-    })
-
-    it('should remove player', () => {
-      renderer.addPlayer('player1', { x: 0, y: 0, z: 0 }, false)
-      renderer.removePlayer('player1')
-      expect(renderer.players.has('player1')).toBe(false)
-    })
-
-    it('should update player position', () => {
-      renderer.addPlayer('player1', { x: 0, y: 0, z: 0 }, false)
-      renderer.updatePlayer('player1', { x: 10, y: 0, z: 20 }, 0.5)
-      const player = renderer.players.get('player1')
-      expect(player.position.x).toBe(10)
-      expect(player.position.z).toBe(20)
-      expect(player.rotation).toBe(0.5)
-    })
+  afterEach(() => {
+    global.window = originalWindow
+    global.THREE = originalTHREE
+    HTMLCanvasElement.prototype.getContext = originalGetContext
   })
 
-  describe('Bullet Management', () => {
-    it('should add bullet', () => {
-      renderer.addBullet({ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 10 })
-      expect(renderer.bullets.length).toBe(1)
-    })
+  it('constructs against the real module and attaches a canvas to the container', () => {
+    const renderer = new Renderer('game-container')
+    const container = document.getElementById('game-container')
 
-    it('should update bullets', () => {
-      renderer.addBullet({ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 10 })
-      for (let i = 0; i < 100; i++) {
-        renderer.update()
-      }
-      expect(renderer.bullets.length).toBe(0)
-    })
+    expect(renderer.container).toBe(container)
+    expect(container.querySelector('canvas')).not.toBeNull()
+    expect(renderer.players).toBeInstanceOf(Map)
   })
 
-  describe('Camera', () => {
-    it('should update camera position', () => {
-      renderer.updateCamera({ x: 5, y: 0, z: 5 }, 0)
-      expect(renderer.camera.position.set).toHaveBeenCalled()
-    })
+  it('tracks players through add/update/remove flow', () => {
+    const renderer = new Renderer('game-container')
+
+    renderer.addPlayer('p1', { x: 1, y: 2, z: 3 }, false)
+    expect(renderer.players.has('p1')).toBe(true)
+
+    renderer.updatePlayer('p1', { x: 4, y: 5, z: 6 }, 0.75)
+    const player = renderer.players.get('p1')
+    expect(player).toBeTruthy()
+
+    renderer.removePlayer('p1')
+    expect(renderer.players.has('p1')).toBe(false)
   })
 })

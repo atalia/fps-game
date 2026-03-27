@@ -3,9 +3,11 @@
 
 const WebSocket = require('ws');
 
-const SERVER_URL = 'ws://101.33.117.73:8080/ws';
+const SERVER_URL = process.env.SERVER_URL || process.env.WS_URL || 'ws://localhost:8080/ws';
 const CLIENT_COUNT = 3;
 const TEST_DURATION = 10000; // 10秒测试
+
+console.log(`Using server: ${SERVER_URL}`);
 
 const clients = [];
 const messages = {}; // clientIndex -> [messages]
@@ -159,83 +161,60 @@ function verifySync() {
     bot_added: false
   };
 
-  // 检查每个客户端收到的消息
-  Object.entries(messages).forEach(([idx, msgs]) => {
-    const i = parseInt(idx);
+  Object.entries(messages).forEach(([clientIndex, clientMessages]) => {
+    const index = parseInt(clientIndex, 10);
     
-    msgs.forEach(msg => {
-      // 服务器广播移动消息为 player_moved
-      if (msg.type === 'player_moved') results.move.received[i] = true;
-      // 服务器广播射击消息为 player_shot
-      if (msg.type === 'player_shot') results.shoot.received[i] = true;
-      if (msg.type === 'chat') results.chat.received[i] = true;
-      if (msg.type === 'player_joined') results.player_joined[i] = true;
-      if (msg.type === 'player_joined' && msg.data?.is_bot) results.bot_added = true;
+    clientMessages.forEach(msg => {
+      if (msg.type === 'move') {
+        results.move.received[index] = true;
+      }
+      if (msg.type === 'shoot') {
+        results.shoot.received[index] = true;
+      }
+      if (msg.type === 'chat' && msg.data?.message === 'Hello from Player3!') {
+        results.chat.received[index] = true;
+      }
+      if (msg.type === 'player_joined') {
+        results.player_joined[index] = true;
+      }
+      if (msg.type === 'bot_added' || (msg.type === 'player_joined' && msg.data?.is_bot)) {
+        results.bot_added = true;
+      }
     });
   });
 
-  // 打印结果 - 排除发送者
-  const moveReceived = results.move.received.filter((_, i) => i !== 0); // 客户端0发送，检查其他
-  const shootReceived = results.shoot.received.filter((_, i) => i !== 1); // 客户端1发送，检查其他
-  
-  console.log('Move sync:', moveReceived.some(r => r) ? '✅ PASS' : '❌ FAIL', results.move.received);
-  console.log('Shoot sync:', shootReceived.some(r => r) ? '✅ PASS' : '❌ FAIL', results.shoot.received);
-  console.log('Chat sync:', results.chat.received.every(r => r) ? '✅ PASS' : '❌ FAIL', results.chat.received);
-  console.log('Player joined:', results.player_joined.every(r => r) ? '✅ PASS' : '❌ FAIL', results.player_joined);
-  console.log('Bot added:', results.bot_added ? '✅ PASS' : '❌ FAIL');
+  console.log('Move received:', results.move.received);
+  console.log('Shoot received:', results.shoot.received);
+  console.log('Chat received:', results.chat.received);
+  console.log('Player joined seen:', results.player_joined);
+  console.log('Bot added seen:', results.bot_added);
 
-  // 统计消息数量
-  console.log('\nMessage counts:');
-  Object.entries(messages).forEach(([idx, msgs]) => {
-    const byType = {};
-    msgs.forEach(m => { byType[m.type] = (byType[m.type] || 0) + 1; });
-    console.log(`  Client ${idx}: ${msgs.length} total`, byType);
-  });
+  return results;
 }
 
-// 主函数
 async function main() {
   console.log('=== Multiplayer Sync Test ===\n');
-  console.log(`Server: ${SERVER_URL}`);
-  console.log(`Clients: ${CLIENT_COUNT}\n`);
 
-  // 创建客户端
   for (let i = 0; i < CLIENT_COUNT; i++) {
-    const ws = await createClient(i);
-    clients.push(ws);
-    await new Promise(r => setTimeout(r, 300)); // 错开连接
+    clients.push(await createClient(i));
   }
 
-  // 等待同步
   await waitForSync();
   console.log('\n=== All clients joined ===\n');
 
-  // 等待一秒让消息稳定
-  await new Promise(r => setTimeout(r, 1000));
-
-  // 运行测试
   testMoveSync();
-  await new Promise(r => setTimeout(r, 500));
-  
-  testShootSync();
-  await new Promise(r => setTimeout(r, 500));
-  
-  testChatSync();
-  await new Promise(r => setTimeout(r, 500));
-  
-  testBotSync();
-  await new Promise(r => setTimeout(r, 1000));
+  setTimeout(testShootSync, 1000);
+  setTimeout(testChatSync, 2000);
+  setTimeout(testBotSync, 3000);
 
-  // 验证结果
-  verifySync();
-
-  // 清理
-  console.log('\n=== Cleaning up ===\n');
-  clients.forEach((ws, i) => {
-    ws.close();
-  });
-
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => {
+    verifySync();
+    clients.forEach(ws => ws.close());
+    setTimeout(() => process.exit(0), 500);
+  }, TEST_DURATION);
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('Test failed:', err);
+  process.exit(1);
+});

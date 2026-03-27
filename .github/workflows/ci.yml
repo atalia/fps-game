@@ -126,24 +126,23 @@ jobs:
   frontend:
     name: Frontend Check
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Check HTML
-      run: |
-        echo "Checking HTML files..."
-        find client -name "*.html" -exec echo "Found: {}" \;
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: client/package-lock.json
 
-    - name: Check JavaScript
-      run: |
-        echo "Checking JavaScript files..."
-        find client -name "*.js" -exec echo "Found: {}" \;
-        echo "Total JS files: $(find client -name '*.js' | wc -l)"
+    - name: Install dependencies
+      run: npm ci
 
-    - name: Validate JSON
-      run: |
-        if [ -f "package.json" ]; then
-          cat package.json | python3 -m json.tool > /dev/null && echo "package.json is valid"
-        fi
+    - name: Run frontend tests
+      run: npm test -- --run

@@ -485,4 +485,8 @@ function leaveRoom() {
 }
 
 // 启动
-init();
+if (typeof window !== 'undefined' && !window.__FPS_DISABLE_AUTO_INIT__) {
+    init();
+}
+
+export { init, setupNetworkHandlers };

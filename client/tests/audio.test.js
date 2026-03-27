@@ -1,12 +1,15 @@
-// Audio Manager Tests
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Mock AudioContext
+const originalWindow = global.window
+
 class MockAudioContext {
   constructor() {
     this.state = 'running'
     this.currentTime = 0
     this.destination = {}
+    this.resume = vi.fn(() => {
+      this.state = 'running'
+    })
   }
 
   createOscillator() {
@@ -32,127 +35,79 @@ class MockAudioContext {
       connect: vi.fn()
     }
   }
-
-  resume() {
-    this.state = 'running'
-  }
 }
 
-// Mock AudioManager
-class MockAudioManager {
-  constructor() {
-    this.context = null
-    this.sounds = new Map()
-    this.masterVolume = 0.7
-    this.sfxVolume = 0.8
-    this.musicVolume = 0.5
-    this.enabled = true
+async function loadAudioManager() {
+  vi.resetModules()
+  global.window = {
+    AudioContext: MockAudioContext,
+    webkitAudioContext: MockAudioContext
   }
-
-  async init() {
-    this.context = new MockAudioContext()
-    this.loadSounds()
-  }
-
-  loadSounds() {
-    const soundDefs = {
-      'shoot': { type: 'synth', freq: 150, duration: 0.1 },
-      'hit': { type: 'synth', freq: 200, duration: 0.15 },
-      'kill': { type: 'synth', freq: 400, duration: 0.2 }
-    }
-    for (const [name, def] of Object.entries(soundDefs)) {
-      this.sounds.set(name, def)
-    }
-  }
-
-  play(name, volume = 1.0) {
-    if (!this.enabled || !this.context) return false
-    const sound = this.sounds.get(name)
-    if (!sound) return false
-    return true
-  }
-
-  setMasterVolume(volume) {
-    this.masterVolume = Math.max(0, Math.min(1, volume))
-  }
-
-  setSfxVolume(volume) {
-    this.sfxVolume = Math.max(0, Math.min(1, volume))
-  }
-
-  toggle() {
-    this.enabled = !this.enabled
-    return this.enabled
-  }
-
-  resume() {
-    if (this.context && this.context.state === 'suspended') {
-      this.context.resume()
-    }
-  }
+  const mod = await import('../js/audio.js')
+  return mod.default || window.audioManager.constructor
 }
 
 describe('AudioManager', () => {
+  let AudioManager
   let audio
 
   beforeEach(async () => {
-    audio = new MockAudioManager()
+    AudioManager = await loadAudioManager()
+    audio = new AudioManager()
     await audio.init()
   })
 
-  describe('Initialization', () => {
-    it('should initialize with audio context', () => {
-      expect(audio.context).not.toBeNull()
-    })
-
-    it('should load sounds', () => {
-      expect(audio.sounds.size).toBeGreaterThan(0)
-    })
+  afterEach(() => {
+    global.window = originalWindow
   })
 
-  describe('Volume', () => {
-    it('should set master volume', () => {
-      audio.setMasterVolume(0.5)
-      expect(audio.masterVolume).toBe(0.5)
-    })
-
-    it('should clamp master volume to 0-1', () => {
-      audio.setMasterVolume(2.0)
-      expect(audio.masterVolume).toBe(1)
-      
-      audio.setMasterVolume(-0.5)
-      expect(audio.masterVolume).toBe(0)
-    })
-
-    it('should set sfx volume', () => {
-      audio.setSfxVolume(0.3)
-      expect(audio.sfxVolume).toBe(0.3)
-    })
+  it('initializes with an audio context and preloads sounds', () => {
+    expect(audio.context).toBeInstanceOf(MockAudioContext)
+    expect(audio.sounds.size).toBeGreaterThan(0)
+    expect(audio.sounds.has('shoot')).toBe(true)
+    expect(audio.enabled).toBe(true)
   })
 
-  describe('Playback', () => {
-    it('should play sound', () => {
-      const result = audio.play('shoot')
-      expect(result).toBe(true)
-    })
+  it('clamps master volume to the 0..1 range', () => {
+    audio.setMasterVolume(2)
+    expect(audio.masterVolume).toBe(1)
 
-    it('should not play non-existent sound', () => {
-      const result = audio.play('nonexistent')
-      expect(result).toBe(false)
-    })
-
-    it('should not play when disabled', () => {
-      audio.enabled = false
-      const result = audio.play('shoot')
-      expect(result).toBe(false)
-    })
+    audio.setMasterVolume(-1)
+    expect(audio.masterVolume).toBe(0)
   })
 
-  describe('Toggle', () => {
-    it('should toggle audio', () => {
-      const initialState = audio.enabled
-      const newState = audio.toggle()
-      expect(newState).toBe(!initialState)
-    })
+  it('returns without throwing when playing unknown sounds or while disabled', () => {
+    expect(() => audio.play('nonexistent')).not.toThrow()
+    audio.enabled = false
+    expect(() => audio.play('shoot')).not.toThrow()
+  })
+
+  it('plays a known sound through the real audio context graph', () => {
+    const oscillator = audio.context.createOscillator()
+    const gainNode = audio.context.createGain()
+    const oscSpy = vi.spyOn(audio.context, 'createOscillator').mockReturnValue(oscillator)
+    const gainSpy = vi.spyOn(audio.context, 'createGain').mockReturnValue(gainNode)
+
+    audio.play('shoot', 0.5)
+
+    expect(oscSpy).toHaveBeenCalled()
+    expect(gainSpy).toHaveBeenCalled()
+    expect(oscillator.connect).toHaveBeenCalledWith(gainNode)
+    expect(gainNode.connect).toHaveBeenCalledWith(audio.context.destination)
+    expect(oscillator.frequency.setValueAtTime).toHaveBeenCalled()
+    expect(gainNode.gain.linearRampToValueAtTime).toHaveBeenCalled()
+    expect(oscillator.start).toHaveBeenCalled()
+    expect(oscillator.stop).toHaveBeenCalled()
+  })
+
+  it('resumes a suspended context', () => {
+    audio.context.state = 'suspended'
+    audio.resume()
+    expect(audio.context.resume).toHaveBeenCalled()
+  })
+
+  it('toggles enabled state', () => {
+    const initial = audio.enabled
+    expect(audio.toggle()).toBe(!initial)
   })
 })

@@ -65,14 +65,22 @@ class Renderer {
             console.log('[RENDERER] MapEnhanced initialized');
         }
 
+        const testMode = typeof window !== 'undefined' && window.__FPS_RENDERER_TEST_MODE__;
+
         // 创建天空盒
-        this.createSkybox();
+        if (!testMode) {
+            this.createSkybox();
+        }
 
         // 创建粒子系统
-        this.createParticles();
+        if (!testMode) {
+            this.createParticles();
+        }
 
         // 创建环境反射
-        this.createEnvironment();
+        if (!testMode) {
+            this.createEnvironment();
+        }
 
         // 添加雾效
         this.scene.fog = new THREE.FogExp2(0x1a1a2e, 0.015);
@@ -662,3 +670,5 @@ class Renderer {
 
 window.Renderer = Renderer;
 console.log('[RENDERER] renderer.js loaded');
+
+export default Renderer;

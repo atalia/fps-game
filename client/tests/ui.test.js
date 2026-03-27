@@ -1,130 +1,69 @@
-// UI Manager Tests
 import { describe, it, expect, beforeEach } from 'vitest'
 
-// Mock DOM elements
-const mockElement = () => ({
-  textContent: '',
-  innerHTML: '',
-  style: { width: '', backgroundColor: '', transform: '' },
-  className: '',
-  classList: { add: vi.fn(), remove: vi.fn() },
-  appendChild: vi.fn(),
-  removeChild: vi.fn(),
-  scrollTop: 0,
-  children: [],
-  parentNode: null
-})
-
-// Mock UIManager
-class UIManager {
-  constructor() {
-    this.elements = {
-      healthFill: mockElement(),
-      ammo: mockElement(),
-      ammoReserve: mockElement(),
-      score: mockElement(),
-      kills: mockElement(),
-      deaths: mockElement()
-    }
-  }
-
-  updateHealth(health, maxHealth = 100) {
-    const percentage = Math.max(0, Math.min(100, (health / maxHealth) * 100))
-    this.elements.healthFill.style.width = `${percentage}%`
-  }
-
-  updateAmmo(ammo, reserve) {
-    this.elements.ammo.textContent = ammo
-    this.elements.ammoReserve.textContent = reserve
-  }
-
-  updateScore(score) {
-    this.elements.score.textContent = score
-  }
-
-  updateKD(kills, deaths) {
-    this.elements.kills.textContent = kills
-    this.elements.deaths.textContent = deaths
-  }
-
-  escapeHtml(text) {
-    const div = { textContent: '' }
-    div.textContent = text
-    return div.textContent
-  }
+async function loadUIManager() {
+  const mod = await import('../js/ui.js')
+  return mod.default || window.UIManager
 }
 
 describe('UIManager', () => {
+  let UIManager
   let ui
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    document.body.innerHTML = `
+      <div id="health-fill"></div>
+      <div id="health-text"></div>
+      <span id="ammo-count"></span>
+      <span id="ammo-reserve"></span>
+      <span id="current-weapon"></span>
+      <span id="room-id"></span>
+      <span id="player-count"></span>
+      <div id="players-container"></div>
+      <div id="connection-status"></div>
+      <div id="chat-messages"></div>
+      <input id="chat-input" />
+      <div id="kill-feed"></div>
+      <div id="scoreboard"></div>
+      <tbody id="scoreboard-rows"></tbody>
+    `
+    UIManager = await loadUIManager()
     ui = new UIManager()
   })
 
-  describe('Health', () => {
-    it('should update health to 100%', () => {
-      ui.updateHealth(100)
-      expect(ui.elements.healthFill.style.width).toBe('100%')
-    })
-
-    it('should update health to 50%', () => {
-      ui.updateHealth(50)
-      expect(ui.elements.healthFill.style.width).toBe('50%')
-    })
-
-    it('should not exceed 100%', () => {
-      ui.updateHealth(150)
-      expect(ui.elements.healthFill.style.width).toBe('100%')
-    })
-
-    it('should not go below 0%', () => {
-      ui.updateHealth(-10)
-      expect(ui.elements.healthFill.style.width).toBe('0%')
-    })
-
-    it('should handle custom max health', () => {
-      ui.updateHealth(75, 150)
-      expect(ui.elements.healthFill.style.width).toBe('50%')
-    })
+  it('updates health bar and text', () => {
+    ui.updateHealth(50)
+    expect(ui.elements.healthFill.style.width).toBe('50%')
+    expect(ui.elements.healthText.textContent).toBe('50 HP')
   })
 
-  describe('Ammo', () => {
-    it('should update ammo count', () => {
-      ui.updateAmmo(30, 90)
-      expect(ui.elements.ammo.textContent).toBe(30)
-      expect(ui.elements.ammoReserve.textContent).toBe(90)
-    })
-
-    it('should handle zero ammo', () => {
-      ui.updateAmmo(0, 0)
-      expect(ui.elements.ammo.textContent).toBe(0)
-    })
+  it('updates ammo counters', () => {
+    ui.updateAmmo(30, 90)
+    expect(ui.elements.ammo.textContent).toBe('30')
+    expect(ui.elements.ammoReserve.textContent).toBe('90')
   })
 
-  describe('Score', () => {
-    it('should update score', () => {
-      ui.updateScore(500)
-      expect(ui.elements.score.textContent).toBe(500)
-    })
+  it('escapes html in player list names', () => {
+    ui.updatePlayerList([
+      { id: 'p1', name: '<script>alert(1)</script>', kills: 3, health: 90 }
+    ])
+
+    expect(ui.elements.playersContainer.innerHTML).not.toContain('<script>')
+    expect(ui.elements.playersContainer.textContent).toContain('<script>alert(1)</script>')
   })
 
-  describe('K/D', () => {
-    it('should update kills and deaths', () => {
-      ui.updateKD(10, 5)
-      expect(ui.elements.kills.textContent).toBe(10)
-      expect(ui.elements.deaths.textContent).toBe(5)
-    })
+  it('updates connection status classes and text', () => {
+    ui.updateConnectionStatus(true)
+    expect(ui.elements.connectionStatus.textContent).toBe('已连接')
+    expect(ui.elements.connectionStatus.className).toBe('connected')
+
+    ui.updateConnectionStatus(false)
+    expect(ui.elements.connectionStatus.textContent).toBe('已断开')
+    expect(ui.elements.connectionStatus.className).toBe('disconnected')
   })
 
-  describe('HTML Escape', () => {
-    it('should escape HTML', () => {
-      const result = ui.escapeHtml('<script>alert("xss")</script>')
-      expect(result).not.toContain('<script>')
-    })
-
-    it('should handle normal text', () => {
-      const result = ui.escapeHtml('Hello World')
-      expect(result).toBe('Hello World')
-    })
+  it('renders chat messages with escaped content', () => {
+    ui.addChatMessage('<b>alice</b>', '<img src=x onerror=1 />')
+    expect(ui.elements.chatMessages.innerHTML).not.toContain('<img')
+    expect(ui.elements.chatMessages.textContent).toContain('<b>alice</b>: <img src=x onerror=1 />')
   })
 })

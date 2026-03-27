@@ -310,3 +310,6 @@ class UIManager {
 
 // 不要自动创建实例，由 main.js 控制
 // window.uiManager = new UIManager()
+window.UIManager = UIManager
+
+export default UIManager

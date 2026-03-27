@@ -1,7 +1,10 @@
 // 模拟前端发送聊天消息测试
 const WebSocket = require('ws');
 
-const ws = new WebSocket('ws://101.33.117.73:8080/ws');
+const WS_URL = process.env.WS_URL || 'ws://localhost:8080/ws';
+console.log(`Connecting to ${WS_URL}`);
+
+const ws = new WebSocket(WS_URL);
 
 ws.on('open', () => {
     console.log('✅ Connected to server');
