@@ -3,6 +3,7 @@ package player
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -269,7 +270,10 @@ func (p *Player) ToMap() map[string]interface{} {
 
 func generateID() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// 如果随机数生成失败，使用时间戳作为备选
+		return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
+	}
 	return hex.EncodeToString(b)
 }
 

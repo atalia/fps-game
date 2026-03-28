@@ -34,10 +34,11 @@ type Bot struct {
 func NewBot(id string, difficulty Difficulty) *Bot {
 	cfg := GetConfig(difficulty)
 
+	name := generateBotName()
 	return &Bot{
 		Player: &player.Player{
 			ID:        id,
-			Name:      generateBotName(),
+			Name:      name,
 			Health:    100,
 			MaxHealth: 100,
 			Position: player.Position{
@@ -51,7 +52,6 @@ func NewBot(id string, difficulty Difficulty) *Bot {
 		},
 		Config: cfg,
 		State:  StatePatrol,
-		Name:   generateBotName(),
 	}
 }
 

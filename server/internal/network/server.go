@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"math/rand"
 	"strings"
 	"net/http"
 	"sync"
@@ -16,6 +17,11 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
+func init() {
+	// 初始化随机数种子
+	rand.Seed(time.Now().UnixNano())
+}
 
 const (
 	writeWait      = 10 * time.Second
@@ -146,7 +152,11 @@ type Message struct {
 
 // NewMessage 创建消息
 func NewMessage(msgType string, data interface{}) *Message {
-	jsonData, _ := json.Marshal(data)
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		// 序列化失败时返回空数据
+		jsonData = []byte("{}")
+	}
 	return &Message{
 		Type:      msgType,
 		Data:      jsonData,
@@ -156,22 +166,41 @@ func NewMessage(msgType string, data interface{}) *Message {
 
 // ToJSON 转换为 JSON
 func (m *Message) ToJSON() []byte {
-	data, _ := json.Marshal(m)
+	data, err := json.Marshal(m)
+	if err != nil {
+		return []byte("{}")
+	}
 	return data
 }
 
 func mustMarshal(v interface{}) json.RawMessage {
-	data, _ := json.Marshal(v)
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
 	return data
 }
 
 // ServeWS 处理 WebSocket 连接
-func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, w http.ResponseWriter, r *http.Request) {
+func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOrigins []string, w http.ResponseWriter, r *http.Request) {
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  8192,
 		WriteBufferSize: 8192,
 		CheckOrigin: func(r *http.Request) bool {
-			return true // 允许所有来源
+			// 如果没有配置允许的域名，则只允许同源（生产环境应配置）
+			if len(allowedOrigins) == 0 {
+				origin := r.Header.Get("Origin")
+				// 开发环境：允许 localhost 和文件协议
+				return origin == "" || strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "http://127.0.0.1")
+			}
+			// 生产环境：检查白名单
+			origin := r.Header.Get("Origin")
+			for _, allowed := range allowedOrigins {
+				if allowed == origin {
+					return true
+				}
+			}
+			return false
 		},
 	}
 
@@ -578,8 +607,9 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 	var closestHit *HitResult
 	minDistance := math.MaxFloat64
 
-	// 检查真实玩家
-	for playerID, p := range c.Room.Players {
+	// 检查真实玩家（使用线程安全的方法获取玩家列表）
+	players := c.Room.GetPlayers()
+	for playerID, p := range players {
 		if playerID == c.Player.ID {
 			continue // 不打自己
 		}
@@ -649,9 +679,9 @@ func (c *Client) respawnPlayer(p *player.Player) {
 	// 重置玩家状态
 	p.Health = p.MaxHealth
 	p.Position = player.Position{
-		X: (float64(time.Now().Unix()%100) - 50), // 随机重生点
+		X: (rand.Float64()*100 - 50), // 使用加密安全的随机数
 		Y: 0,
-		Z: (float64(time.Now().UnixNano()%100) - 50),
+		Z: (rand.Float64()*100 - 50),
 	}
 
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{

@@ -44,7 +44,7 @@ func main() {
 
 	// WebSocket 路由
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		network.ServeWS(hub, roomManager, matcher, w, r)
+		network.ServeWS(hub, roomManager, matcher, cfg.CORS.AllowedOrigins, w, r)
 	})
 
 	// 静态文件服务

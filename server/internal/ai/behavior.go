@@ -198,6 +198,10 @@ func (b *Bot) shootAtTarget() {
 	if rand.Float64() < b.Config.Accuracy {
 		// 计算伤害
 		damage := 20 + rand.Intn(10)
-		b.Target.TakeDamage(damage)
+		// 使用局部变量调用，避免 Target 被其他 goroutine 修改导致 nil 指针
+		target := b.Target
+		if target != nil {
+			target.TakeDamage(damage)
+		}
 	}
 }

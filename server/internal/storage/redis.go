@@ -64,9 +64,17 @@ func (s *MemoryStorage) SavePlayer(ctx context.Context, playerID string, data in
 func (s *MemoryStorage) GetPlayer(ctx context.Context, playerID string, dest interface{}) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.data["player:"+playerID]
+	data, ok := s.data["player:"+playerID]
 	if !ok {
 		return fmt.Errorf("player not found")
+	}
+	// 将存储的数据反序列化到 dest
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal player data: %w", err)
+	}
+	if err := json.Unmarshal(jsonData, dest); err != nil {
+		return fmt.Errorf("failed to unmarshal player data: %w", err)
 	}
 	return nil
 }
@@ -91,9 +99,17 @@ func (s *MemoryStorage) SaveRoom(ctx context.Context, roomID string, data interf
 func (s *MemoryStorage) GetRoom(ctx context.Context, roomID string, dest interface{}) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.data["room:"+roomID]
+	data, ok := s.data["room:"+roomID]
 	if !ok {
 		return fmt.Errorf("room not found")
+	}
+	// 将存储的数据反序列化到 dest
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal room data: %w", err)
+	}
+	if err := json.Unmarshal(jsonData, dest); err != nil {
+		return fmt.Errorf("failed to unmarshal room data: %w", err)
 	}
 	return nil
 }
@@ -147,9 +163,17 @@ func (s *MemoryStorage) SetSession(ctx context.Context, sessionID string, data i
 func (s *MemoryStorage) GetSession(ctx context.Context, sessionID string, dest interface{}) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.sessions[sessionID]
+	data, ok := s.sessions[sessionID]
 	if !ok {
 		return fmt.Errorf("session not found")
+	}
+	// 将存储的数据反序列化到 dest
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session data: %w", err)
+	}
+	if err := json.Unmarshal(jsonData, dest); err != nil {
+		return fmt.Errorf("failed to unmarshal session data: %w", err)
 	}
 	return nil
 }

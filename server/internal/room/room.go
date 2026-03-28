@@ -3,6 +3,7 @@ package room
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
@@ -39,11 +40,16 @@ func NewRoom(maxSize int) *Room {
 	}
 }
 
-// GetPlayers 实现 Room 接口 (供 AI 使用)
+// GetPlayers 获取玩家列表的副本（线程安全）
 func (r *Room) GetPlayers() map[string]*player.Player {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.Players
+	// 返回副本而不是内部 map 引用，防止外部无锁修改
+	playersCopy := make(map[string]*player.Player, len(r.Players))
+	for k, v := range r.Players {
+		playersCopy[k] = v
+	}
+	return playersCopy
 }
 
 // GetPlayerIDs 获取所有玩家 ID 列表（线程安全）
@@ -307,7 +313,9 @@ func (m *Manager) FindAvailableRoom() *Room {
 
 func generateID() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
+	}
 	return hex.EncodeToString(b)
 }
 

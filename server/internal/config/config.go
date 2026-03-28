@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,7 @@ type Config struct {
 	Redis      RedisConfig
 	Log        LogConfig
 	Metrics    MetricsConfig
+	CORS       CORSConfig
 	ClientPath string
 }
 
@@ -54,6 +56,11 @@ type MetricsConfig struct {
 	Port    string
 }
 
+// CORSConfig CORS 配置
+type CORSConfig struct {
+	AllowedOrigins []string // 允许的域名列表，空表示允许所有（开发环境）
+}
+
 // Load 从环境变量加载配置
 func Load() *Config {
 	return &Config{
@@ -84,6 +91,9 @@ func Load() *Config {
 		Metrics: MetricsConfig{
 			Enabled: getBoolEnv("METRICS_ENABLED", true),
 			Port:    getEnv("METRICS_PORT", "9090"),
+		},
+		CORS: CORSConfig{
+			AllowedOrigins: getSliceEnv("CORS_ALLOWED_ORIGINS", ""),
 		},
 		ClientPath: getEnv("CLIENT_PATH", "./client"),
 	}
@@ -130,4 +140,23 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
+}
+
+func getSliceEnv(key string, defaultValue string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		value = defaultValue
+	}
+	if value == "" {
+		return nil
+	}
+	// 支持逗号分隔的多个域名
+	result := []string{}
+	for _, v := range strings.Split(value, ",") {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			result = append(result, v)
+		}
+	}
+	return result
 }

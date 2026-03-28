@@ -3,6 +3,7 @@ package ai
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +14,7 @@ type Manager struct {
 	defaultDifficulty Difficulty
 	autoFill          bool
 	maxBots           int
+	botCounter        uint64 // 原子计数器，用于生成唯一 ID
 }
 
 // NewManager 创建管理器
@@ -34,7 +36,9 @@ func (m *Manager) AddBot(difficulty Difficulty, team string) *Bot {
 		return nil
 	}
 
-	id := fmt.Sprintf("bot_%d", len(m.bots)+1)
+	// 使用原子计数器生成唯一 ID，避免并发冲突
+	counter := atomic.AddUint64(&m.botCounter, 1)
+	id := fmt.Sprintf("bot_%d", counter)
 	bot := NewBot(id, difficulty)
 	if team != "" {
 		bot.Team = team

@@ -28,40 +28,66 @@ class PlayerController {
         this.lastShot = 0;
         this.shootCooldown = 100; // ms
 
+        // 存储事件处理函数引用，用于后续清理
+        this._eventHandlers = {};
+
         this.init();
     }
 
     init() {
         // 键盘事件
-        document.addEventListener('keydown', (e) => {
+        this._eventHandlers.keydown = (e) => {
             this.keys[e.code] = true;
-        });
-
-        document.addEventListener('keyup', (e) => {
+        };
+        this._eventHandlers.keyup = (e) => {
             this.keys[e.code] = false;
-        });
+        };
+        document.addEventListener('keydown', this._eventHandlers.keydown);
+        document.addEventListener('keyup', this._eventHandlers.keyup);
 
         // 鼠标锁定
-        document.addEventListener('click', () => {
+        this._eventHandlers.click = () => {
             if (!this.isLocked) {
                 document.body.requestPointerLock();
             } else {
                 this.shoot();
             }
-        });
-
-        document.addEventListener('pointerlockchange', () => {
+        };
+        this._eventHandlers.pointerlockchange = () => {
             this.isLocked = document.pointerLockElement === document.body;
-        });
+        };
+        document.addEventListener('click', this._eventHandlers.click);
+        document.addEventListener('pointerlockchange', this._eventHandlers.pointerlockchange);
 
         // 鼠标移动
-        document.addEventListener('mousemove', (e) => {
+        this._eventHandlers.mousemove = (e) => {
             if (this.isLocked) {
                 this.rotation -= e.movementX * 0.002;
                 this.pitch -= e.movementY * 0.002;
                 this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
             }
-        });
+        };
+        document.addEventListener('mousemove', this._eventHandlers.mousemove);
+    }
+
+    destroy() {
+        // 清理所有事件监听器，防止内存泄漏
+        if (this._eventHandlers.keydown) {
+            document.removeEventListener('keydown', this._eventHandlers.keydown);
+        }
+        if (this._eventHandlers.keyup) {
+            document.removeEventListener('keyup', this._eventHandlers.keyup);
+        }
+        if (this._eventHandlers.click) {
+            document.removeEventListener('click', this._eventHandlers.click);
+        }
+        if (this._eventHandlers.pointerlockchange) {
+            document.removeEventListener('pointerlockchange', this._eventHandlers.pointerlockchange);
+        }
+        if (this._eventHandlers.mousemove) {
+            document.removeEventListener('mousemove', this._eventHandlers.mousemove);
+        }
+        this._eventHandlers = {};
     }
 
     update() {
