@@ -24,25 +24,25 @@ type HitBox struct {
 
 // Player 玩家
 type Player struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Position     Position          `json:"position"`
-	Rotation     float64           `json:"rotation"` // Y 轴旋转
-	Velocity     Position          `json:"-"`
-	Health       int               `json:"health"`
-	MaxHealth    int               `json:"max_health"`
-	Score        int               `json:"score"`
-	Kills        int               `json:"kills"`
-	Deaths       int               `json:"deaths"`
-	Team         string            `json:"team"`
-	Weapon       string            `json:"weapon"`
-	Ammo         int               `json:"ammo"`
-	AmmoReserve  int               `json:"ammo_reserve"`
-	LastShot     time.Time         `json:"-"`
+	ID             string               `json:"id"`
+	Name           string               `json:"name"`
+	Position       Position             `json:"position"`
+	Rotation       float64              `json:"rotation"` // Y 轴旋转
+	Velocity       Position             `json:"-"`
+	Health         int                  `json:"health"`
+	MaxHealth      int                  `json:"max_health"`
+	Score          int                  `json:"score"`
+	Kills          int                  `json:"kills"`
+	Deaths         int                  `json:"deaths"`
+	Team           string               `json:"team"`
+	Weapon         string               `json:"weapon"`
+	Ammo           int                  `json:"ammo"`
+	AmmoReserve    int                  `json:"ammo_reserve"`
+	LastShot       time.Time            `json:"-"`
 	SkillCooldowns map[string]time.Time `json:"-"`
-	Connected    bool              `json:"-"`
-	HitBoxes     []HitBox          `json:"hit_boxes"`
-	mu           sync.RWMutex
+	Connected      bool                 `json:"-"`
+	HitBoxes       []HitBox             `json:"hit_boxes"`
+	mu             sync.RWMutex
 }
 
 // Config 玩家配置
@@ -83,18 +83,18 @@ var DefaultHitBoxes = []HitBox{
 // NewPlayerWithConfig 使用配置创建玩家
 func NewPlayerWithConfig(cfg Config) *Player {
 	return &Player{
-		ID:            generateID(),
-		Health:        cfg.DefaultHealth,
-		MaxHealth:     cfg.DefaultHealth,
-		Score:         0,
-		Kills:         0,
-		Deaths:        0,
-		Weapon:        "rifle",
-		Ammo:          cfg.DefaultAmmo,
-		AmmoReserve:   cfg.DefaultAmmoReserve,
+		ID:             generateID(),
+		Health:         cfg.DefaultHealth,
+		MaxHealth:      cfg.DefaultHealth,
+		Score:          0,
+		Kills:          0,
+		Deaths:         0,
+		Weapon:         "rifle",
+		Ammo:           cfg.DefaultAmmo,
+		AmmoReserve:    cfg.DefaultAmmoReserve,
 		SkillCooldowns: make(map[string]time.Time),
-		Connected:     true,
-		HitBoxes:      DefaultHitBoxes,
+		Connected:      true,
+		HitBoxes:       DefaultHitBoxes,
 	}
 }
 
@@ -293,14 +293,14 @@ func (p *Player) SetTeam(team string) {
 
 // SkillConfig 技能配置
 var SkillCooldowns = map[string]time.Duration{
-	"heal":      30 * time.Second,
-	"speed":     20 * time.Second,
-	"shield":    45 * time.Second,
-	"teleport":  60 * time.Second,
-	"scan":      25 * time.Second,
-	"drone":     40 * time.Second,
-	"smoke":     15 * time.Second,
-	"flash":     20 * time.Second,
+	"heal":     30 * time.Second,
+	"speed":    20 * time.Second,
+	"shield":   45 * time.Second,
+	"teleport": 60 * time.Second,
+	"scan":     25 * time.Second,
+	"drone":    40 * time.Second,
+	"smoke":    15 * time.Second,
+	"flash":    20 * time.Second,
 }
 
 // CanUseSkill 是否可以使用技能

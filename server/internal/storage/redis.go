@@ -68,6 +68,10 @@ func (s *MemoryStorage) GetPlayer(ctx context.Context, playerID string, dest int
 	if !ok {
 		return fmt.Errorf("player not found")
 	}
+	// 如果 dest 为 nil，只检查存在性
+	if dest == nil {
+		return nil
+	}
 	// 将存储的数据反序列化到 dest
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -102,6 +106,10 @@ func (s *MemoryStorage) GetRoom(ctx context.Context, roomID string, dest interfa
 	data, ok := s.data["room:"+roomID]
 	if !ok {
 		return fmt.Errorf("room not found")
+	}
+	// 如果 dest 为 nil，只检查存在性
+	if dest == nil {
+		return nil
 	}
 	// 将存储的数据反序列化到 dest
 	jsonData, err := json.Marshal(data)
@@ -166,6 +174,10 @@ func (s *MemoryStorage) GetSession(ctx context.Context, sessionID string, dest i
 	data, ok := s.sessions[sessionID]
 	if !ok {
 		return fmt.Errorf("session not found")
+	}
+	// 如果 dest 为 nil，只检查存在性
+	if dest == nil {
+		return nil
 	}
 	// 将存储的数据反序列化到 dest
 	jsonData, err := json.Marshal(data)

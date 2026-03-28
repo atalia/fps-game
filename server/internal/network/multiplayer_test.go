@@ -482,8 +482,8 @@ func TestMultiplayer_Emote(t *testing.T) {
 		// B 应收到 emote
 		msg := RecvType(t, connB, "emote")
 		var emoteData struct {
-			EmoteID   string `json:"emote_id"`
-			PlayerID  string `json:"player_id"`
+			EmoteID  string `json:"emote_id"`
+			PlayerID string `json:"player_id"`
 		}
 		if err := json.Unmarshal(msg.Data, &emoteData); err != nil {
 			t.Fatalf("Failed to parse emote: %v", err)
@@ -689,9 +689,9 @@ func TestMultiplayer_ConcurrentActions(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			Send(t, connB, "move", map[string]interface{}{
-				"x":        float64(i * 10 + 100),
+				"x":        float64(i*10 + 100),
 				"y":        0.0,
-				"z":        float64(i * 5 + 50),
+				"z":        float64(i*5 + 50),
 				"rotation": 3.14,
 			})
 		}
@@ -702,9 +702,9 @@ func TestMultiplayer_ConcurrentActions(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			Send(t, connC, "move", map[string]interface{}{
-				"x":        float64(i * 10 + 200),
+				"x":        float64(i*10 + 200),
 				"y":        0.0,
-				"z":        float64(i * 5 + 100),
+				"z":        float64(i*5 + 100),
 				"rotation": 1.57,
 			})
 		}
@@ -921,14 +921,14 @@ func TestMultiplayer_MultipleRooms(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// 如果没收到，可能是连接问题，打印房间状态
 	if !foundD {
 		t.Logf("Room 1: %s, Room 2: %s", room1, room2)
 		t.Logf("Hub clients: %d", ts.Hub.GetClientCount())
 		t.Logf("RoomManager rooms: %d", ts.RoomManager.GetRoomCount())
 	}
-	
+
 	// 放宽检查：如果房间隔离正确（Room 1 消息没被 C/D 收到），测试通过
 	t.Logf("Multiple rooms isolation test passed")
 }
@@ -944,8 +944,8 @@ func TestMultiplayer_ReloadWeapon(t *testing.T) {
 	// 射击消耗弹药
 	for i := 0; i < 5; i++ {
 		Send(t, conn, "shoot", map[string]interface{}{
-			"position": map[string]float64{"x": 0, "y": 1.25, "z": 0},
-			"rotation": 0,
+			"position":  map[string]float64{"x": 0, "y": 1.25, "z": 0},
+			"rotation":  0,
 			"direction": map[string]float64{"x": 0, "y": 0, "z": 1},
 		})
 		time.Sleep(50 * time.Millisecond)
@@ -1177,15 +1177,15 @@ func TestScenario_TeamDeathmatch(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		// A 射击
 		Send(t, connA, "shoot", map[string]interface{}{
-			"position": map[string]float64{"x": 0, "y": 1.25, "z": 0},
-			"rotation": 0,
+			"position":  map[string]float64{"x": 0, "y": 1.25, "z": 0},
+			"rotation":  0,
 			"direction": map[string]float64{"x": 1, "y": 0, "z": 0},
 		})
 
 		// B 射击
 		Send(t, connB, "shoot", map[string]interface{}{
-			"position": map[string]float64{"x": 0, "y": 1.25, "z": 0},
-			"rotation": 0,
+			"position":  map[string]float64{"x": 0, "y": 1.25, "z": 0},
+			"rotation":  0,
 			"direction": map[string]float64{"x": 1, "y": 0, "z": 0},
 		})
 
@@ -1225,8 +1225,8 @@ func TestScenario_ZombieMode(t *testing.T) {
 
 	// 僵尸攻击人类
 	Send(t, connA, "shoot", map[string]interface{}{
-		"position": map[string]float64{"x": 0, "y": 1.25, "z": 0},
-		"rotation": 0,
+		"position":  map[string]float64{"x": 0, "y": 1.25, "z": 0},
+		"rotation":  0,
 		"direction": map[string]float64{"x": 0, "y": 0, "z": 1},
 	})
 
@@ -1285,7 +1285,7 @@ func BenchmarkWS_Connect(b *testing.B) {
 	rm := room.NewManager(100, 10)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWS(hub, rm, nil, w, r)
+		ServeWS(hub, rm, nil, nil, w, r)
 	})
 
 	server := httptest.NewServer(handler)

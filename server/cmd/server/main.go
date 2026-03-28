@@ -124,4 +124,3 @@ func withLogging(next http.Handler) http.Handler {
 		log.Printf("%s %s %v", r.Method, r.URL.Path, time.Since(start))
 	})
 }
-

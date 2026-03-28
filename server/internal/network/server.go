@@ -26,13 +26,13 @@ func init() {
 }
 
 const (
-	writeWait       = 10 * time.Second
-	pongWait        = 90 * time.Second // 增加到 90 秒
-	pingPeriod      = (pongWait * 9) / 10
-	maxMessageSize  = 4096
-	maxPlayerName   = 32  // 玩家名称最大长度
-	maxChatMessage  = 256 // 聊天消息最大长度
-	minPlayerName   = 1   // 玩家名称最小长度
+	writeWait      = 10 * time.Second
+	pongWait       = 90 * time.Second // 增加到 90 秒
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 4096
+	maxPlayerName  = 32  // 玩家名称最大长度
+	maxChatMessage = 256 // 聊天消息最大长度
+	minPlayerName  = 1   // 玩家名称最小长度
 )
 
 // Client 客户端连接
@@ -47,8 +47,8 @@ type Client struct {
 
 // RateLimiter 简单的令牌桶频率限制器
 type RateLimiter struct {
-	tokens    int
-	maxTokens int
+	tokens     int
+	maxTokens  int
 	refillRate time.Duration
 	lastRefill time.Time
 	mu         sync.Mutex
@@ -167,7 +167,7 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	defer h.mu.RUnlock()
 
 	playerIDs := r.GetPlayerIDs()
-	
+
 	// 只在非移动消息时打印日志
 	if msgType != "player_moved" && msgType != "move" {
 		log.Printf("[DEBUG] BroadcastToRoom: type=%s, players=%d", msgType, len(playerIDs))
@@ -327,7 +327,7 @@ func (c *Client) readPump(roomManager *room.Manager) {
 			}
 			log.Printf("[DEBUG] Message: %s from %s", msg.Type, c.Player.ID)
 		}
-		
+
 		c.handleMessage(msg, roomManager)
 	}
 }
@@ -565,7 +565,9 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		Direction map[string]float64 `json:"direction"`
 		WeaponID  string             `json:"weapon_id"`
 	}
-	if err := json.Unmarshal(data, &shootData); err != nil { return }
+	if err := json.Unmarshal(data, &shootData); err != nil {
+		return
+	}
 
 	// 广播射击事件
 	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
@@ -609,7 +611,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			// 获取被击中的目标（玩家或机器人）
 			var target *player.Player
 			var isBot bool
-			
+
 			// 检查是否是机器人
 			if strings.HasPrefix(hit.PlayerID, "bot_") {
 				bots := c.Room.GetBots()
@@ -623,7 +625,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			} else {
 				target = c.Room.GetPlayer(hit.PlayerID)
 			}
-			
+
 			if target != nil && target.IsAlive() {
 				target.TakeDamage(damage)
 
@@ -696,8 +698,8 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 
 			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
 				distance := math.Sqrt(
-					math.Pow(worldPos.X-origin.X, 2)+
-						math.Pow(worldPos.Y-origin.Y, 2)+
+					math.Pow(worldPos.X-origin.X, 2) +
+						math.Pow(worldPos.Y-origin.Y, 2) +
 						math.Pow(worldPos.Z-origin.Z, 2),
 				)
 
@@ -725,8 +727,8 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 
 			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
 				distance := math.Sqrt(
-					math.Pow(worldPos.X-origin.X, 2)+
-						math.Pow(worldPos.Y-origin.Y, 2)+
+					math.Pow(worldPos.X-origin.X, 2) +
+						math.Pow(worldPos.Y-origin.Y, 2) +
 						math.Pow(worldPos.Z-origin.Z, 2),
 				)
 
@@ -813,7 +815,9 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		Y float64 `json:"y"`
 		Z float64 `json:"z"`
 	}
-	if err := json.Unmarshal(data, &pos); err != nil { return }
+	if err := json.Unmarshal(data, &pos); err != nil {
+		return
+	}
 
 	c.Player.Respawn(pos.X, pos.Y, pos.Z)
 
@@ -1007,8 +1011,8 @@ func (c *Client) handleSkillUse(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	var req struct {
-		SkillID  string `json:"skill_id"`
-		TargetID string `json:"target_id"`
+		SkillID  string  `json:"skill_id"`
+		TargetID string  `json:"target_id"`
 		X        float64 `json:"x"`
 		Y        float64 `json:"y"`
 		Z        float64 `json:"z"`
@@ -1065,8 +1069,8 @@ func (c *Client) handlePing(data json.RawMessage, roomManager *room.Manager) {
 	}
 
 	var req struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
+		Type    string  `json:"type"`
+		Message string  `json:"message"`
 		X       float64 `json:"x"`
 		Y       float64 `json:"y"`
 		Z       float64 `json:"z"`
@@ -1090,7 +1094,7 @@ func (c *Client) handlePing(data json.RawMessage, roomManager *room.Manager) {
 // handleAddBot 处理添加机器人
 func (c *Client) handleAddBot(data json.RawMessage) {
 	log.Printf("[DEBUG] handleAddBot called, data: %s", string(data))
-	
+
 	var req struct {
 		Difficulty string `json:"difficulty"`
 		Team       string `json:"team"`

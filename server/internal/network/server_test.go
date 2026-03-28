@@ -38,7 +38,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	rm := room.NewManager(100, 10) // 最多100房间，每房间10人
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWS(hub, rm, nil, w, r)
+		ServeWS(hub, rm, nil, nil, w, r)
 	})
 
 	server := httptest.NewServer(handler)
@@ -221,7 +221,7 @@ func SendRaw(t *testing.T, conn *websocket.Conn, raw string) {
 // RecvType 读取指定类型的消息，跳过其他类型
 func RecvType(t *testing.T, conn *websocket.Conn, wantType string) *TestMessage {
 	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
-	
+
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {

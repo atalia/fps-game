@@ -64,11 +64,11 @@ func (pq *PriorityQueue) Pop() interface{} {
 
 // Matcher 匹配器
 type Matcher struct {
-	queue      PriorityQueue
-	matches    map[string]*Match
-	teamSize   int
-	maxWait    time.Duration
-	mu         sync.Mutex
+	queue    PriorityQueue
+	matches  map[string]*Match
+	teamSize int
+	maxWait  time.Duration
+	mu       sync.Mutex
 }
 
 // NewMatcher 创建匹配器

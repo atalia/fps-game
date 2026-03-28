@@ -13,20 +13,20 @@ import (
 
 // Room 游戏房间
 type Room struct {
-	ID           string
-	Name         string
-	MaxSize      int
-	Players      map[string]*player.Player
-	BotManager   *ai.Manager
-	CreatedAt    time.Time
-	StartedAt    time.Time
+	ID         string
+	Name       string
+	MaxSize    int
+	Players    map[string]*player.Player
+	BotManager *ai.Manager
+	CreatedAt  time.Time
+	StartedAt  time.Time
 	// C4 爆破模式
-	C4Planted    bool
-	C4Planter    string
-	C4Position   player.Position
-	C4PlantedAt  time.Time
-	GameMode     string
-	mu           sync.RWMutex
+	C4Planted   bool
+	C4Planter   string
+	C4Position  player.Position
+	C4PlantedAt time.Time
+	GameMode    string
+	mu          sync.RWMutex
 }
 
 // NewRoom 创建房间

@@ -13,9 +13,9 @@ const (
 
 // HitBox 命中盒定义
 type HitBox struct {
-	Type   HitBoxType  `json:"type"`
-	Offset Position    `json:"offset"` // 相对于玩家中心
-	Radius float64     `json:"radius"` // 碰撞球半径
+	Type   HitBoxType `json:"type"`
+	Offset Position   `json:"offset"` // 相对于玩家中心
+	Radius float64    `json:"radius"` // 碰撞球半径
 }
 
 // Position 3D 位置
