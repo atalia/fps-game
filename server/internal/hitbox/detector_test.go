@@ -11,7 +11,8 @@ func TestRaySphereIntersect_Hit(t *testing.T) {
 	center := Position{X: 5, Y: 0, Z: 0}
 	radius := 1.0
 
-	if !RaySphereIntersect(origin, direction, center, radius) {
+	tval := RaySphereIntersect(origin, direction, center, radius)
+	if tval < 0 {
 		t.Error("expected ray to intersect sphere")
 	}
 }
@@ -23,7 +24,8 @@ func TestRaySphereIntersect_Miss(t *testing.T) {
 	center := Position{X: 5, Y: 5, Z: 0}
 	radius := 1.0
 
-	if RaySphereIntersect(origin, direction, center, radius) {
+	tval := RaySphereIntersect(origin, direction, center, radius)
+	if tval >= 0 {
 		t.Error("expected ray to miss sphere")
 	}
 }
@@ -35,7 +37,8 @@ func TestRaySphereIntersect_Tangent(t *testing.T) {
 	center := Position{X: 5, Y: 0, Z: 0}
 	radius := 1.0
 
-	if !RaySphereIntersect(origin, direction, center, radius) {
+	tval := RaySphereIntersect(origin, direction, center, radius)
+	if tval < 0 {
 		t.Error("expected ray to be tangent to sphere")
 	}
 }

@@ -63,7 +63,8 @@ async function init() {
         loadingText.textContent = '初始化特效系统...';
         if (typeof EffectsSystem !== 'undefined' && typeof PerformanceMonitor !== 'undefined') {
             window.performanceMonitor = new PerformanceMonitor();
-            window.effectsSystem = new EffectsSystem(window.renderer);
+            window.effectsSystem = new EffectsSystem();
+            window.effectsSystem.init(window.renderer);  // 调用 init 方法完成初始化
             console.log('✅ Effects system initialized');
         } else {
             console.warn('⚠️ Effects system not loaded, using fallback');
@@ -456,6 +457,10 @@ function leaveRoom() {
         window.game.roomId = null;
         if (window.game.players) {
             window.game.players.clear();
+        }
+        // 清理 PlayerController 的事件监听器
+        if (window.game.player && typeof window.game.player.destroy === 'function') {
+            window.game.player.destroy();
         }
     }
     

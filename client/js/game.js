@@ -197,6 +197,11 @@ class Game {
     this.player.ammo = config.ammo
     this.player.ammoReserve = config.reserve
     window.uiManager.updateAmmo(config.ammo, config.reserve)
+    
+    // 同步到服务器
+    if (window.network && window.network.connected) {
+      window.network.send('weapon_change', { weapon_id: weapon })
+    }
   }
 
   // 通过武器 ID 切换武器（支持扩展武器系统）

@@ -4,8 +4,9 @@ import (
 	"math"
 )
 
-// RaySphereIntersect 检测射线是否与球体相交
-func RaySphereIntersect(origin, direction, center Position, radius float64) bool {
+// RaySphereIntersect 检测射线是否与球体相交，返回最近的交点距离 t
+// 如果不相交或交点在射线下游（t < 0），返回 -1
+func RaySphereIntersect(origin, direction, center Position, radius float64) float64 {
 	// 射线方程: P = origin + t * direction
 	// 球体方程: |P - center| = radius
 	// 联立得: |origin + t*direction - center|^2 = radius^2
@@ -22,7 +23,28 @@ func RaySphereIntersect(origin, direction, center Position, radius float64) bool
 	c := oc.X*oc.X + oc.Y*oc.Y + oc.Z*oc.Z - radius*radius
 
 	discriminant := b*b - 4*a*c
-	return discriminant >= 0
+	if discriminant < 0 {
+		return -1
+	}
+
+	// 计算两个交点，取最近的有效交点
+	sqrtDisc := math.Sqrt(discriminant)
+	t1 := (-b - sqrtDisc) / (2 * a)
+	t2 := (-b + sqrtDisc) / (2 * a)
+
+	// 选择最近的有效交点 (t >= 0)
+	if t1 >= 0 {
+		return t1
+	}
+	if t2 >= 0 {
+		return t2
+	}
+	return -1
+}
+
+// RaySphereIntersectSimple 简单版本，只判断是否相交（保持向后兼容）
+func RaySphereIntersectSimple(origin, direction, center Position, radius float64) bool {
+	return RaySphereIntersect(origin, direction, center, radius) >= 0
 }
 
 // CalculateDamage 计算最终伤害

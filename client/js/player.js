@@ -207,6 +207,13 @@ class PlayerController {
 
         // 发送射击消息到服务器
         if (window.network && window.network.connected) {
+            // 根据 rotation 和 pitch 计算射击方向
+            const direction = {
+                x: -Math.sin(this.rotation) * Math.cos(this.pitch),
+                y: Math.sin(this.pitch),
+                z: -Math.cos(this.rotation) * Math.cos(this.pitch)
+            };
+            
             window.network.send('shoot', {
                 position: {
                     x: this.position.x,
@@ -214,7 +221,9 @@ class PlayerController {
                     z: this.position.z
                 },
                 rotation: this.rotation,
-                pitch: this.pitch
+                pitch: this.pitch,
+                direction: direction,
+                weapon_id: this.weapon
             });
         }
 

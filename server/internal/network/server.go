@@ -471,6 +471,14 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		r = roomManager.CreateRoom()
 	}
 
+	// 检查房间是否创建成功（可能因达到上限而返回 nil）
+	if r == nil {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Server is full, cannot create new room",
+		}).ToJSON()
+		return
+	}
+
 	if !r.AddPlayer(c.Player) {
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Room is full",
@@ -562,6 +570,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 	var shootData struct {
 		Position  map[string]float64 `json:"position"`
 		Rotation  float64            `json:"rotation"`
+		Pitch     float64            `json:"pitch"`
 		Direction map[string]float64 `json:"direction"`
 		WeaponID  string             `json:"weapon_id"`
 	}
@@ -577,89 +586,102 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		"ammo":      c.Player.Ammo,
 	}, c.Player.ID)
 
+	// 如果客户端没有发送 direction，根据 rotation 和 pitch 计算
+	if shootData.Direction == nil {
+		// 从 rotation (yaw) 和 pitch 计算 direction
+		shootData.Direction = map[string]float64{
+			"x": -math.Sin(shootData.Rotation) * math.Cos(shootData.Pitch),
+			"y": math.Sin(shootData.Pitch),
+			"z": -math.Cos(shootData.Rotation) * math.Cos(shootData.Pitch),
+		}
+	}
+
+	// 如果客户端没有发送 weapon_id，使用玩家当前武器
+	if shootData.WeaponID == "" {
+		shootData.WeaponID = c.Player.Weapon
+	}
+
 	// 命中检测
-	if shootData.Direction != nil {
-		origin := hitbox.Position{
-			X: shootData.Position["x"],
-			Y: shootData.Position["y"],
-			Z: shootData.Position["z"],
+	origin := hitbox.Position{
+		X: shootData.Position["x"],
+		Y: shootData.Position["y"],
+		Z: shootData.Position["z"],
+	}
+	direction := hitbox.Position{
+		X: shootData.Direction["x"],
+		Y: shootData.Direction["y"],
+		Z: shootData.Direction["z"],
+	}
+
+	// 武器射程 (默认 50)
+	weaponRange := 50.0
+
+	hit := c.detectHit(origin, direction, weaponRange)
+	if hit != nil {
+		// 基础伤害 (根据武器类型)
+		baseDamage := 30
+		if shootData.WeaponID == "sniper" {
+			baseDamage = 100
+		} else if shootData.WeaponID == "shotgun" {
+			baseDamage = 80
+		} else if shootData.WeaponID == "pistol" {
+			baseDamage = 25
 		}
-		direction := hitbox.Position{
-			X: shootData.Direction["x"],
-			Y: shootData.Direction["y"],
-			Z: shootData.Direction["z"],
-		}
 
-		// 武器射程 (默认 50)
-		weaponRange := 50.0
+		// 计算伤害
+		damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
 
-		hit := c.detectHit(origin, direction, weaponRange)
-		if hit != nil {
-			// 基础伤害 (根据武器类型)
-			baseDamage := 30
-			if shootData.WeaponID == "sniper" {
-				baseDamage = 100
-			} else if shootData.WeaponID == "shotgun" {
-				baseDamage = 80
-			} else if shootData.WeaponID == "pistol" {
-				baseDamage = 25
-			}
+		// 获取被击中的目标（玩家或机器人）
+		var target *player.Player
+		var isBot bool
 
-			// 计算伤害
-			damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
-
-			// 获取被击中的目标（玩家或机器人）
-			var target *player.Player
-			var isBot bool
-
-			// 检查是否是机器人
-			if strings.HasPrefix(hit.PlayerID, "bot_") {
-				bots := c.Room.GetBots()
-				for _, bot := range bots {
-					if bot.Player.ID == hit.PlayerID {
-						target = bot.Player
-						isBot = true
-						break
-					}
+		// 检查是否是机器人
+		if strings.HasPrefix(hit.PlayerID, "bot_") {
+			bots := c.Room.GetBots()
+			for _, bot := range bots {
+				if bot.Player.ID == hit.PlayerID {
+					target = bot.Player
+					isBot = true
+					break
 				}
-			} else {
-				target = c.Room.GetPlayer(hit.PlayerID)
 			}
+		} else {
+			target = c.Room.GetPlayer(hit.PlayerID)
+		}
 
-			if target != nil && target.IsAlive() {
-				target.TakeDamage(damage)
+		if target != nil && target.IsAlive() {
+			target.TakeDamage(damage)
 
-				// 广播受伤消息
-				c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
-					"player_id":        hit.PlayerID,
-					"attacker_id":      c.Player.ID,
-					"damage":           damage,
-					"hitbox":           hit.HitBoxType,
-					"remaining_health": target.Health,
-					"position":         target.Position,
-					"is_bot":           isBot,
+			// 广播受伤消息
+			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
+				"player_id":        hit.PlayerID,
+				"attacker_id":      c.Player.ID,
+				"damage":           damage,
+				"hitbox":           hit.HitBoxType,
+				"remaining_health": target.Health,
+				"position":         target.Position,
+				"is_bot":           isBot,
+			}, "")
+
+			// 检查死亡
+			if target.Health <= 0 {
+				// 更新击杀统计
+				c.Player.AddKill(1)
+				target.Die()
+
+				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
+					"victim_id":     hit.PlayerID,
+					"killer_id":     c.Player.ID,
+					"weapon_id":     shootData.WeaponID,
+					"hitbox":        hit.HitBoxType,
+					"is_headshot":   hit.HitBoxType == "head",
+					"kill_distance": hit.Distance,
+					"is_bot":        isBot,
 				}, "")
 
-				// 检查死亡
-				if target.Health <= 0 {
-					// 更新击杀统计
-					c.Player.AddKill(1)
-					target.Die()
-
-					c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
-						"victim_id":     hit.PlayerID,
-						"killer_id":     c.Player.ID,
-						"weapon_id":     shootData.WeaponID,
-						"hitbox":        hit.HitBoxType,
-						"is_headshot":   hit.HitBoxType == "head",
-						"kill_distance": hit.Distance,
-						"is_bot":        isBot,
-					}, "")
-
-					// 玩家自动重生，机器人不重生
-					if !isBot {
-						go c.respawnPlayer(target)
-					}
+				// 玩家自动重生，机器人不重生
+				if !isBot {
+					go c.respawnPlayer(target)
 				}
 			}
 		}
@@ -696,19 +718,15 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 				Z: p.Position.Z + hb.Offset.Z,
 			}
 
-			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
-				distance := math.Sqrt(
-					math.Pow(worldPos.X-origin.X, 2) +
-						math.Pow(worldPos.Y-origin.Y, 2) +
-						math.Pow(worldPos.Z-origin.Z, 2),
-				)
-
-				if distance < minDistance {
-					minDistance = distance
+			// 使用返回 t 值的版本，检查射线是否在有效范围内
+			t := hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius)
+			if t >= 0 && t <= maxRange {
+				if t < minDistance {
+					minDistance = t
 					closestHit = &HitResult{
 						PlayerID:   playerID,
 						HitBoxType: hb.Type,
-						Distance:   distance,
+						Distance:   t,
 					}
 				}
 			}
@@ -725,19 +743,15 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 				Z: bot.Player.Position.Z + hb.Offset.Z,
 			}
 
-			if hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius) {
-				distance := math.Sqrt(
-					math.Pow(worldPos.X-origin.X, 2) +
-						math.Pow(worldPos.Y-origin.Y, 2) +
-						math.Pow(worldPos.Z-origin.Z, 2),
-				)
-
-				if distance < minDistance {
-					minDistance = distance
+			// 使用返回 t 值的版本，检查射线是否在有效范围内
+			t := hitbox.RaySphereIntersect(origin, direction, worldPos, hb.Radius)
+			if t >= 0 && t <= maxRange {
+				if t < minDistance {
+					minDistance = t
 					closestHit = &HitResult{
 						PlayerID:   bot.Player.ID,
 						HitBoxType: hb.Type,
-						Distance:   distance,
+						Distance:   t,
 					}
 				}
 			}
