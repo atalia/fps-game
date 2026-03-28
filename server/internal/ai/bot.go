@@ -52,6 +52,7 @@ func NewBot(id string, difficulty Difficulty) *Bot {
 		},
 		Config: cfg,
 		State:  StatePatrol,
+		Name:   name,
 	}
 }
 
