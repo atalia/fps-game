@@ -82,7 +82,10 @@ class Network {
 
             messages.forEach(msg => {
                 const parsed = JSON.parse(msg);
-                console.log('[NETWORK] Received:', parsed.type, parsed.data ? JSON.stringify(parsed.data).substring(0, 100) : '');
+                // 只在 DEBUG 模式下打印详细日志
+                if (window.DEBUG_MODE) {
+                    console.log('[NETWORK] Received:', parsed.type, parsed.data ? JSON.stringify(parsed.data).substring(0, 100) : '');
+                }
                 const handler = this.handlers.get(parsed.type);
 
                 if (handler) {
@@ -120,7 +123,10 @@ class Network {
             timestamp: Date.now()
         });
 
-        console.log('[NETWORK] Sending:', type, JSON.stringify(data).substring(0, 100));
+        // 只在 DEBUG 模式下打印详细日志
+        if (window.DEBUG_MODE) {
+            console.log('[NETWORK] Sending:', type, JSON.stringify(data).substring(0, 100));
+        }
         this.ws.send(message);
     }
 

@@ -2,13 +2,15 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
-	"strings"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"fps-game/internal/ai"
 	"fps-game/internal/hitbox"
@@ -24,19 +26,63 @@ func init() {
 }
 
 const (
-	writeWait      = 10 * time.Second
-	pongWait       = 90 * time.Second  // 增加到 90 秒
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 4096
+	writeWait       = 10 * time.Second
+	pongWait        = 90 * time.Second // 增加到 90 秒
+	pingPeriod      = (pongWait * 9) / 10
+	maxMessageSize  = 4096
+	maxPlayerName   = 32  // 玩家名称最大长度
+	maxChatMessage  = 256 // 聊天消息最大长度
+	minPlayerName   = 1   // 玩家名称最小长度
 )
 
 // Client 客户端连接
 type Client struct {
-	Conn   *websocket.Conn
-	Player *player.Player
-	Room   *room.Room
-	Send   chan []byte
-	hub    *Hub
+	Conn         *websocket.Conn
+	Player       *player.Player
+	Room         *room.Room
+	Send         chan []byte
+	hub          *Hub
+	msgRateLimit *RateLimiter // 消息频率限制器
+}
+
+// RateLimiter 简单的令牌桶频率限制器
+type RateLimiter struct {
+	tokens    int
+	maxTokens int
+	refillRate time.Duration
+	lastRefill time.Time
+	mu         sync.Mutex
+}
+
+// NewRateLimiter 创建频率限制器
+func NewRateLimiter(maxTokens int, refillRate time.Duration) *RateLimiter {
+	return &RateLimiter{
+		tokens:     maxTokens,
+		maxTokens:  maxTokens,
+		refillRate: refillRate,
+		lastRefill: time.Now(),
+	}
+}
+
+// Allow 检查是否允许请求
+func (r *RateLimiter) Allow() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// 补充令牌
+	now := time.Now()
+	elapsed := now.Sub(r.lastRefill)
+	if elapsed >= r.refillRate {
+		r.tokens = r.maxTokens
+		r.lastRefill = now
+	}
+
+	// 检查并消耗令牌
+	if r.tokens > 0 {
+		r.tokens--
+		return true
+	}
+	return false
 }
 
 // Hub 连接中心
@@ -216,10 +262,11 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 // HandleConnection 处理连接
 func HandleConnection(conn *websocket.Conn, hub *Hub, roomManager *room.Manager) {
 	client := &Client{
-		Conn:   conn,
-		Player: player.NewPlayer(),
-		Send:   make(chan []byte, 512),  // 增加缓冲区
-		hub:    hub,
+		Conn:         conn,
+		Player:       player.NewPlayer(),
+		Send:         make(chan []byte, 512), // 增加缓冲区
+		hub:          hub,
+		msgRateLimit: NewRateLimiter(30, time.Second), // 每秒最多30条消息
 	}
 
 	log.Printf("[DEBUG] New connection, player ID: %s", client.Player.ID)
@@ -262,14 +309,22 @@ func (c *Client) readPump(roomManager *room.Manager) {
 			break
 		}
 
+		// 频率限制检查（心跳和移动消息除外）
 		var msg Message
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("[WARN] Unmarshal error: %v", err)
 			continue
 		}
 
-		// 只在非移动消息时打印日志
 		if msg.Type != "move" && msg.Type != "heartbeat" {
+			// 检查频率限制
+			if !c.msgRateLimit.Allow() {
+				log.Printf("[WARN] Rate limit exceeded for player %s", c.Player.ID)
+				c.Send <- NewMessage("error", map[string]string{
+					"message": "Rate limit exceeded, please slow down",
+				}).ToJSON()
+				continue
+			}
 			log.Printf("[DEBUG] Message: %s from %s", msg.Type, c.Player.ID)
 		}
 		
@@ -388,7 +443,25 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		return
 	}
 
-	c.Player.SetName(req.Name)
+	// 验证玩家名称
+	name := strings.TrimSpace(req.Name)
+	if len(name) < minPlayerName || len(name) > maxPlayerName {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": fmt.Sprintf("Player name must be between %d and %d characters", minPlayerName, maxPlayerName),
+		}).ToJSON()
+		return
+	}
+	// 验证名称字符（只允许字母、数字、中文和空格）
+	for _, r := range name {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsSpace(r) && r != '_' && r != '-' {
+			c.Send <- NewMessage("error", map[string]string{
+				"message": "Player name can only contain letters, numbers, spaces, underscores and hyphens",
+			}).ToJSON()
+			return
+		}
+	}
+
+	c.Player.SetName(name)
 
 	var r *room.Room
 	if req.RoomID != "" {
@@ -713,12 +786,24 @@ func (c *Client) handleChat(data json.RawMessage, roomManager *room.Manager) {
 		return
 	}
 
-	log.Printf("[DEBUG] handleChat: %s says: %s, broadcasting to room", c.Player.Name, chat.Message)
+	// 验证聊天消息长度
+	message := strings.TrimSpace(chat.Message)
+	if len(message) == 0 {
+		return
+	}
+	if len(message) > maxChatMessage {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": fmt.Sprintf("Chat message too long (max %d characters)", maxChatMessage),
+		}).ToJSON()
+		return
+	}
+
+	log.Printf("[DEBUG] handleChat: %s says: %s, broadcasting to room", c.Player.Name, message)
 	// 广播聊天消息
 	c.hub.BroadcastToRoom(c.Room, "chat", map[string]string{
 		"player_id": c.Player.ID,
 		"name":      c.Player.Name,
-		"message":   chat.Message,
+		"message":   message,
 	}, "")
 }
 
