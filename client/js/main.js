@@ -445,41 +445,36 @@ function setupLeaveRoomButton() {
 // 退出房间
 function leaveRoom() {
     console.log('[MAIN] Leaving room...');
-    
+
     // 发送离开消息
     if (window.network && window.network.connected) {
         window.network.send('leave_room', {});
     }
-    
-    // 清理本地状态
+
+    // 清理游戏实例（包括所有事件监听器）
     if (window.game) {
-        window.game.running = false;
-        window.game.roomId = null;
-        if (window.game.players) {
-            window.game.players.clear();
+        if (typeof window.game.destroy === 'function') {
+            window.game.destroy();
         }
-        // 清理 PlayerController 的事件监听器
-        if (window.game.player && typeof window.game.player.destroy === 'function') {
-            window.game.player.destroy();
-        }
+        window.game = null;
     }
-    
+
     // 清理渲染器中的其他玩家
     if (window.renderer) {
         window.renderer.clearPlayers();
     }
-    
+
     // 隐藏退出按钮
     const leaveBtn = document.getElementById('leave-room-btn');
     if (leaveBtn) {
         leaveBtn.style.display = 'none';
     }
-    
+
     // 显示大厅
     if (window.lobby) {
         window.lobby.show();
     }
-    
+
     // 更新 UI
     window.uiManager.updateRoom('等待加入...', 0);
     window.uiManager.updatePlayerList([]);

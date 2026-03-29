@@ -9,6 +9,7 @@ class Game {
     this.lastUpdate = Date.now()
     this.tickRate = 60
     this.effects = null
+    this._eventHandlers = {} // 存储事件处理器引用，用于清理
   }
 
   async init() {
@@ -119,25 +120,23 @@ class Game {
       console.error('[GAME] Chat input not found!')
       return
     }
-    
+
     console.log('[GAME] Setting up chat, input element:', input.id)
-    
+
     // 点击输入框时暂停游戏控制
-    input.addEventListener('focus', () => {
+    this._eventHandlers.chatFocus = () => {
       console.log('[GAME] Chat input focused')
       this.chatFocused = true
-    })
-    
-    input.addEventListener('blur', () => {
+    }
+    this._eventHandlers.chatBlur = () => {
       console.log('[GAME] Chat input blurred')
       this.chatFocused = false
-    })
-    
-    input.addEventListener('keydown', (e) => {
+    }
+    this._eventHandlers.chatKeydown = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault()
         e.stopPropagation()
-        
+
         const message = input.value.trim()
         if (message) {
           console.log('[GAME] Sending chat message:', message)
@@ -146,11 +145,15 @@ class Game {
         }
         input.blur()
       }
-    })
+    }
+
+    input.addEventListener('focus', this._eventHandlers.chatFocus)
+    input.addEventListener('blur', this._eventHandlers.chatBlur)
+    input.addEventListener('keydown', this._eventHandlers.chatKeydown)
   }
 
   setupWeaponSwitch() {
-    document.addEventListener('keydown', (e) => {
+    this._eventHandlers.weaponSwitchKeydown = (e) => {
       switch (e.key) {
         case '1':
           this.switchWeapon('pistol')
@@ -178,7 +181,8 @@ class Game {
           window.uiManager.showMessage('已添加 AI 机器人')
           break
       }
-    })
+    }
+    document.addEventListener('keydown', this._eventHandlers.weaponSwitchKeydown)
   }
 
   switchWeapon(weapon) {
@@ -460,7 +464,40 @@ class Game {
 
   destroy() {
     this.running = false
-    this.renderer?.dispose()
+
+    // 清理聊天事件监听器
+    const chatInput = document.getElementById('chat-input')
+    if (chatInput) {
+      if (this._eventHandlers.chatFocus) {
+        chatInput.removeEventListener('focus', this._eventHandlers.chatFocus)
+      }
+      if (this._eventHandlers.chatBlur) {
+        chatInput.removeEventListener('blur', this._eventHandlers.chatBlur)
+      }
+      if (this._eventHandlers.chatKeydown) {
+        chatInput.removeEventListener('keydown', this._eventHandlers.chatKeydown)
+      }
+    }
+
+    // 清理武器切换事件监听器
+    if (this._eventHandlers.weaponSwitchKeydown) {
+      document.removeEventListener('keydown', this._eventHandlers.weaponSwitchKeydown)
+    }
+
+    // 清理 PlayerController 的事件监听器
+    if (this.player && typeof this.player.destroy === 'function') {
+      this.player.destroy()
+    }
+
+    // 清理渲染器
+    if (this.renderer && typeof this.renderer.dispose === 'function') {
+      this.renderer.dispose()
+    }
+
+    // 清空事件处理器引用
+    this._eventHandlers = {}
+
+    console.log('[GAME] Game destroyed, all event listeners cleaned up')
   }
 }
 

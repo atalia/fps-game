@@ -613,6 +613,14 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		Z: shootData.Direction["z"],
 	}
 
+	// 归一化 direction，防止客户端放大向量绕过射程限制
+	dirLen := math.Sqrt(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)
+	if dirLen > 0 {
+		direction.X /= dirLen
+		direction.Y /= dirLen
+		direction.Z /= dirLen
+	}
+
 	// 武器射程 (默认 50)
 	weaponRange := 50.0
 
@@ -855,13 +863,23 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 // handleWeaponChange 处理武器切换
 func (c *Client) handleWeaponChange(data json.RawMessage) {
 	var req struct {
-		Weapon string `json:"weapon"`
+		Weapon   string `json:"weapon"`
+		WeaponID string `json:"weapon_id"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
 		return
 	}
 
-	c.Player.SetWeapon(req.Weapon)
+	// 支持 weapon 和 weapon_id 两种字段
+	weapon := req.Weapon
+	if weapon == "" {
+		weapon = req.WeaponID
+	}
+	if weapon == "" {
+		return
+	}
+
+	c.Player.SetWeapon(weapon)
 
 	// 广播武器切换
 	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
