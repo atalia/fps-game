@@ -884,7 +884,7 @@ func (c *Client) handleWeaponChange(data json.RawMessage) {
 	// 广播武器切换
 	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"weapon":    req.Weapon,
+		"weapon":    weapon,
 	}, "")
 }
 

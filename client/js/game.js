@@ -489,9 +489,10 @@ class Game {
       this.player.destroy()
     }
 
-    // 清理渲染器
-    if (this.renderer && typeof this.renderer.dispose === 'function') {
-      this.renderer.dispose()
+    // 注意：不销毁 renderer，因为它是全局共享的
+    // 只清理渲染器中的玩家模型
+    if (this.renderer && typeof this.renderer.clearPlayers === 'function') {
+      this.renderer.clearPlayers()
     }
 
     // 清空事件处理器引用
