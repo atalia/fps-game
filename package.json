@@ -3,12 +3,16 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:protocol": "vitest run client/js/__tests__/protocol.test.js"
+    "test:protocol": "vitest run client/js/__tests__/protocol.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "playwright": "^1.58.2",
     "vitest": "^4.1.2",
     "zod": "^4.3.6"
   }
