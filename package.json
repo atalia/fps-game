@@ -4,6 +4,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:protocol": "vitest run client/js/__tests__/protocol.test.js",
+    "test:handlers": "vitest run client/js/__tests__/handlers.test.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
