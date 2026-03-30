@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "voice_start.json",
+  "title": "VoiceStart",
+  "description": "Broadcast when a player starts speaking",
+  "type": "object",
+  "required": ["playerId"],
+  "properties": {
+    "playerId": {
+      "type": "string",
+      "description": "Speaking player's identifier"
+    }
+  },
+  "additionalProperties": false
+}

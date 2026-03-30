@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "player_killed.json",
+  "title": "PlayerKilled",
+  "description": "Broadcast when a player is killed",
+  "type": "object",
+  "required": ["victim_id", "killer_id"],
+  "properties": {
+    "victim_id": {
+      "type": "string",
+      "description": "Killed player's identifier"
+    },
+    "killer_id": {
+      "type": "string",
+      "description": "Killer's identifier"
+    },
+    "weapon_id": {
+      "type": "string",
+      "description": "Weapon used for the kill"
+    },
+    "hitbox": {
+      "type": "string",
+      "enum": ["head", "body", "arm", "leg"],
+      "description": "Final hit location"
+    },
+    "is_headshot": {
+      "type": "boolean",
+      "description": "Whether this was a headshot kill"
+    },
+    "kill_distance": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Distance of the kill shot"
+    },
+    "is_bot": {
+      "type": "boolean",
+      "description": "Whether victim is a bot"
+    }
+  },
+  "additionalProperties": true
+}

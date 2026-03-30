@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "player_joined.json",
+  "title": "PlayerJoined",
+  "description": "Broadcast when a new player joins the room",
+  "type": "object",
+  "required": ["player_id", "name"],
+  "properties": {
+    "player_id": {
+      "type": "string",
+      "description": "Player identifier"
+    },
+    "name": {
+      "type": "string",
+      "description": "Player display name"
+    },
+    "position": {
+      "type": "object",
+      "description": "Initial position",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "is_bot": {
+      "type": "boolean",
+      "description": "Whether this player is a bot"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "normal", "hard", "nightmare"],
+      "description": "Bot difficulty level (only for bots)"
+    },
+    "health": { "type": "integer" },
+    "kills": { "type": "integer" },
+    "deaths": { "type": "integer" }
+  },
+  "additionalProperties": true
+}

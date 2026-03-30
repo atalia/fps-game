@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "player_damaged.json",
+  "title": "PlayerDamaged",
+  "description": "Broadcast when a player takes damage",
+  "type": "object",
+  "required": ["player_id", "attacker_id", "damage", "remaining_health"],
+  "properties": {
+    "player_id": {
+      "type": "string",
+      "description": "Victim's identifier"
+    },
+    "attacker_id": {
+      "type": "string",
+      "description": "Attacker's identifier"
+    },
+    "attacker_position": {
+      "type": "object",
+      "description": "Attacker's position (for hit direction indicator)",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "damage": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Damage amount"
+    },
+    "hitbox": {
+      "type": "string",
+      "enum": ["head", "body", "arm", "leg"],
+      "description": "Body part hit"
+    },
+    "remaining_health": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Health after damage"
+    },
+    "position": {
+      "type": "object",
+      "description": "Victim's position",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "is_bot": {
+      "type": "boolean",
+      "description": "Whether victim is a bot"
+    }
+  },
+  "additionalProperties": true
+}

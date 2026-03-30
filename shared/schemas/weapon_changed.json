@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "weapon_changed.json",
+  "title": "WeaponChanged",
+  "description": "Broadcast when a player changes weapon",
+  "type": "object",
+  "required": ["player_id", "weapon"],
+  "properties": {
+    "player_id": {
+      "type": "string",
+      "description": "Player's identifier"
+    },
+    "weapon": {
+      "type": "string",
+      "enum": ["pistol", "rifle", "shotgun", "sniper"],
+      "description": "New weapon type"
+    }
+  },
+  "additionalProperties": true
+}

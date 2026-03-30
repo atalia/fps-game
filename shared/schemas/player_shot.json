@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "player_shot.json",
+  "title": "PlayerShot",
+  "description": "Broadcast when a player shoots",
+  "type": "object",
+  "required": ["player_id", "position"],
+  "properties": {
+    "player_id": {
+      "type": "string",
+      "description": "Shooter's identifier"
+    },
+    "position": {
+      "type": "object",
+      "description": "Shooter's position at time of shot",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "rotation": {
+      "type": "number",
+      "description": "Shooter's rotation (yaw) in radians"
+    },
+    "ammo": {
+      "type": "integer",
+      "description": "Remaining ammo after shot"
+    },
+    "weapon_id": {
+      "type": "string",
+      "enum": ["pistol", "rifle", "shotgun", "sniper"],
+      "description": "Weapon type used"
+    },
+    "direction": {
+      "type": "object",
+      "description": "Shot direction (unit vector)",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  },
+  "additionalProperties": true
+}
