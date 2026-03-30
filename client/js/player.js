@@ -1,6 +1,7 @@
 // player.js - 玩家控制器
 class PlayerController {
     constructor() {
+        this.id = null; // 玩家 ID，由 startGame 设置
         this.position = { x: 0, y: 0, z: 0 };
         this.velocity = { x: 0, y: 0, z: 0 };
         this.rotation = 0;

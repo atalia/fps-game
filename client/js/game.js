@@ -95,9 +95,11 @@ class Game {
     this.effects.update(deltaTime)
     this.effects.render(this.renderer.scene)
 
-    // 更新准星扩散
-    if (window.dynamicCrosshair) {
-      window.dynamicCrosshair.setMoving(this.keys && (this.keys.w || this.keys.a || this.keys.s || this.keys.d))
+    // 更新准星扩散（从 PlayerController 获取真实移动状态）
+    if (window.dynamicCrosshair && this.player) {
+      const keys = this.player.keys
+      const isMoving = keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD']
+      window.dynamicCrosshair.setMoving(isMoving)
       window.dynamicCrosshair.update(deltaTime)
     }
 

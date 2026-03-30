@@ -578,12 +578,14 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		return
 	}
 
-	// 广播射击事件
+	// 广播射击事件（包含 weapon_id 和 direction，让其他客户端正确还原射击）
 	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
 		"player_id": c.Player.ID,
 		"position":  shootData.Position,
 		"rotation":  shootData.Rotation,
 		"ammo":      c.Player.Ammo,
+		"weapon_id": shootData.WeaponID,
+		"direction": shootData.Direction,
 	}, c.Player.ID)
 
 	// 如果客户端没有发送 direction，根据 rotation 和 pitch 计算
@@ -660,15 +662,16 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		if target != nil && target.IsAlive() {
 			target.TakeDamage(damage)
 
-			// 广播受伤消息
+			// 广播受伤消息（包含 attacker_position 用于显示受击方向指示）
 			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
-				"player_id":        hit.PlayerID,
-				"attacker_id":      c.Player.ID,
-				"damage":           damage,
-				"hitbox":           hit.HitBoxType,
-				"remaining_health": target.Health,
-				"position":         target.Position,
-				"is_bot":           isBot,
+				"player_id":         hit.PlayerID,
+				"attacker_id":       c.Player.ID,
+				"attacker_position": c.Player.Position,
+				"damage":            damage,
+				"hitbox":            hit.HitBoxType,
+				"remaining_health":  target.Health,
+				"position":          target.Position,
+				"is_bot":            isBot,
 			}, "")
 
 			// 检查死亡
@@ -895,7 +898,7 @@ func (c *Client) handleVoiceStart() {
 	}
 
 	c.hub.BroadcastToRoom(c.Room, "voice_start", map[string]string{
-		"player_id": c.Player.ID,
+		"playerId": c.Player.ID,
 	}, c.Player.ID)
 }
 
@@ -906,7 +909,7 @@ func (c *Client) handleVoiceStop() {
 	}
 
 	c.hub.BroadcastToRoom(c.Room, "voice_stop", map[string]string{
-		"player_id": c.Player.ID,
+		"playerId": c.Player.ID,
 	}, c.Player.ID)
 }
 
@@ -916,10 +919,18 @@ func (c *Client) handleVoiceData(data json.RawMessage) {
 		return
 	}
 
-	// 直接转发语音数据给房间内其他玩家
+	// 解析客户端发送的音频数据
+	var voiceMsg struct {
+		Audio string `json:"audio"`
+	}
+	if err := json.Unmarshal(data, &voiceMsg); err != nil {
+		return
+	}
+
+	// 转发语音数据给房间内其他玩家
 	c.hub.BroadcastToRoom(c.Room, "voice_data", map[string]interface{}{
-		"player_id": c.Player.ID,
-		"audio":     data,
+		"playerId": c.Player.ID,
+		"audio":    voiceMsg.Audio,
 	}, c.Player.ID)
 }
 

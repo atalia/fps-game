@@ -213,15 +213,16 @@ function setupNetworkHandlers() {
         console.log('Player joined:', data.name, 'position:', data.position, 'is_bot:', data.is_bot);
         // 确保位置有效
         const position = data.position || { x: 0, y: 0, z: 0 };
-        window.renderer.addPlayer(data.player_id, position, false);
-        
+        const isBot = data.is_bot || false;
+        window.renderer.addPlayer(data.player_id, position, isBot);
+
         // 如果是机器人，显示 AI 标签
-        if (data.is_bot && window.aiLabels) {
+        if (isBot && window.aiLabels) {
             window.aiLabels.createLabel(data.player_id, data.name, data.difficulty);
         }
-        
+
         window.uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`);
-        
+
         // 同步到 game.players Map
         if (window.game && window.game.players) {
             window.game.players.set(data.player_id, {
@@ -229,7 +230,7 @@ function setupNetworkHandlers() {
                 name: data.name,
                 position: position,
                 rotation: 0,
-                is_bot: data.is_bot,
+                is_bot: isBot,
                 kills: data.kills || 0,
                 health: data.health || 100
             });
@@ -276,9 +277,14 @@ function setupNetworkHandlers() {
 
     // 玩家射击
     window.network.on('player_shot', (data) => {
-        window.audioManager.playShoot('rifle');
+        // 使用正确的武器音效
+        const weaponId = data.weapon_id || 'rifle';
+        window.audioManager.playShoot(weaponId);
+
+        // 使用服务端提供的方向，如果没有则使用默认方向
         if (data.position) {
-            window.renderer.addProjectile(data.position, { x: 0, y: 0, z: 0 });
+            const direction = data.direction || { x: 0, y: 0, z: -1 };
+            window.renderer.addProjectile(data.position, direction);
         }
     });
 
@@ -404,6 +410,12 @@ async function startGame(playerId) {
     window.game = new Game();
     await window.game.init();
 
+    // 设置玩家 ID
+    if (window.game.player) {
+        window.game.player.id = playerId;
+        console.log('[MAIN] Player ID set to:', playerId);
+    }
+
     // 初始化命中效果系统
     if (typeof HitEffects !== 'undefined') {
         window.hitEffects = new HitEffects(window.renderer.scene, window.renderer.camera);
@@ -412,6 +424,19 @@ async function startGame(playerId) {
     // 初始化 AI 标签系统
     if (typeof AILabels !== 'undefined') {
         window.aiLabels = new AILabels();
+    }
+
+    // 初始化语音系统
+    if (typeof VoiceSystem !== 'undefined') {
+        window.voiceSystem = new VoiceSystem();
+        window.voiceSystem.init().then(success => {
+            if (success) {
+                console.log('[MAIN] Voice system initialized');
+                setupVoiceHandlers();
+            }
+        }).catch(err => {
+            console.warn('[MAIN] Voice system init failed:', err);
+        });
     }
 
     // 隐藏大厅
@@ -478,10 +503,35 @@ function leaveRoom() {
     // 更新 UI
     window.uiManager.updateRoom('等待加入...', 0);
     window.uiManager.updatePlayerList([]);
-    
+
     gameStarted = false;
-    
+
     console.log('[MAIN] Left room successfully');
+}
+
+// 设置语音事件处理
+function setupVoiceHandlers() {
+    if (!window.network || !window.voiceSystem) return;
+
+    // 接收语音数据
+    window.network.on('voice_data', (data) => {
+        if (window.voiceSystem && data.playerId && data.audio) {
+            window.voiceSystem.receiveAudio(data.playerId, data.audio);
+        }
+    });
+
+    // 语音开始
+    window.network.on('voice_start', (data) => {
+        console.log('[VOICE] Player started speaking:', data.playerId);
+    });
+
+    // 语音停止
+    window.network.on('voice_stop', (data) => {
+        console.log('[VOICE] Player stopped speaking:', data.playerId);
+        if (window.voiceSystem) {
+            window.voiceSystem.stopReceiving(data.playerId);
+        }
+    });
 }
 
 // 启动
