@@ -213,29 +213,8 @@ function setupNetworkHandlers() {
     // 玩家加入
     window.network.on('player_joined', (data) => {
         console.log('Player joined:', data.name, 'position:', data.position, 'is_bot:', data.is_bot);
-        // 确保位置有效
-        const position = data.position || { x: 0, y: 0, z: 0 };
-        const isBot = data.is_bot || false;
-        window.renderer.addPlayer(data.player_id, position, isBot);
-
-        // 如果是机器人，显示 AI 标签
-        if (isBot && window.aiLabels) {
-            window.aiLabels.createLabel(data.player_id, data.name, data.difficulty);
-        }
-
-        window.uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`);
-
-        // 同步到 game.players Map
-        if (window.game && window.game.players) {
-            window.game.players.set(data.player_id, {
-                id: data.player_id,
-                name: data.name,
-                position: position,
-                rotation: 0,
-                is_bot: isBot,
-                kills: data.kills || 0,
-                health: data.health || 100
-            });
+        if (window.messageHandlers) {
+            window.messageHandlers.handlePlayerJoined(data);
         }
         
         // 更新玩家列表 UI
@@ -333,6 +312,28 @@ async function startGame(playerId) {
 
     // 初始化游戏
     window.game = new Game();
+    
+    // 【重要】先创建 messageHandlers 占位，防止时序窗口丢失消息
+    // 在 Game.init() 完成前使用空 game 对象
+    if (typeof createMessageHandlers !== 'undefined') {
+        window.messageHandlers = createMessageHandlers({
+            game: window.game,
+            renderer: window.renderer,
+            uiManager: window.uiManager,
+            audioManager: window.audioManager,
+            screenEffects: window.screenEffects,
+            hitIndicator: window.hitIndicator,
+            effectsSystem: window.effectsSystem,
+            damageNumber: window.damageNumber,
+            dynamicCrosshair: window.dynamicCrosshair,
+            hitEffects: window.hitEffects,
+            killNotice: window.killNotice,
+            killstreakEnhanced: window.killstreakEnhanced,
+            aiLabels: window.aiLabels
+        });
+        console.log('[MAIN] Message handlers initialized (early)');
+    }
+
     await window.game.init();
 
     // 设置玩家 ID
@@ -364,7 +365,7 @@ async function startGame(playerId) {
         });
     }
 
-    // 初始化消息处理器（必须在 window.game 创建后）
+    // 重新创建 messageHandlers，包含新初始化的依赖（hitEffects, aiLabels 等）
     if (typeof createMessageHandlers !== 'undefined') {
         window.messageHandlers = createMessageHandlers({
             game: window.game,
@@ -381,7 +382,7 @@ async function startGame(playerId) {
             killstreakEnhanced: window.killstreakEnhanced,
             aiLabels: window.aiLabels
         });
-        console.log('[MAIN] Message handlers initialized');
+        console.log('[MAIN] Message handlers re-initialized with full dependencies');
     }
 
     // 隐藏大厅

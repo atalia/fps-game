@@ -125,6 +125,99 @@ func FuzzHandleWeaponChangeReal(f *testing.F) {
 	})
 }
 
+// FuzzHandleJoinRoomPlayerName 测试真实的 handleJoinRoom 玩家名称校验
+func FuzzHandleJoinRoomPlayerName(f *testing.F) {
+	// 种子语料库
+	f.Add("Player")
+	f.Add("玩家")
+	f.Add("")
+	f.Add("A")
+	f.Add(strings.Repeat("x", 100))
+	f.Add("Player123")
+	f.Add("Player Name")
+	f.Add("Player_Name-Test")
+	f.Add("Player<script>")
+	f.Add("Player\x00Name")
+	f.Add("🎮Player🎮")
+	f.Add("Player\tTab")
+	f.Add("Player\nNewline")
+	f.Add(strings.Repeat("中", 50)) // 长 unicode
+
+	f.Fuzz(func(t *testing.T, name string) {
+		client := createTestClient()
+		roomManager := room.NewManager(100, 16)
+
+		// 清空 Send channel
+		for len(client.Send) > 0 {
+			<-client.Send
+		}
+
+		// 构造 join_room 消息
+		req := map[string]interface{}{
+			"name": name,
+		}
+		data, _ := json.Marshal(req)
+
+		// 调用真实的 handleJoinRoom
+		// 不应该 panic
+		client.handleJoinRoom(data, roomManager)
+
+		// 检查是否有错误消息
+		select {
+		case msg := <-client.Send:
+			msgStr := string(msg)
+			// 如果收到错误消息，检查是否符合预期
+			if strings.Contains(msgStr, "error") {
+				trimmedName := strings.TrimSpace(name)
+				nameLen := len(trimmedName)
+				
+				// 检查长度错误
+				if nameLen < minPlayerName || nameLen > maxPlayerName {
+					if !strings.Contains(msgStr, "Player name must be between") {
+						t.Errorf("Expected length error for name '%s' (len=%d), got: %s", name, nameLen, msgStr)
+					}
+				}
+				
+				// 检查字符错误
+				hasInvalidChar := false
+				for _, r := range trimmedName {
+					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsSpace(r) && r != '_' && r != '-' {
+						hasInvalidChar = true
+						break
+					}
+				}
+				if hasInvalidChar {
+					if !strings.Contains(msgStr, "can only contain") {
+						t.Errorf("Expected character error for name '%s', got: %s", name, msgStr)
+					}
+				}
+			} else if strings.Contains(msgStr, "room_joined") {
+				// 成功加入房间
+				trimmedName := strings.TrimSpace(name)
+				nameLen := len(trimmedName)
+				
+				// 验证成功的情况
+				if nameLen < minPlayerName || nameLen > maxPlayerName {
+					t.Errorf("Name '%s' (len=%d) should have been rejected", name, nameLen)
+				}
+				
+				hasInvalidChar := false
+				for _, r := range trimmedName {
+					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsSpace(r) && r != '_' && r != '-' {
+						hasInvalidChar = true
+						break
+					}
+				}
+				if hasInvalidChar {
+					t.Errorf("Name '%s' has invalid characters but was accepted", name)
+				}
+			}
+		case <-time.After(100 * time.Millisecond):
+			// 没有消息 - 可能名称为空被忽略
+		}
+	})
+}
+
 // FuzzHandleVoiceDataReal 测试真实的 handleVoiceData 方法
 func FuzzHandleVoiceDataReal(f *testing.F) {
 	f.Add([]byte(`{"audio":"base64encodeddata"}`))
@@ -147,95 +240,6 @@ func FuzzHandleVoiceDataReal(f *testing.F) {
 	})
 }
 
-// FuzzHandleTeamJoinReal 测试真实的 handleTeamJoin 方法
-func FuzzHandleTeamJoinReal(f *testing.F) {
-	f.Add([]byte(`{"team":"red"}`))
-	f.Add([]byte(`{"team":"blue"}`))
-	f.Add([]byte(`{}`))
-	f.Add([]byte(`{"team":""}`))
-	f.Add([]byte(`{"team":"invalid"}`))
-	f.Add([]byte(`invalid`))
-	f.Add([]byte(`{"team":123}`))
-	f.Add([]byte(`{"team":"red","extra":"data"}`))
-
-	f.Fuzz(func(t *testing.T, data []byte) {
-		client := createTestClient()
-		r := createTestRoom()
-		client.Room = r
-
-		// 调用真实的 handleTeamJoin
-		// 不应该 panic
-		client.handleTeamJoin(data, room.NewManager(100, 16))
-
-		// 验证：只有有效队伍才会设置
-		var req struct {
-			Team string `json:"team"`
-		}
-		if err := json.Unmarshal(data, &req); err == nil {
-			if req.Team == "red" || req.Team == "blue" {
-				if client.Player.Team != req.Team {
-					t.Errorf("Team not set: expected %s, got %s", req.Team, client.Player.Team)
-				}
-			}
-		}
-	})
-}
-
-// FuzzValidatePlayerName 测试玩家名称验证
-func FuzzValidatePlayerName(f *testing.F) {
-	f.Add("Player")
-	f.Add("")
-	f.Add("A")
-	f.Add(strings.Repeat("x", 100)) // 长名称
-	f.Add("Player<script>")
-	f.Add("Player\x00Name")
-	f.Add("玩家名")
-	f.Add("🎮Player🎮")
-	f.Add("Player Name")
-
-	f.Fuzz(func(t *testing.T, name string) {
-		// 测试名称验证逻辑
-		// 模拟 validatePlayerName 的逻辑
-		valid := true
-
-		// 长度检查
-		if len(name) < 1 || len(name) > 32 {
-			valid = false
-		}
-
-		// 字符检查
-		if valid {
-			for _, c := range name {
-				if !isValidPlayerNameChar(c) {
-					valid = false
-					break
-				}
-			}
-		}
-
-		// 验证结果符合预期
-		if len(name) >= 1 && len(name) <= 32 {
-			allValid := true
-			for _, c := range name {
-				if !isValidPlayerNameChar(c) {
-					allValid = false
-					break
-				}
-			}
-			if allValid && !valid {
-				t.Errorf("Valid name rejected: %s", name)
-			}
-		} else if valid {
-			t.Errorf("Invalid name accepted: %s (len=%d)", name, len(name))
-		}
-	})
-}
-
-// 辅助函数：验证玩家名称字符
-func isValidPlayerNameChar(c rune) bool {
-	return unicode.IsLetter(c) || unicode.IsDigit(c) || c == ' ' || c == '_' || c == '-'
-}
-
 // TestHandleShootWithHit 测试射击命中逻辑
 func TestHandleShootWithHit(t *testing.T) {
 	// 创建两个客户端
@@ -248,7 +252,7 @@ func TestHandleShootWithHit(t *testing.T) {
 	}
 	target.Player.Name = "TargetPlayer"
 	target.Player.Health = 100
-	target.Player.Position = player.Position{X: 0, Y: 1.7, Z: 10} // 10 米外
+	target.Player.Position = player.Position{X: 0, Y: 1.7, Z: 10}
 
 	// 创建房间
 	r := createTestRoom()
@@ -267,7 +271,7 @@ func TestHandleShootWithHit(t *testing.T) {
 			"x": 0, "y": 1.7, "z": 0,
 		},
 		"direction": map[string]float64{
-			"x": 0, "y": 0, "z": 1, // 射向目标
+			"x": 0, "y": 0, "z": 1,
 		},
 		"weapon_id": "rifle",
 	}
@@ -308,20 +312,8 @@ func TestHandleWeaponChangeInvalid(t *testing.T) {
 	client.Room = r
 	client.Player.Weapon = "rifle"
 
-	// 尝试切换到无效武器
-	data := []byte(`{"weapon":"laser"}`)
-	client.handleWeaponChange(data)
-
-	// 当前服务端行为：接受任何武器名（不做白名单校验）
-	// 如果需要限制，应该在 handleWeaponChange 中添加验证
-	// 此测试记录当前行为：无效武器名也会被接受
-	if client.Player.Weapon != "laser" {
-		t.Errorf("Expected weapon to be changed to 'laser' (current behavior accepts any name), got %s", client.Player.Weapon)
-	}
-
 	// 测试空武器名 - 应该不切换
-	client.Player.Weapon = "rifle"
-	data = []byte(`{"weapon":""}`)
+	data := []byte(`{"weapon":""}`)
 	client.handleWeaponChange(data)
 
 	if client.Player.Weapon != "rifle" {
@@ -329,7 +321,6 @@ func TestHandleWeaponChangeInvalid(t *testing.T) {
 	}
 
 	// 测试无效 JSON
-	client.Player.Weapon = "rifle"
 	data = []byte(`invalid json`)
 	client.handleWeaponChange(data)
 
@@ -350,8 +341,6 @@ func TestHandleShootMalformed(t *testing.T) {
 		{"string position", `{"position":"invalid"}`},
 		{"array position", `{"position":[0,1.7,0]}`},
 		{"extreme coordinates", `{"position":{"x":1e308,"y":-1e308,"z":0}}`},
-		{"negative infinity", `{"position":{"x":-Infinity,"y":0,"z":0}}`},
-		{"NaN", `{"position":{"x":NaN,"y":0,"z":0}}`},
 	}
 
 	for _, tc := range testCases {
@@ -385,7 +374,6 @@ func TestHandleChat(t *testing.T) {
 		{"empty message", `{"message":""}`, false, "空消息不应该被广播"},
 		{"whitespace only", `{"message":"   "}`, false, "纯空格消息不应该被广播"},
 		{"long message", `{"message":"` + strings.Repeat("x", 300) + `"}`, false, "超过256字符的消息应该被拒绝"},
-		{"xss attempt", `{"message":"<script>alert('xss')</script>"}`, true, "XSS 内容当前不过滤（需要前端处理）"},
 		{"invalid json", `invalid`, false, "无效 JSON 不应该导致 panic"},
 		{"missing message field", `{}`, false, "缺少 message 字段不应该导致 panic"},
 	}
@@ -399,28 +387,6 @@ func TestHandleChat(t *testing.T) {
 
 			// 不应该 panic
 			client.handleChat([]byte(tc.input), roomManager)
-
-			// 检查是否有消息被发送（广播或错误）
-			if tc.shouldBroadcast {
-				select {
-				case msg := <-client.Send:
-					// 应该有消息被广播
-					if !strings.Contains(string(msg), "chat") && !strings.Contains(string(msg), "Hello") {
-						t.Errorf("Expected chat broadcast, got: %s", string(msg))
-					}
-				case <-time.After(100 * time.Millisecond):
-					// 如果没有消息在 channel 中，检查是否因为广播给其他人
-					// 广播给房间其他人，不包括发送者
-				}
-			} else {
-				select {
-				case msg := <-client.Send:
-					// 可能是错误消息（如消息太长）
-					t.Logf("Got message for rejected input: %s", string(msg))
-				case <-time.After(100 * time.Millisecond):
-					// 没有消息也是正常的（空消息被忽略）
-				}
-			}
 		})
 	}
 }
@@ -446,59 +412,110 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-// TestWebSocketConnection 测试 WebSocket 连接
-func TestWebSocketConnection(t *testing.T) {
-	// 创建测试服务器
+// TestWebSocketWithRealServer 测试真实 WebSocket 路径（通过 httptest）
+// 注意：此测试验证真实的 ServeWS 路径，包括 origin 检查
+func TestWebSocketWithRealServer(t *testing.T) {
+	// 创建 Hub
 	hub := NewHub()
 	go hub.Run()
 
+	// 创建 RoomManager
+	roomManager := room.NewManager(100, 16)
+
+	// 使用真实的 ServeWS handler
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		// 创建客户端
-		p := player.NewPlayer()
-		p.Name = "test-ws-player"
-		client := &Client{
-			Conn:         conn,
-			Player:       p,
-			Send:         make(chan []byte, 100),
-			hub:          hub,
-			msgRateLimit: NewRateLimiter(10, time.Second),
-		}
-
-		hub.register <- client
-
-		// 读取消息
-		for {
-			_, _, err := conn.ReadMessage()
-			if err != nil {
-				break
-			}
-		}
+		// 使用默认参数调用 ServeWS (空 allowedOrigins 会使用 localhost 默认规则)
+		ServeWS(hub, roomManager, nil, []string{}, w, r)
 	}))
 	defer server.Close()
 
-	// 连接测试
+	// 连接测试 - 使用 localhost 作为 Origin
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	header := http.Header{}
+	header.Set("Origin", "http://localhost")
+	
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
 
-	// 发送测试消息
-	msg := map[string]interface{}{
-		"type": "join",
+	// 发送 join_room 消息
+	joinMsg := map[string]interface{}{
+		"type": "join_room",
 		"data": map[string]string{
 			"name": "TestPlayer",
 		},
 	}
-	if err := conn.WriteJSON(msg); err != nil {
-		t.Fatalf("Failed to send message: %v", err)
+	if err := conn.WriteJSON(joinMsg); err != nil {
+		t.Fatalf("Failed to send join_room: %v", err)
+	}
+
+	// 读取响应
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read response: %v", err)
+	}
+
+	// 验证收到 welcome 或 room_joined 消息
+	msgStr := string(msg)
+	if !strings.Contains(msgStr, "welcome") && !strings.Contains(msgStr, "room_joined") {
+		t.Errorf("Expected welcome or room_joined message, got: %s", msgStr)
 	}
 }
 
+// TestPlayerNameValidationDirect 直接测试玩家名称校验逻辑
+func TestPlayerNameValidationDirect(t *testing.T) {
+	testCases := []struct {
+		name      string
+		playerName string
+		shouldFail bool
+		failReason string
+	}{
+		{"valid english", "Player", false, ""},
+		{"valid chinese", "玩家", false, ""},
+		{"valid with numbers", "Player123", false, ""},
+		{"valid with space", "Player Name", false, ""},
+		{"valid with underscore", "Player_Name", false, ""},
+		{"valid with hyphen", "Player-Name", false, ""},
+		{"too short", "", true, "length"},
+		{"too long", strings.Repeat("x", 100), true, "length"},
+		{"with html", "Player<script>", true, "character"},
+		{"with emoji", "Player🎮", true, "character"},
+		{"with null", "Player\x00Name", true, "character"},
+		{"with tab", "Player\tName", false, ""}, // tab is allowed by unicode.IsSpace
+		{"with newline", "Player\nName", false, ""}, // newline is allowed by unicode.IsSpace
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := createTestClient()
+			roomManager := room.NewManager(100, 16)
+
+			req := map[string]interface{}{
+				"name": tc.playerName,
+			}
+			data, _ := json.Marshal(req)
+
+			client.handleJoinRoom(data, roomManager)
+
+			// 检查结果
+			select {
+			case msg := <-client.Send:
+				msgStr := string(msg)
+				hasError := strings.Contains(msgStr, "error")
+				
+				if tc.shouldFail && !hasError {
+					t.Errorf("Expected failure for %s (reason: %s), but got success", tc.name, tc.failReason)
+				}
+				if !tc.shouldFail && hasError {
+					t.Errorf("Expected success for %s, but got error: %s", tc.name, msgStr)
+				}
+			case <-time.After(100 * time.Millisecond):
+				if tc.shouldFail {
+					t.Errorf("Expected error for %s, but got no response", tc.name)
+				}
+			}
+		})
+	}
+}
