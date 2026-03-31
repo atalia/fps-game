@@ -1,279 +1,272 @@
-// handlers.test.js - 消息处理链测试
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+// handlers.test.js - 消息处理链测试（测试真实的 message-handlers.js）
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createMessageHandlers } from '../message-handlers.js'
 
-// Mock 全局对象
+// Mock 依赖
 const mockRenderer = {
   addPlayer: vi.fn(),
   removePlayer: vi.fn(),
-  updatePlayerPosition: vi.fn(),
+  updatePlayer: vi.fn(),
   addProjectile: vi.fn(),
-  clearPlayers: vi.fn(),
-  scene: { add: vi.fn(), remove: vi.fn() }
+  clearPlayers: vi.fn()
 }
 
 const mockUIManager = {
   updateHealth: vi.fn(),
   updateAmmo: vi.fn(),
-  updatePlayerList: vi.fn(),
+  updateKills: vi.fn(),
+  updateDeaths: vi.fn(),
   showMessage: vi.fn(),
   addKillFeed: vi.fn(),
-  showDamageIndicator: vi.fn()
+  showDeathScreen: vi.fn(),
+  hideDeathScreen: vi.fn()
 }
 
 const mockAudioManager = {
   playShoot: vi.fn(),
   playHit: vi.fn(),
-  playKill: vi.fn(),
-  playReload: vi.fn()
+  playKill: vi.fn()
 }
 
-const mockNetwork = {
-  send: vi.fn(),
-  on: vi.fn(),
-  playerId: 'test-player-123',
-  connected: true
+const mockScreenEffects = {
+  flashDamage: vi.fn(),
+  flashKill: vi.fn()
+}
+
+const mockHitIndicator = {
+  show: vi.fn()
 }
 
 const mockEffectsSystem = {
-  addEffect: vi.fn(),
-  showHitMarker: vi.fn(),
-  showDamageNumber: vi.fn()
-}
-
-// 模拟游戏状态
-const createMockGameState = () => ({
-  player: {
-    id: 'test-player-123',
-    health: 100,
-    ammo: 30,
-    weapon: 'rifle',
-    kills: 0,
-    deaths: 0
-  },
-  players: new Map([
-    ['test-player-123', { id: 'test-player-123', name: 'TestPlayer', health: 100 }]
-  ])
-})
-
-// 设置全局 mock
-beforeEach(() => {
-  // 每次测试创建新的游戏状态
-  const freshGameState = createMockGameState()
-  
-  vi.stubGlobal('window', {
-    renderer: mockRenderer,
-    uiManager: mockUIManager,
-    audioManager: mockAudioManager,
-    network: mockNetwork,
-    effectsSystem: mockEffectsSystem,
-    game: freshGameState,
-    performanceMonitor: { update: vi.fn() }
-  })
-  
-  // 重置所有 mock
-  vi.clearAllMocks()
-})
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
-
-// 消息处理器
-function createMessageHandlers() {
-  return {
-    handlePlayerDamaged: (data) => {
-      const window = globalThis.window
-      
-      // 更新血量
-      if (data.player_id === window.game.player.id) {
-        window.game.player.health = data.remaining_health
-        window.uiManager.updateHealth(data.remaining_health)
-        
-        // 显示受伤指示器
-        if (data.attacker_position) {
-          window.uiManager.showDamageIndicator(data.attacker_position)
-        }
-      }
-      
-      // 更新玩家列表中的血量
-      const player = window.game.players.get(data.player_id)
-      if (player) {
-        player.health = data.remaining_health
-      }
-    },
-    
-    handlePlayerShot: (data) => {
-      const window = globalThis.window
-      
-      // 播放射击音效
-      const weaponId = data.weapon_id || 'rifle'
-      window.audioManager.playShoot(weaponId)
-      
-      // 添加弹道效果
-      if (data.position) {
-        const direction = data.direction || { x: 0, y: 0, z: -1 }
-        window.renderer.addProjectile(data.position, direction)
-      }
-    },
-    
-    handleWeaponChanged: (data) => {
-      const window = globalThis.window
-      
-      // 更新武器状态
-      if (data.player_id === window.game.player.id) {
-        window.game.player.weapon = data.weapon
-        window.uiManager.showMessage(`切换到 ${data.weapon}`)
-      }
-      
-      // 更新玩家列表
-      const player = window.game.players.get(data.player_id)
-      if (player) {
-        player.weapon = data.weapon
-      }
-    },
-    
-    handlePlayerKilled: (data) => {
-      const window = globalThis.window
-      
-      // 如果是自己死亡
-      if (data.victim_id === window.game.player.id) {
-        window.game.player.deaths++
-        window.uiManager.showMessage('你被击杀了！')
-        
-        // 更新击杀者的击杀数
-        if (data.killer_id === window.game.player.id) {
-          // 自杀不计击杀
-        }
-      }
-      
-      // 如果自己击杀了敌人
-      if (data.killer_id === window.game.player.id && data.victim_id !== window.game.player.id) {
-        window.game.player.kills++
-        window.audioManager.playKill()
-        window.uiManager.addKillFeed(`你击杀了敌人`)
-      }
-      
-      // 更新击杀信息
-      window.uiManager.addKillFeed(`${data.victim_id} 被 ${data.killer_id} 击杀`)
-    },
-    
-    handlePlayerJoined: (data) => {
-      const window = globalThis.window
-      
-      // 添加到玩家列表
-      window.game.players.set(data.player_id, {
-        id: data.player_id,
-        name: data.name,
-        health: data.health || 100,
-        position: data.position,
-        is_bot: data.is_bot || false
-      })
-      
-      // 渲染器添加玩家模型
-      window.renderer.addPlayer(data.player_id, data.position || { x: 0, y: 0, z: 0 }, data.is_bot || false)
-      
-      // 显示加入消息
-      window.uiManager.addKillFeed(`${data.name} 加入了游戏`)
-    }
+  core: {
+    createHitBurst: vi.fn(),
+    createBloodSplatter: vi.fn()
   }
 }
 
-// 测试
+const mockDamageNumber = {
+  show: vi.fn()
+}
+
+const mockDynamicCrosshair = {
+  showHit: vi.fn()
+}
+
+const mockKillNotice = {
+  show: vi.fn()
+}
+
+const mockKillstreakEnhanced = {
+  addKill: vi.fn()
+}
+
+const mockAILabels = {
+  createLabel: vi.fn(),
+  removeLabel: vi.fn()
+}
+
+// 创建游戏状态
+function createGameState() {
+  return {
+    player: {
+      id: 'test-player-123',
+      health: 100,
+      ammo: 30,
+      weapon: 'rifle',
+      kills: 0,
+      deaths: 0
+    },
+    players: new Map([
+      ['test-player-123', { id: 'test-player-123', name: 'TestPlayer', health: 100, weapon: 'rifle' }]
+    ])
+  }
+}
+
+// 创建消息处理器
+function createHandlers(gameState) {
+  return createMessageHandlers({
+    game: gameState,
+    renderer: mockRenderer,
+    uiManager: mockUIManager,
+    audioManager: mockAudioManager,
+    screenEffects: mockScreenEffects,
+    hitIndicator: mockHitIndicator,
+    effectsSystem: mockEffectsSystem,
+    damageNumber: mockDamageNumber,
+    dynamicCrosshair: mockDynamicCrosshair,
+    killNotice: mockKillNotice,
+    killstreakEnhanced: mockKillstreakEnhanced,
+    aiLabels: mockAILabels
+  })
+}
+
 describe('消息处理链测试', () => {
-  const handlers = createMessageHandlers()
+  let gameState
+  let handlers
   
+  beforeEach(() => {
+    // 重置所有 mock
+    vi.clearAllMocks()
+    
+    // 创建新的游戏状态
+    gameState = createGameState()
+    
+    // 创建新的消息处理器
+    handlers = createHandlers(gameState)
+  })
+
   describe('player_damaged 处理链', () => {
-    it('更新本地玩家血量并调用 UI', () => {
+    it('自己受伤：更新血量 + 闪烁屏幕 + 显示受击指示器', () => {
       const data = {
         player_id: 'test-player-123',
         attacker_id: 'enemy-456',
         attacker_position: { x: 10, y: 0, z: 20 },
         damage: 25,
-        remaining_health: 75
+        remaining_health: 75,
+        hitbox: 'body'
       }
       
       handlers.handlePlayerDamaged(data)
       
-      expect(window.game.player.health).toBe(75)
+      // 验证调用真实代码路径
+      expect(gameState.player.health).toBe(75)
       expect(mockUIManager.updateHealth).toHaveBeenCalledWith(75)
-      expect(mockUIManager.showDamageIndicator).toHaveBeenCalledWith({ x: 10, y: 0, z: 20 })
+      expect(mockScreenEffects.flashDamage).toHaveBeenCalled()
+      expect(mockHitIndicator.show).toHaveBeenCalledWith({ x: 10, y: 0, z: 20 }, 25)
     })
     
-    it('不更新其他玩家的 UI', () => {
+    it('自己击中敌人：播放命中效果', () => {
+      gameState.player.id = 'shooter-123'
+      
       const data = {
-        player_id: 'other-player',
-        attacker_id: 'test-player-123',
+        player_id: 'enemy-456',
+        attacker_id: 'shooter-123',
         damage: 30,
-        remaining_health: 70
+        remaining_health: 70,
+        position: { x: 5, y: 1, z: 10 },
+        hitbox: 'head'
       }
       
       handlers.handlePlayerDamaged(data)
       
-      // 不应该更新本地玩家血量
-      expect(window.game.player.health).toBe(100)
-      expect(mockUIManager.updateHealth).not.toHaveBeenCalled()
+      // 验证命中效果链
+      expect(mockEffectsSystem.core.createHitBurst).toHaveBeenCalledWith(
+        { x: 5, y: 1, z: 10 },
+        true  // isHeadshot
+      )
+      expect(mockEffectsSystem.core.createBloodSplatter).toHaveBeenCalled()
+      expect(mockDamageNumber.show).toHaveBeenCalled()
+      expect(mockDynamicCrosshair.showHit).toHaveBeenCalled()
+      expect(mockAudioManager.playHit).toHaveBeenCalled()
     })
     
-    it('更新玩家列表中的血量', () => {
-      window.game.players.set('other-player', { id: 'other-player', health: 100 })
-      
+    it('其他玩家受伤：不更新自己 UI', () => {
       const data = {
         player_id: 'other-player',
-        attacker_id: 'test-player-123',
-        damage: 40,
-        remaining_health: 60
+        attacker_id: 'another-player',
+        damage: 20,
+        remaining_health: 80
       }
       
       handlers.handlePlayerDamaged(data)
       
-      expect(window.game.players.get('other-player').health).toBe(60)
+      // 不应该更新自己状态
+      expect(gameState.player.health).toBe(100)
+      expect(mockUIManager.updateHealth).not.toHaveBeenCalled()
+      expect(mockScreenEffects.flashDamage).not.toHaveBeenCalled()
     })
   })
-  
+
   describe('player_shot 处理链', () => {
-    it('播放正确的武器音效', () => {
+    it('播放武器音效 + 添加弹道', () => {
       const data = {
         player_id: 'enemy-456',
         weapon_id: 'sniper',
-        position: { x: 0, y: 1.7, z: 0 }
-      }
-      
-      handlers.handlePlayerShot(data)
-      
-      expect(mockAudioManager.playShoot).toHaveBeenCalledWith('sniper')
-    })
-    
-    it('添加弹道效果', () => {
-      const data = {
-        player_id: 'enemy-456',
-        weapon_id: 'rifle',
-        position: { x: 10, y: 1.7, z: 20 },
+        position: { x: 0, y: 1.7, z: 0 },
         direction: { x: 0, y: 0, z: -1 }
       }
       
       handlers.handlePlayerShot(data)
       
+      expect(mockAudioManager.playShoot).toHaveBeenCalledWith('sniper')
       expect(mockRenderer.addProjectile).toHaveBeenCalledWith(
-        { x: 10, y: 1.7, z: 20 },
+        { x: 0, y: 1.7, z: 0 },
         { x: 0, y: 0, z: -1 }
       )
     })
     
-    it('使用默认值当缺少字段时', () => {
+    it('使用默认值处理缺失字段', () => {
       const data = {
         player_id: 'enemy-456',
-        position: { x: 0, y: 0, z: 0 }
+        position: { x: 10, y: 0, z: 20 }
       }
       
       handlers.handlePlayerShot(data)
       
       expect(mockAudioManager.playShoot).toHaveBeenCalledWith('rifle')
-      expect(mockRenderer.addProjectile).toHaveBeenCalled()
+      expect(mockRenderer.addProjectile).toHaveBeenCalledWith(
+        { x: 10, y: 0, z: 20 },
+        { x: 0, y: 0, z: -1 }  // 默认方向
+      )
     })
   })
-  
+
+  describe('player_killed 处理链', () => {
+    it('自己击杀敌人：更新击杀数 + 播放效果', () => {
+      gameState.player.id = 'killer-123'
+      gameState.player.kills = 5
+      
+      const data = {
+        victim_id: 'enemy-456',
+        killer_id: 'killer-123',
+        is_headshot: true
+      }
+      
+      handlers.handlePlayerKilled(data)
+      
+      expect(gameState.player.kills).toBe(6)
+      expect(mockUIManager.updateKills).toHaveBeenCalledWith(6)
+      expect(mockUIManager.addKillFeed).toHaveBeenCalledWith('击杀 enemy-456 (爆头!)')
+      expect(mockAudioManager.playKill).toHaveBeenCalled()
+      expect(mockKillNotice.show).toHaveBeenCalled()
+      expect(mockKillstreakEnhanced.addKill).toHaveBeenCalled()
+      expect(mockScreenEffects.flashKill).toHaveBeenCalled()
+    })
+    
+    it('自己死亡：更新死亡数 + 显示死亡屏幕', () => {
+      gameState.player.id = 'victim-456'
+      gameState.player.deaths = 2
+      
+      const data = {
+        victim_id: 'victim-456',
+        killer_id: 'enemy-123'
+      }
+      
+      handlers.handlePlayerKilled(data)
+      
+      expect(gameState.player.deaths).toBe(3)
+      expect(mockUIManager.updateDeaths).toHaveBeenCalledWith(3)
+      expect(mockUIManager.showDeathScreen).toHaveBeenCalled()
+    })
+    
+    it('无关击杀：只更新击杀信息', () => {
+      const data = {
+        victim_id: 'player-1',
+        killer_id: 'player-2'
+      }
+      
+      handlers.handlePlayerKilled(data)
+      
+      // 不应该更新自己的击杀/死亡数
+      expect(gameState.player.kills).toBe(0)
+      expect(gameState.player.deaths).toBe(0)
+      expect(mockUIManager.updateKills).not.toHaveBeenCalled()
+      expect(mockUIManager.updateDeaths).not.toHaveBeenCalled()
+    })
+  })
+
   describe('weapon_changed 处理链', () => {
-    it('更新本地玩家武器状态', () => {
+    it('自己切换武器：更新状态 + 显示消息', () => {
       const data = {
         player_id: 'test-player-123',
         weapon: 'shotgun'
@@ -281,70 +274,28 @@ describe('消息处理链测试', () => {
       
       handlers.handleWeaponChanged(data)
       
-      expect(window.game.player.weapon).toBe('shotgun')
+      expect(gameState.player.weapon).toBe('shotgun')
       expect(mockUIManager.showMessage).toHaveBeenCalledWith('切换到 shotgun')
     })
     
-    it('更新玩家列表中的武器', () => {
-      window.game.players.set('other-player', { id: 'other-player', weapon: 'rifle' })
+    it('其他玩家切换武器：更新玩家列表', () => {
+      gameState.players.set('other-player', { id: 'other-player', weapon: 'rifle' })
       
       const data = {
         player_id: 'other-player',
-        weapon: 'pistol'
+        weapon: 'sniper'
       }
       
       handlers.handleWeaponChanged(data)
       
-      expect(window.game.players.get('other-player').weapon).toBe('pistol')
+      expect(gameState.players.get('other-player').weapon).toBe('sniper')
+      // 不应该显示消息给自己
+      expect(mockUIManager.showMessage).not.toHaveBeenCalled()
     })
   })
-  
-  describe('player_killed 处理链', () => {
-    it('处理自己被击杀', () => {
-      const data = {
-        victim_id: 'test-player-123',
-        killer_id: 'enemy-456',
-        weapon_id: 'rifle',
-        is_headshot: true
-      }
-      
-      handlers.handlePlayerKilled(data)
-      
-      expect(window.game.player.deaths).toBe(1)
-      expect(mockUIManager.showMessage).toHaveBeenCalledWith('你被击杀了！')
-    })
-    
-    it('处理自己击杀敌人', () => {
-      window.game.player.kills = 0
-      
-      const data = {
-        victim_id: 'enemy-456',
-        killer_id: 'test-player-123',
-        weapon_id: 'sniper',
-        is_headshot: true
-      }
-      
-      handlers.handlePlayerKilled(data)
-      
-      expect(window.game.player.kills).toBe(1)
-      expect(mockAudioManager.playKill).toHaveBeenCalled()
-    })
-    
-    it('显示击杀信息', () => {
-      const data = {
-        victim_id: 'player-1',
-        killer_id: 'player-2',
-        weapon_id: 'pistol'
-      }
-      
-      handlers.handlePlayerKilled(data)
-      
-      expect(mockUIManager.addKillFeed).toHaveBeenCalled()
-    })
-  })
-  
+
   describe('player_joined 处理链', () => {
-    it('添加新玩家到列表和渲染器', () => {
+    it('普通玩家加入：添加到渲染器 + 显示消息', () => {
       const data = {
         player_id: 'new-player-789',
         name: 'NewPlayer',
@@ -355,31 +306,72 @@ describe('消息处理链测试', () => {
       
       handlers.handlePlayerJoined(data)
       
-      expect(window.game.players.has('new-player-789')).toBe(true)
       expect(mockRenderer.addPlayer).toHaveBeenCalledWith(
         'new-player-789',
         { x: 15, y: 0, z: 25 },
         false
       )
       expect(mockUIManager.addKillFeed).toHaveBeenCalledWith('NewPlayer 加入了游戏')
+      expect(gameState.players.has('new-player-789')).toBe(true)
     })
     
-    it('正确处理机器人加入', () => {
+    it('机器人加入：添加 AI 标签', () => {
       const data = {
         player_id: 'bot-123',
         name: 'Bot',
         position: { x: 0, y: 0, z: 0 },
         is_bot: true,
-        difficulty: 'normal'
+        difficulty: 'hard'
       }
       
       handlers.handlePlayerJoined(data)
       
-      expect(window.game.players.get('bot-123').is_bot).toBe(true)
       expect(mockRenderer.addPlayer).toHaveBeenCalledWith(
         'bot-123',
         { x: 0, y: 0, z: 0 },
-        true  // is_bot
+        true
+      )
+      expect(mockAILabels.createLabel).toHaveBeenCalledWith(
+        'bot-123',
+        'Bot',
+        'hard'
+      )
+      expect(gameState.players.get('bot-123').is_bot).toBe(true)
+    })
+  })
+
+  describe('player_respawned 处理链', () => {
+    it('自己重生：更新状态 + 隐藏死亡屏幕', () => {
+      const data = {
+        player_id: 'test-player-123',
+        health: 100,
+        position: { x: 50, y: 0, z: 50 }
+      }
+      
+      handlers.handlePlayerRespawned(data)
+      
+      expect(gameState.player.health).toBe(100)
+      expect(gameState.player.position).toEqual({ x: 50, y: 0, z: 50 })
+      expect(mockUIManager.updateHealth).toHaveBeenCalledWith(100)
+      expect(mockUIManager.hideDeathScreen).toHaveBeenCalled()
+      expect(mockRenderer.updatePlayer).toHaveBeenCalled()
+    })
+    
+    it('其他玩家重生：只更新位置', () => {
+      const data = {
+        player_id: 'other-player',
+        health: 100,
+        position: { x: 20, y: 0, z: 30 }
+      }
+      
+      handlers.handlePlayerRespawned(data)
+      
+      // 不应该更新自己状态
+      expect(mockUIManager.hideDeathScreen).not.toHaveBeenCalled()
+      expect(mockRenderer.updatePlayer).toHaveBeenCalledWith(
+        'other-player',
+        { x: 20, y: 0, z: 30 },
+        0
       )
     })
   })

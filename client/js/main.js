@@ -138,6 +138,25 @@ async function init() {
 }
 
 function setupNetworkHandlers() {
+    // 初始化消息处理器（使用 main.js 中的真实依赖）
+    if (typeof createMessageHandlers !== 'undefined') {
+        window.messageHandlers = createMessageHandlers({
+            game: window.game,
+            renderer: window.renderer,
+            uiManager: window.uiManager,
+            audioManager: window.audioManager,
+            screenEffects: window.screenEffects,
+            hitIndicator: window.hitIndicator,
+            effectsSystem: window.effectsSystem,
+            damageNumber: window.damageNumber,
+            dynamicCrosshair: window.dynamicCrosshair,
+            hitEffects: window.hitEffects,
+            killNotice: window.killNotice,
+            killstreakEnhanced: window.killstreakEnhanced,
+            aiLabels: window.aiLabels
+        });
+    }
+    
     // 辅助函数：刷新玩家列表 UI
     function refreshPlayerList() {
         if (!window.game || !window.game.players) return
@@ -277,117 +296,30 @@ function setupNetworkHandlers() {
 
     // 玩家射击
     window.network.on('player_shot', (data) => {
-        // 使用正确的武器音效
-        const weaponId = data.weapon_id || 'rifle';
-        window.audioManager.playShoot(weaponId);
-
-        // 使用服务端提供的方向，如果没有则使用默认方向
-        if (data.position) {
-            const direction = data.direction || { x: 0, y: 0, z: -1 };
-            window.renderer.addProjectile(data.position, direction);
-        }
+        window.messageHandlers.handlePlayerShot(data);
     });
 
     // 玩家受伤
     window.network.on('player_damaged', (data) => {
         console.log(`Player ${data.player_id} took ${data.damage} damage (${data.hitbox})`);
-
-        // 更新血量
-        if (data.player_id === window.game?.player?.id) {
-            window.game.player.health = data.remaining_health;
-            window.uiManager.updateHealth(data.remaining_health);
-
-            // 屏幕闪红 + 受击指示
-            if (window.screenEffects) {
-                window.screenEffects.flashDamage();
-            }
-            if (window.hitIndicator && data.attacker_position) {
-                window.hitIndicator.show(data.attacker_position, data.damage);
-            }
-        } else {
-            // 显示命中标记 (射击者视角)
-            if (data.attacker_id === window.game?.player?.id) {
-                // 命中粒子效果
-                if (window.effectsSystem && window.effectsSystem.core) {
-                    window.effectsSystem.core.createHitBurst(
-                        data.position,
-                        data.hitbox === 'head'
-                    );
-                }
-                // 血迹效果
-                if (window.effectsSystem && window.effectsSystem.core) {
-                    window.effectsSystem.core.createBloodSplatter(data.position);
-                }
-                // 伤害数字
-                if (window.damageNumber) {
-                    window.damageNumber.show(data.damage, data.position, {
-                        isHeadshot: data.hitbox === 'head'
-                    });
-                }
-                // 准星命中反馈
-                if (window.dynamicCrosshair) {
-                    window.dynamicCrosshair.showHit();
-                }
-                // 命中音效
-                if (window.audioManager) {
-                    window.audioManager.playHit();
-                }
-                // 兼容旧系统
-                if (window.hitEffects) {
-                    window.hitEffects.showHitMarker(
-                        new THREE.Vector3(data.position.x, data.position.y, data.position.z),
-                        data.hitbox,
-                        data.damage
-                    );
-                }
-            }
-        }
+        window.messageHandlers.handlePlayerDamaged(data);
     });
 
     // 玩家死亡
     window.network.on('player_killed', (data) => {
         console.log(`Player ${data.victim_id} killed by ${data.killer_id}`);
-
-        // 更新击杀计数
-        if (data.killer_id === window.game?.player?.id) {
-            window.game.player.kills++;
-            window.uiManager.updateKills(window.game.player.kills);
-            window.uiManager.addKillFeed(`击杀 ${data.victim_id}${data.is_headshot ? ' (爆头!)' : ''}`);
-            
-            // 击杀音效
-            if (window.audioManager) {
-                window.audioManager.playKill();
-            }
-            
-            // 新特效系统
-            if (window.killNotice) {
-                window.killNotice.show(data.victim_id, { isHeadshot: data.is_headshot });
-            }
-            if (window.killstreakEnhanced) {
-                window.killstreakEnhanced.addKill();
-            }
-            if (window.screenEffects) {
-                window.screenEffects.flashKill();
-            }
-        }
-
-        if (data.victim_id === window.game?.player?.id) {
-            window.game.player.deaths++;
-            window.uiManager.updateDeaths(window.game.player.deaths);
-            window.uiManager.showDeathScreen();
-        }
+        window.messageHandlers.handlePlayerKilled(data);
     });
 
     // 玩家重生
     window.network.on('player_respawned', (data) => {
-        if (data.player_id === window.game?.player?.id) {
-            window.game.player.health = data.health;
-            window.game.player.position = data.position;
-            window.uiManager.updateHealth(data.health);
-            window.uiManager.hideDeathScreen();
-        }
+        window.messageHandlers.handlePlayerRespawned(data);
+    });
 
-        window.renderer.updatePlayer(data.player_id, data.position, 0);
+    // 武器切换
+    window.network.on('weapon_changed', (data) => {
+        console.log(`Player ${data.player_id} switched to ${data.weapon}`);
+        window.messageHandlers.handleWeaponChanged(data);
     });
 
     // 聊天消息
