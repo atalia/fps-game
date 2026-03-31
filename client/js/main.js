@@ -138,24 +138,7 @@ async function init() {
 }
 
 function setupNetworkHandlers() {
-    // 初始化消息处理器（使用 main.js 中的真实依赖）
-    if (typeof createMessageHandlers !== 'undefined') {
-        window.messageHandlers = createMessageHandlers({
-            game: window.game,
-            renderer: window.renderer,
-            uiManager: window.uiManager,
-            audioManager: window.audioManager,
-            screenEffects: window.screenEffects,
-            hitIndicator: window.hitIndicator,
-            effectsSystem: window.effectsSystem,
-            damageNumber: window.damageNumber,
-            dynamicCrosshair: window.dynamicCrosshair,
-            hitEffects: window.hitEffects,
-            killNotice: window.killNotice,
-            killstreakEnhanced: window.killstreakEnhanced,
-            aiLabels: window.aiLabels
-        });
-    }
+    // 注意：messageHandlers 在 startGame() 中初始化，因为那时 window.game 才创建
     
     // 辅助函数：刷新玩家列表 UI
     function refreshPlayerList() {
@@ -296,30 +279,40 @@ function setupNetworkHandlers() {
 
     // 玩家射击
     window.network.on('player_shot', (data) => {
-        window.messageHandlers.handlePlayerShot(data);
+        if (window.messageHandlers) {
+            window.messageHandlers.handlePlayerShot(data);
+        }
     });
 
     // 玩家受伤
     window.network.on('player_damaged', (data) => {
         console.log(`Player ${data.player_id} took ${data.damage} damage (${data.hitbox})`);
-        window.messageHandlers.handlePlayerDamaged(data);
+        if (window.messageHandlers) {
+            window.messageHandlers.handlePlayerDamaged(data);
+        }
     });
 
     // 玩家死亡
     window.network.on('player_killed', (data) => {
         console.log(`Player ${data.victim_id} killed by ${data.killer_id}`);
-        window.messageHandlers.handlePlayerKilled(data);
+        if (window.messageHandlers) {
+            window.messageHandlers.handlePlayerKilled(data);
+        }
     });
 
     // 玩家重生
     window.network.on('player_respawned', (data) => {
-        window.messageHandlers.handlePlayerRespawned(data);
+        if (window.messageHandlers) {
+            window.messageHandlers.handlePlayerRespawned(data);
+        }
     });
 
     // 武器切换
     window.network.on('weapon_changed', (data) => {
         console.log(`Player ${data.player_id} switched to ${data.weapon}`);
-        window.messageHandlers.handleWeaponChanged(data);
+        if (window.messageHandlers) {
+            window.messageHandlers.handleWeaponChanged(data);
+        }
     });
 
     // 聊天消息
@@ -369,6 +362,26 @@ async function startGame(playerId) {
         }).catch(err => {
             console.warn('[MAIN] Voice system init failed:', err);
         });
+    }
+
+    // 初始化消息处理器（必须在 window.game 创建后）
+    if (typeof createMessageHandlers !== 'undefined') {
+        window.messageHandlers = createMessageHandlers({
+            game: window.game,
+            renderer: window.renderer,
+            uiManager: window.uiManager,
+            audioManager: window.audioManager,
+            screenEffects: window.screenEffects,
+            hitIndicator: window.hitIndicator,
+            effectsSystem: window.effectsSystem,
+            damageNumber: window.damageNumber,
+            dynamicCrosshair: window.dynamicCrosshair,
+            hitEffects: window.hitEffects,
+            killNotice: window.killNotice,
+            killstreakEnhanced: window.killstreakEnhanced,
+            aiLabels: window.aiLabels
+        });
+        console.log('[MAIN] Message handlers initialized');
     }
 
     // 隐藏大厅

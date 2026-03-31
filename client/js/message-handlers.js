@@ -1,12 +1,11 @@
 // message-handlers.js - 可测试的消息处理函数（从 main.js 提取）
+// 注意：不使用 ES6 export，使用全局函数供 main.js 调用
 
 /**
- * 这些函数从 main.js 的 network.on 回调中提取，
- * 用于单元测试。main.js 中的回调调用这些函数。
+ * 创建消息处理器
+ * 必须在 window.game 创建后调用（即进房后）
  */
-
-// 依赖注入容器
-export function createMessageHandlers(deps) {
+function createMessageHandlers(deps) {
   const {
     game,
     renderer,
@@ -26,7 +25,7 @@ export function createMessageHandlers(deps) {
   return {
     /**
      * 处理 player_damaged 消息
-     * main.js line 292-328
+     * 对应 main.js line 292-328 的真实逻辑
      */
     handlePlayerDamaged(data) {
       // 更新血量
@@ -64,13 +63,22 @@ export function createMessageHandlers(deps) {
           if (audioManager) {
             audioManager.playHit()
           }
+          // 兼容旧系统 - hitEffects
+          if (hitEffects && data.position) {
+            // 使用 THREE.Vector3 如果可用，否则直接传对象
+            let pos = data.position
+            if (typeof THREE !== 'undefined' && THREE !== null && THREE.Vector3) {
+              pos = new THREE.Vector3(data.position.x, data.position.y, data.position.z)
+            }
+            hitEffects.showHitMarker(pos, data.hitbox, data.damage)
+          }
         }
       }
     },
 
     /**
      * 处理 player_shot 消息
-     * main.js line 279-289
+     * 对应 main.js line 279-289
      */
     handlePlayerShot(data) {
       // 使用正确的武器音效
@@ -86,7 +94,7 @@ export function createMessageHandlers(deps) {
 
     /**
      * 处理 player_killed 消息
-     * main.js line 331-358
+     * 对应 main.js line 331-358
      */
     handlePlayerKilled(data) {
       // 更新击杀计数
@@ -121,7 +129,7 @@ export function createMessageHandlers(deps) {
 
     /**
      * 处理 weapon_changed 消息
-     * main.js line 387-401
+     * 对应 main.js line 387-401
      */
     handleWeaponChanged(data) {
       // 更新本地玩家武器状态
@@ -141,7 +149,7 @@ export function createMessageHandlers(deps) {
 
     /**
      * 处理 player_joined 消息
-     * main.js line 186-217
+     * 对应 main.js line 186-217
      */
     handlePlayerJoined(data) {
       const position = data.position || { x: 0, y: 0, z: 0 }
@@ -171,7 +179,7 @@ export function createMessageHandlers(deps) {
 
     /**
      * 处理 player_respawned 消息
-     * main.js line 361-372
+     * 对应 main.js line 361-372
      */
     handlePlayerRespawned(data) {
       if (data.player_id === game?.player?.id) {
@@ -184,4 +192,9 @@ export function createMessageHandlers(deps) {
       renderer.updatePlayer(data.player_id, data.position, 0)
     }
   }
+}
+
+// 暴露给测试使用（仅在有全局 window 对象时）
+if (typeof window !== 'undefined') {
+  window.createMessageHandlers = createMessageHandlers
 }

@@ -1,6 +1,30 @@
 // handlers.test.js - 消息处理链测试（测试真实的 message-handlers.js）
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createMessageHandlers } from '../message-handlers.js'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+// 加载 message-handlers.js 内容
+const messageHandlersCode = readFileSync(
+  join(__dirname, '../message-handlers.js'),
+  'utf8'
+)
+
+// 创建一个简单的上下文来执行代码
+function loadMessageHandlers() {
+  const context = {
+    window: {},
+    THREE: null
+  }
+  
+  // 在上下文中执行代码
+  const fn = new Function('window', 'THREE', messageHandlersCode)
+  fn(context.window, context.THREE)
+  
+  return context.window.createMessageHandlers
+}
+
+// 获取 createMessageHandlers 函数
+const createMessageHandlers = loadMessageHandlers()
 
 // Mock 依赖
 const mockRenderer = {
@@ -65,6 +89,10 @@ const mockAILabels = {
   removeLabel: vi.fn()
 }
 
+const mockHitEffects = {
+  showHitMarker: vi.fn()
+}
+
 // 创建游戏状态
 function createGameState() {
   return {
@@ -94,6 +122,7 @@ function createHandlers(gameState) {
     effectsSystem: mockEffectsSystem,
     damageNumber: mockDamageNumber,
     dynamicCrosshair: mockDynamicCrosshair,
+    hitEffects: mockHitEffects,
     killNotice: mockKillNotice,
     killstreakEnhanced: mockKillstreakEnhanced,
     aiLabels: mockAILabels
@@ -135,7 +164,7 @@ describe('消息处理链测试', () => {
       expect(mockHitIndicator.show).toHaveBeenCalledWith({ x: 10, y: 0, z: 20 }, 25)
     })
     
-    it('自己击中敌人：播放命中效果', () => {
+    it('自己击中敌人：播放命中效果 + 调用旧版 hitEffects', () => {
       gameState.player.id = 'shooter-123'
       
       const data = {
@@ -158,6 +187,8 @@ describe('消息处理链测试', () => {
       expect(mockDamageNumber.show).toHaveBeenCalled()
       expect(mockDynamicCrosshair.showHit).toHaveBeenCalled()
       expect(mockAudioManager.playHit).toHaveBeenCalled()
+      // 验证兼容旧系统 - hitEffects.showHitMarker 被调用
+      expect(mockHitEffects.showHitMarker).toHaveBeenCalled()
     })
     
     it('其他玩家受伤：不更新自己 UI', () => {

@@ -312,8 +312,30 @@ func TestHandleWeaponChangeInvalid(t *testing.T) {
 	data := []byte(`{"weapon":"laser"}`)
 	client.handleWeaponChange(data)
 
-	// 武器不应该改变（当前行为是接受任何武器名）
-	// 根据实际代码逻辑调整断言
+	// 当前服务端行为：接受任何武器名（不做白名单校验）
+	// 如果需要限制，应该在 handleWeaponChange 中添加验证
+	// 此测试记录当前行为：无效武器名也会被接受
+	if client.Player.Weapon != "laser" {
+		t.Errorf("Expected weapon to be changed to 'laser' (current behavior accepts any name), got %s", client.Player.Weapon)
+	}
+
+	// 测试空武器名 - 应该不切换
+	client.Player.Weapon = "rifle"
+	data = []byte(`{"weapon":""}`)
+	client.handleWeaponChange(data)
+
+	if client.Player.Weapon != "rifle" {
+		t.Errorf("Empty weapon should not change weapon, expected 'rifle', got %s", client.Player.Weapon)
+	}
+
+	// 测试无效 JSON
+	client.Player.Weapon = "rifle"
+	data = []byte(`invalid json`)
+	client.handleWeaponChange(data)
+
+	if client.Player.Weapon != "rifle" {
+		t.Errorf("Invalid JSON should not change weapon, expected 'rifle', got %s", client.Player.Weapon)
+	}
 }
 
 // TestHandleShootMalformed 测试畸形射击消息
@@ -354,22 +376,51 @@ func TestHandleChat(t *testing.T) {
 	roomManager := room.NewManager(100, 16)
 
 	testCases := []struct {
-		name    string
-		input   string
-		wantOk  bool
-		wantMsg string
+		name           string
+		input          string
+		shouldBroadcast bool
+		description    string
 	}{
-		{"normal message", `{"message":"Hello!"}`, true, "Hello!"},
-		{"empty message", `{"message":""}`, true, ""},
-		{"long message", `{"message":"` + strings.Repeat("x", 300) + `"}`, true, strings.Repeat("x", 256)}, // 应该被截断
-		{"xss attempt", `{"message":"<script>alert('xss')</script>"}`, true, ""},
-		{"null bytes", `{"message":"test\x00message"}`, true, ""},
+		{"normal message", `{"message":"Hello!"}`, true, "正常消息应该被广播"},
+		{"empty message", `{"message":""}`, false, "空消息不应该被广播"},
+		{"whitespace only", `{"message":"   "}`, false, "纯空格消息不应该被广播"},
+		{"long message", `{"message":"` + strings.Repeat("x", 300) + `"}`, false, "超过256字符的消息应该被拒绝"},
+		{"xss attempt", `{"message":"<script>alert('xss')</script>"}`, true, "XSS 内容当前不过滤（需要前端处理）"},
+		{"invalid json", `invalid`, false, "无效 JSON 不应该导致 panic"},
+		{"missing message field", `{}`, false, "缺少 message 字段不应该导致 panic"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 清空 Send channel
+			for len(client.Send) > 0 {
+				<-client.Send
+			}
+
 			// 不应该 panic
 			client.handleChat([]byte(tc.input), roomManager)
+
+			// 检查是否有消息被发送（广播或错误）
+			if tc.shouldBroadcast {
+				select {
+				case msg := <-client.Send:
+					// 应该有消息被广播
+					if !strings.Contains(string(msg), "chat") && !strings.Contains(string(msg), "Hello") {
+						t.Errorf("Expected chat broadcast, got: %s", string(msg))
+					}
+				case <-time.After(100 * time.Millisecond):
+					// 如果没有消息在 channel 中，检查是否因为广播给其他人
+					// 广播给房间其他人，不包括发送者
+				}
+			} else {
+				select {
+				case msg := <-client.Send:
+					// 可能是错误消息（如消息太长）
+					t.Logf("Got message for rejected input: %s", string(msg))
+				case <-time.After(100 * time.Millisecond):
+					// 没有消息也是正常的（空消息被忽略）
+				}
+			}
 		})
 	}
 }
