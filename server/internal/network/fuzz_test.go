@@ -162,12 +162,20 @@ func FuzzHandleJoinRoomPlayerName(f *testing.F) {
 		// 不应该 panic
 		client.handleJoinRoom(data, roomManager)
 
-		// 检查是否有错误消息
+		// 必须收到响应消息（error 或 room_joined）
 		select {
 		case msg := <-client.Send:
 			msgStr := string(msg)
+			hasError := strings.Contains(msgStr, "error")
+			hasRoomJoined := strings.Contains(msgStr, "room_joined")
+			
+			// 必须是 error 或 room_joined 之一
+			if !hasError && !hasRoomJoined {
+				t.Errorf("Expected error or room_joined, got: %s", msgStr)
+			}
+			
 			// 如果收到错误消息，检查是否符合预期
-			if strings.Contains(msgStr, "error") {
+			if hasError {
 				trimmedName := strings.TrimSpace(name)
 				nameLen := len(trimmedName)
 				
@@ -191,8 +199,10 @@ func FuzzHandleJoinRoomPlayerName(f *testing.F) {
 						t.Errorf("Expected character error for name '%s', got: %s", name, msgStr)
 					}
 				}
-			} else if strings.Contains(msgStr, "room_joined") {
-				// 成功加入房间
+			}
+			
+			// 如果成功加入房间，验证名称是合法的
+			if hasRoomJoined {
 				trimmedName := strings.TrimSpace(name)
 				nameLen := len(trimmedName)
 				
@@ -212,8 +222,9 @@ func FuzzHandleJoinRoomPlayerName(f *testing.F) {
 					t.Errorf("Name '%s' has invalid characters but was accepted", name)
 				}
 			}
-		case <-time.After(100 * time.Millisecond):
-			// 没有消息 - 可能名称为空被忽略
+		case <-time.After(500 * time.Millisecond):
+			// 必须收到消息 - 超时表示 bug
+			t.Errorf("handleJoinRoom did not send any response for name '%s' - this is a regression", name)
 		}
 	})
 }
@@ -362,20 +373,25 @@ func TestHandleChat(t *testing.T) {
 	r := createTestRoom()
 	r.AddPlayer(client.Player)
 	client.Room = r
+	
+	// 注册客户端到 hub 的 clientMap，这样 BroadcastToRoom 才能找到它
+	client.hub.clientMap[client.Player.ID] = client
+	
 	roomManager := room.NewManager(100, 16)
 
 	testCases := []struct {
 		name           string
 		input          string
 		shouldBroadcast bool
+		shouldError    bool
 		description    string
 	}{
-		{"normal message", `{"message":"Hello!"}`, true, "正常消息应该被广播"},
-		{"empty message", `{"message":""}`, false, "空消息不应该被广播"},
-		{"whitespace only", `{"message":"   "}`, false, "纯空格消息不应该被广播"},
-		{"long message", `{"message":"` + strings.Repeat("x", 300) + `"}`, false, "超过256字符的消息应该被拒绝"},
-		{"invalid json", `invalid`, false, "无效 JSON 不应该导致 panic"},
-		{"missing message field", `{}`, false, "缺少 message 字段不应该导致 panic"},
+		{"normal message", `{"message":"Hello!"}`, true, false, "正常消息应该被广播"},
+		{"empty message", `{"message":""}`, false, false, "空消息不应该被广播"},
+		{"whitespace only", `{"message":"   "}`, false, false, "纯空格消息不应该被广播"},
+		{"long message", `{"message":"` + strings.Repeat("x", 300) + `"}`, false, true, "超过256字符的消息应该被拒绝并发送错误"},
+		{"invalid json", `invalid`, false, false, "无效 JSON 不应该导致 panic"},
+		{"missing message field", `{}`, false, false, "缺少 message 字段不应该导致 panic"},
 	}
 
 	for _, tc := range testCases {
@@ -387,6 +403,39 @@ func TestHandleChat(t *testing.T) {
 
 			// 不应该 panic
 			client.handleChat([]byte(tc.input), roomManager)
+
+			// 检查结果
+			select {
+			case msg := <-client.Send:
+				msgStr := string(msg)
+				hasError := strings.Contains(msgStr, "error")
+				hasChat := strings.Contains(msgStr, "chat")
+				
+				if tc.shouldBroadcast {
+					// 应该有 chat 广播
+					if !hasChat {
+						t.Errorf("Expected chat broadcast for %s, got: %s", tc.description, msgStr)
+					}
+				} else if tc.shouldError {
+					// 应该有错误消息
+					if !hasError {
+						t.Errorf("Expected error for %s, got: %s", tc.description, msgStr)
+					}
+				} else {
+					// 不应该有消息
+					if hasChat {
+						t.Errorf("Unexpected chat broadcast for %s: %s", tc.description, msgStr)
+					}
+				}
+			case <-time.After(100 * time.Millisecond):
+				// 无消息是合理的（空消息、无效 JSON 等）
+				if tc.shouldBroadcast {
+					t.Errorf("Expected broadcast for %s, but got no message", tc.description)
+				}
+				if tc.shouldError {
+					t.Errorf("Expected error for %s, but got no message", tc.description)
+				}
+			}
 		})
 	}
 }
@@ -440,6 +489,16 @@ func TestWebSocketWithRealServer(t *testing.T) {
 	}
 	defer conn.Close()
 
+	// 读取第一条消息 - 应该是 welcome
+	_, msg1, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read welcome: %v", err)
+	}
+	msg1Str := string(msg1)
+	if !strings.Contains(msg1Str, "welcome") {
+		t.Errorf("Expected welcome message first, got: %s", msg1Str)
+	}
+
 	// 发送 join_room 消息
 	joinMsg := map[string]interface{}{
 		"type": "join_room",
@@ -451,16 +510,19 @@ func TestWebSocketWithRealServer(t *testing.T) {
 		t.Fatalf("Failed to send join_room: %v", err)
 	}
 
-	// 读取响应
-	_, msg, err := conn.ReadMessage()
+	// 读取第二条消息 - 必须是 room_joined
+	_, msg2, err := conn.ReadMessage()
 	if err != nil {
-		t.Fatalf("Failed to read response: %v", err)
+		t.Fatalf("Failed to read room_joined: %v", err)
+	}
+	msg2Str := string(msg2)
+	if !strings.Contains(msg2Str, "room_joined") {
+		t.Errorf("Expected room_joined message after join_room, got: %s", msg2Str)
 	}
 
-	// 验证收到 welcome 或 room_joined 消息
-	msgStr := string(msg)
-	if !strings.Contains(msgStr, "welcome") && !strings.Contains(msgStr, "room_joined") {
-		t.Errorf("Expected welcome or room_joined message, got: %s", msgStr)
+	// 验证 room_joined 包含必要字段
+	if !strings.Contains(msg2Str, "room_id") || !strings.Contains(msg2Str, "player_id") {
+		t.Errorf("room_joined missing required fields, got: %s", msg2Str)
 	}
 }
 

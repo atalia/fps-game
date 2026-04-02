@@ -313,8 +313,14 @@ async function startGame(playerId) {
     // 初始化游戏
     window.game = new Game();
     
-    // 【重要】先创建 messageHandlers 占位，防止时序窗口丢失消息
-    // 在 Game.init() 完成前使用空 game 对象
+    // 【重要】先设置玩家 ID，防止消息处理时找不到自己
+    // Game 构造函数会创建默认 player 对象
+    if (window.game.player) {
+        window.game.player.id = playerId;
+        console.log('[MAIN] Player ID set early:', playerId);
+    }
+    
+    // 创建 messageHandlers，此时 player.id 已设置
     if (typeof createMessageHandlers !== 'undefined') {
         window.messageHandlers = createMessageHandlers({
             game: window.game,
@@ -331,16 +337,10 @@ async function startGame(playerId) {
             killstreakEnhanced: window.killstreakEnhanced,
             aiLabels: window.aiLabels
         });
-        console.log('[MAIN] Message handlers initialized (early)');
+        console.log('[MAIN] Message handlers initialized (early with player ID)');
     }
 
     await window.game.init();
-
-    // 设置玩家 ID
-    if (window.game.player) {
-        window.game.player.id = playerId;
-        console.log('[MAIN] Player ID set to:', playerId);
-    }
 
     // 初始化命中效果系统
     if (typeof HitEffects !== 'undefined') {
