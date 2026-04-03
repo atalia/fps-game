@@ -835,6 +835,19 @@ func (c *Client) handleChat(data json.RawMessage, roomManager *room.Manager) {
 }
 
 func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "You must join a room before respawning",
+		}).ToJSON()
+		return
+	}
+	if c.Player.IsAlive() {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Cannot respawn while alive",
+		}).ToJSON()
+		return
+	}
+
 	var pos struct {
 		X float64 `json:"x"`
 		Y float64 `json:"y"`

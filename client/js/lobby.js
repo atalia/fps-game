@@ -287,7 +287,6 @@ class Lobby {
                 room_id: roomId,
                 name: name
             });
-            this.hide();
             
             // 清除选中状态
             this.selectedRoom = null;

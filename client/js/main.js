@@ -75,7 +75,8 @@ async function init() {
         if (typeof Network === 'undefined') {
             throw new Error('Network 类未定义，请检查 network.js 加载');
         }
-        const wsUrl = `ws://${window.location.host}/ws`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
         console.log('🔌 Connecting to:', wsUrl);
         window.network = new Network(wsUrl);
 

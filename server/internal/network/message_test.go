@@ -229,7 +229,7 @@ func TestWS_Shoot_InvalidJSON(t *testing.T) {
 	NoMessage(t, connB)
 }
 
-// TestWS_Respawn 测试重生 - 发送者收到两个消息
+// TestWS_Respawn_AliveRejected 活着时不允许手动重生
 func TestWS_Respawn(t *testing.T) {
 	ts := NewTestServer(t)
 
@@ -241,27 +241,30 @@ func TestWS_Respawn(t *testing.T) {
 
 	Send(t, connA, "respawn", map[string]float64{"x": 10.0, "y": 0.0, "z": 5.0})
 
-	// A 应收到 respawn (self) 和 player_respawned (broadcast)
+	// A 活着时应收到 error，不应收到 respawn/player_respawned
 	msgsA := RecvAll(t, connA)
-	respawnCountA := CountType(msgsA, "respawn")
+	errorCountA := CountType(msgsA, "error")
 	playerRespawnedCountA := CountType(msgsA, "player_respawned")
-	if respawnCountA == 0 {
-		t.Error("A should receive respawn (self)")
+	respawnCountA := CountType(msgsA, "respawn")
+	if errorCountA == 0 {
+		t.Error("A should receive error when respawning while alive")
 	}
-	// player_respawned 的 excludeID=c.Player.ID，所以 A 不应收到
 	if playerRespawnedCountA > 0 {
-		t.Error("A should NOT receive player_respawned (excluded)")
+		t.Error("A should NOT receive player_respawned when respawn is rejected")
+	}
+	if respawnCountA > 0 {
+		t.Error("A should NOT receive respawn when respawn is rejected")
 	}
 
-	// B 应收到 player_respawned
+	// B 不应收到任何重生广播
 	msgsB := RecvAll(t, connB)
 	respawnCountB := CountType(msgsB, "player_respawned")
-	if respawnCountB == 0 {
-		t.Error("B should receive player_respawned")
+	if respawnCountB > 0 {
+		t.Error("B should NOT receive player_respawned when respawn is rejected")
 	}
 }
 
-// TestWS_Respawn_NoRoom 无房间静默
+// TestWS_Respawn_NoRoom 无房间拒绝
 func TestWS_Respawn_NoRoom(t *testing.T) {
 	ts := NewTestServer(t)
 
@@ -269,11 +272,15 @@ func TestWS_Respawn_NoRoom(t *testing.T) {
 	defer conn.Close()
 
 	Send(t, conn, "respawn", map[string]float64{"x": 10.0})
-	// respawn 没有 room 检查，会发送 self 消息
+	// 无房间时应返回 error
 	msgs := RecvAll(t, conn)
+	errorCount := CountType(msgs, "error")
 	respawnCount := CountType(msgs, "respawn")
-	if respawnCount == 0 {
-		t.Fatal("Should receive respawn message (no room check)")
+	if errorCount == 0 {
+		t.Fatal("Should receive error message (room required)")
+	}
+	if respawnCount > 0 {
+		t.Fatal("Should NOT receive respawn message when no room")
 	}
 }
 
