@@ -26,14 +26,36 @@ func init() {
 }
 
 const (
-	writeWait      = 10 * time.Second
-	pongWait       = 90 * time.Second // 增加到 90 秒
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 4096
-	maxPlayerName  = 32  // 玩家名称最大长度
-	maxChatMessage = 256 // 聊天消息最大长度
-	minPlayerName  = 1   // 玩家名称最小长度
+	writeWait                  = 10 * time.Second
+	pongWait                   = 90 * time.Second // 增加到 90 秒
+	pingPeriod                 = (pongWait * 9) / 10
+	maxMessageSize             = 4096
+	maxPlayerName              = 32  // 玩家名称最大长度
+	maxChatMessage             = 256 // 聊天消息最大长度
+	minPlayerName              = 1   // 玩家名称最小长度
+	maxAuthoritativeCoordinate = 100.0
+	respawnCoordinateLimit     = 50.0
 )
+
+var respawnDelay = 3 * time.Second
+
+type moveRequest struct {
+	X        *float64 `json:"x"`
+	Y        *float64 `json:"y"`
+	Z        *float64 `json:"z"`
+	Rotation *float64 `json:"rotation"`
+}
+
+type vectorRequest struct {
+	X *float64 `json:"x"`
+	Y *float64 `json:"y"`
+	Z *float64 `json:"z"`
+}
+
+type shootRequest struct {
+	Pitch     *float64       `json:"pitch"`
+	Direction *vectorRequest `json:"direction"`
+}
 
 // Client 客户端连接
 type Client struct {
@@ -479,7 +501,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		return
 	}
 
-	if !r.AddPlayer(c.Player) {
+	if !roomManager.JoinPlayer(c.Player, r.ID) {
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Room is full",
 		}).ToJSON()
@@ -487,7 +509,6 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	c.Room = r
-	roomManager.JoinRoom(c.Player.ID, r.ID)
 
 	// 发送房间信息给新玩家
 	c.Send <- NewMessage("room_joined", map[string]interface{}{
@@ -535,94 +556,78 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 		return
 	}
 
-	var pos struct {
-		X        float64 `json:"x"`
-		Y        float64 `json:"y"`
-		Z        float64 `json:"z"`
-		Rotation float64 `json:"rotation"`
+	var req moveRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
 	}
-	if err := json.Unmarshal(data, &pos); err != nil {
+	if req.X == nil || req.Z == nil {
+		return
+	}
+	if !isFiniteFloat(*req.X) || !isFiniteFloat(*req.Z) {
 		return
 	}
 
-	c.Player.SetPosition(pos.X, pos.Y, pos.Z)
-	c.Player.SetRotation(pos.Rotation)
+	current := c.Player.Snapshot()
+	x, z := clampAuthoritativePosition(*req.X, *req.Z)
+	rotation := current.Rotation
+	if req.Rotation != nil {
+		if !isFiniteFloat(*req.Rotation) {
+			return
+		}
+		rotation = *req.Rotation
+	}
+
+	c.Player.SetPosition(x, current.Position.Y, z)
+	c.Player.SetRotation(rotation)
+
+	updated := c.Player.Snapshot()
 
 	// 广播给其他玩家
 	c.hub.BroadcastToRoom(c.Room, "player_moved", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"position": map[string]float64{
-			"x": pos.X,
-			"y": pos.Y,
-			"z": pos.Z,
-		},
-		"rotation": pos.Rotation,
+		"position":  updated.Position,
+		"rotation":  updated.Rotation,
 	}, c.Player.ID)
 }
 
 func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
-	if c.Room == nil || !c.Player.CanShoot() {
+	if c.Room == nil {
 		return
 	}
 
-	c.Player.Shoot()
-
-	var shootData struct {
-		Position  map[string]float64 `json:"position"`
-		Rotation  float64            `json:"rotation"`
-		Pitch     float64            `json:"pitch"`
-		Direction map[string]float64 `json:"direction"`
-		WeaponID  string             `json:"weapon_id"`
-	}
-	if err := json.Unmarshal(data, &shootData); err != nil {
+	var req shootRequest
+	if err := json.Unmarshal(data, &req); err != nil {
 		return
+	}
+
+	shooter := c.Player.Snapshot()
+	direction, ok := resolveShootDirection(req, shooter.Rotation)
+	if !ok {
+		return
+	}
+	if !c.Player.CanShoot() || !c.Player.Shoot() {
+		return
+	}
+
+	shooter = c.Player.Snapshot()
+	weaponID := shooter.Weapon
+	origin := hitbox.Position{
+		X: shooter.Position.X,
+		Y: shooter.Position.Y,
+		Z: shooter.Position.Z,
 	}
 
 	// 广播射击事件（包含 weapon_id 和 direction，让其他客户端正确还原射击）
 	c.hub.BroadcastToRoom(c.Room, "player_shot", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"position":  shootData.Position,
-		"rotation":  shootData.Rotation,
-		"ammo":      c.Player.Ammo,
-		"weapon_id": shootData.WeaponID,
-		"direction": shootData.Direction,
+		"position":  shooter.Position,
+		"rotation":  shooter.Rotation,
+		"ammo":      shooter.Ammo,
+		"weapon_id": weaponID,
+		"direction": map[string]float64{"x": direction.X, "y": direction.Y, "z": direction.Z},
 	}, c.Player.ID)
 
-	// 如果客户端没有发送 direction，根据 rotation 和 pitch 计算
-	if shootData.Direction == nil {
-		// 从 rotation (yaw) 和 pitch 计算 direction
-		shootData.Direction = map[string]float64{
-			"x": -math.Sin(shootData.Rotation) * math.Cos(shootData.Pitch),
-			"y": math.Sin(shootData.Pitch),
-			"z": -math.Cos(shootData.Rotation) * math.Cos(shootData.Pitch),
-		}
-	}
-
-	// 如果客户端没有发送 weapon_id，使用玩家当前武器
-	if shootData.WeaponID == "" {
-		shootData.WeaponID = c.Player.Weapon
-	}
-
 	// 命中检测
-	origin := hitbox.Position{
-		X: shootData.Position["x"],
-		Y: shootData.Position["y"],
-		Z: shootData.Position["z"],
-	}
-	direction := hitbox.Position{
-		X: shootData.Direction["x"],
-		Y: shootData.Direction["y"],
-		Z: shootData.Direction["z"],
-	}
-
-	// 归一化 direction，防止客户端放大向量绕过射程限制
-	dirLen := math.Sqrt(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)
-	if dirLen > 0 {
-		direction.X /= dirLen
-		direction.Y /= dirLen
-		direction.Z /= dirLen
-	}
-
 	// 武器射程 (默认 50)
 	weaponRange := 50.0
 
@@ -630,11 +635,11 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 	if hit != nil {
 		// 基础伤害 (根据武器类型)
 		baseDamage := 30
-		if shootData.WeaponID == "sniper" {
+		if weaponID == "sniper" {
 			baseDamage = 100
-		} else if shootData.WeaponID == "shotgun" {
+		} else if weaponID == "shotgun" {
 			baseDamage = 80
-		} else if shootData.WeaponID == "pistol" {
+		} else if weaponID == "pistol" {
 			baseDamage = 25
 		}
 
@@ -660,22 +665,23 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		}
 
 		if target != nil && target.IsAlive() {
-			target.TakeDamage(damage)
+			remainingHealth := target.TakeDamage(damage)
+			targetState := target.Snapshot()
 
 			// 广播受伤消息（包含 attacker_position 用于显示受击方向指示）
 			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
 				"player_id":         hit.PlayerID,
 				"attacker_id":       c.Player.ID,
-				"attacker_position": c.Player.Position,
+				"attacker_position": shooter.Position,
 				"damage":            damage,
 				"hitbox":            hit.HitBoxType,
-				"remaining_health":  target.Health,
-				"position":          target.Position,
+				"remaining_health":  remainingHealth,
+				"position":          targetState.Position,
 				"is_bot":            isBot,
 			}, "")
 
 			// 检查死亡
-			if target.Health <= 0 {
+			if remainingHealth <= 0 {
 				// 更新击杀统计
 				c.Player.AddKill(1)
 				target.Die()
@@ -683,7 +689,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
 					"victim_id":     hit.PlayerID,
 					"killer_id":     c.Player.ID,
-					"weapon_id":     shootData.WeaponID,
+					"weapon_id":     weaponID,
 					"hitbox":        hit.HitBoxType,
 					"is_headshot":   hit.HitBoxType == "head",
 					"kill_distance": hit.Distance,
@@ -692,7 +698,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 				// 玩家自动重生，机器人不重生
 				if !isBot {
-					go c.respawnPlayer(target)
+					go c.respawnPlayer(target, c.Room)
 				}
 			}
 		}
@@ -773,21 +779,17 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 }
 
 // respawnPlayer 重生玩家
-func (c *Client) respawnPlayer(p *player.Player) {
-	time.Sleep(3 * time.Second) // 3 秒重生延迟
+func (c *Client) respawnPlayer(p *player.Player, respawnRoom *room.Room) {
+	time.Sleep(respawnDelay)
 
-	// 重置玩家状态
-	p.Health = p.MaxHealth
-	p.Position = player.Position{
-		X: (rand.Float64()*100 - 50), // 使用加密安全的随机数
-		Y: 0,
-		Z: (rand.Float64()*100 - 50),
-	}
+	spawn := randomSpawnPosition()
+	p.Respawn(spawn.X, spawn.Y, spawn.Z)
+	state := p.Snapshot()
 
-	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
+	c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
 		"player_id": p.ID,
-		"position":  p.Position,
-		"health":    p.Health,
+		"position":  state.Position,
+		"health":    state.Health,
 	}, "")
 }
 
@@ -847,33 +849,86 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		}).ToJSON()
 		return
 	}
-
-	var pos struct {
-		X float64 `json:"x"`
-		Y float64 `json:"y"`
-		Z float64 `json:"z"`
-	}
-	if err := json.Unmarshal(data, &pos); err != nil {
-		return
-	}
-
-	c.Player.Respawn(pos.X, pos.Y, pos.Z)
+	spawn := randomSpawnPosition()
+	c.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
+	state := c.Player.Snapshot()
 
 	c.Send <- NewMessage("respawn", map[string]interface{}{
-		"position": map[string]float64{
-			"x": pos.X,
-			"y": pos.Y,
-			"z": pos.Z,
-		},
-		"health": c.Player.Health,
-		"ammo":   c.Player.Ammo,
+		"position": state.Position,
+		"health":   state.Health,
+		"ammo":     state.Ammo,
 	}).ToJSON()
 
 	// 广播重生
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"position":  c.Player.Position,
+		"position":  state.Position,
 	}, c.Player.ID)
+}
+
+func clampAuthoritativePosition(x, z float64) (float64, float64) {
+	return clampCoordinate(x, maxAuthoritativeCoordinate), clampCoordinate(z, maxAuthoritativeCoordinate)
+}
+
+func clampCoordinate(v, limit float64) float64 {
+	if v < -limit {
+		return -limit
+	}
+	if v > limit {
+		return limit
+	}
+	return v
+}
+
+func isFiniteFloat(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func resolveShootDirection(req shootRequest, rotation float64) (hitbox.Position, bool) {
+	pitch := 0.0
+	if req.Pitch != nil {
+		if !isFiniteFloat(*req.Pitch) {
+			return hitbox.Position{}, false
+		}
+		pitch = *req.Pitch
+	}
+
+	if req.Direction != nil {
+		if req.Direction.X == nil || req.Direction.Y == nil || req.Direction.Z == nil {
+			return hitbox.Position{}, false
+		}
+		if !isFiniteFloat(*req.Direction.X) || !isFiniteFloat(*req.Direction.Y) || !isFiniteFloat(*req.Direction.Z) {
+			return hitbox.Position{}, false
+		}
+
+		direction := hitbox.Position{
+			X: *req.Direction.X,
+			Y: *req.Direction.Y,
+			Z: *req.Direction.Z,
+		}
+		dirLen := math.Sqrt(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)
+		if dirLen == 0 {
+			return hitbox.Position{}, false
+		}
+		direction.X /= dirLen
+		direction.Y /= dirLen
+		direction.Z /= dirLen
+		return direction, true
+	}
+
+	return hitbox.Position{
+		X: -math.Sin(rotation) * math.Cos(pitch),
+		Y: math.Sin(pitch),
+		Z: -math.Cos(rotation) * math.Cos(pitch),
+	}, true
+}
+
+func randomSpawnPosition() player.Position {
+	return player.Position{
+		X: rand.Float64()*respawnCoordinateLimit*2 - respawnCoordinateLimit,
+		Y: 0,
+		Z: rand.Float64()*respawnCoordinateLimit*2 - respawnCoordinateLimit,
+	}
 }
 
 // handleWeaponChange 处理武器切换

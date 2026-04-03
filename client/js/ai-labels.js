@@ -44,7 +44,12 @@ class AILabels {
             transform: translate(-50%, -100%);
             white-space: nowrap;
         `;
-        label.innerHTML = `<span style="opacity: 0.7;">[BOT]</span> ${name}`;
+
+        const botTag = document.createElement('span');
+        botTag.style.opacity = '0.7';
+        botTag.textContent = '[BOT]';
+        label.appendChild(botTag);
+        label.appendChild(document.createTextNode(` ${name}`));
         document.body.appendChild(label);
 
         this.botLabels.set(botId, {

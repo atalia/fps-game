@@ -6,6 +6,12 @@ class KillFeed {
         this.container = document.getElementById('kill-feed');
     }
 
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
     add(killer, victim, weapon = '', headshot = false) {
         const item = {
             killer,
@@ -30,13 +36,15 @@ class KillFeed {
 
         this.container.innerHTML = this.items.map(item => {
             const headshotIcon = item.headshot ? '🎯 ' : '';
-            const weaponText = item.weapon ? ` [${item.weapon}]` : '';
+            const weaponText = item.weapon ? ` [${this.escapeHtml(item.weapon)}]` : '';
+            const killer = this.escapeHtml(item.killer);
+            const victim = this.escapeHtml(item.victim);
             
             return `
                 <div class="kill-item">
-                    <span class="killer">${item.killer}</span>
+                    <span class="killer">${killer}</span>
                     ${headshotIcon}${weaponText} → 
-                    <span class="victim">${item.victim}</span>
+                    <span class="victim">${victim}</span>
                 </div>
             `;
         }).join('');

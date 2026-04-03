@@ -85,7 +85,7 @@ func FuzzHandleWeaponChangeReal(f *testing.F) {
 	f.Add([]byte(`{"weapon":"invalid_weapon"}`))
 	f.Add([]byte(`{"weapon":123}`))
 	f.Add([]byte(`invalid`))
-	f.Add([]byte(`{"weapon":"`+validWeapons[rand.Intn(len(validWeapons))]+`"}`))
+	f.Add([]byte(`{"weapon":"` + validWeapons[rand.Intn(len(validWeapons))] + `"}`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		client := createTestClient()
@@ -168,24 +168,24 @@ func FuzzHandleJoinRoomPlayerName(f *testing.F) {
 			msgStr := string(msg)
 			hasError := strings.Contains(msgStr, "error")
 			hasRoomJoined := strings.Contains(msgStr, "room_joined")
-			
+
 			// 必须是 error 或 room_joined 之一
 			if !hasError && !hasRoomJoined {
 				t.Errorf("Expected error or room_joined, got: %s", msgStr)
 			}
-			
+
 			// 如果收到错误消息，检查是否符合预期
 			if hasError {
 				trimmedName := strings.TrimSpace(name)
 				nameLen := len(trimmedName)
-				
+
 				// 检查长度错误
 				if nameLen < minPlayerName || nameLen > maxPlayerName {
 					if !strings.Contains(msgStr, "Player name must be between") {
 						t.Errorf("Expected length error for name '%s' (len=%d), got: %s", name, nameLen, msgStr)
 					}
 				}
-				
+
 				// 检查字符错误
 				hasInvalidChar := false
 				for _, r := range trimmedName {
@@ -200,17 +200,17 @@ func FuzzHandleJoinRoomPlayerName(f *testing.F) {
 					}
 				}
 			}
-			
+
 			// 如果成功加入房间，验证名称是合法的
 			if hasRoomJoined {
 				trimmedName := strings.TrimSpace(name)
 				nameLen := len(trimmedName)
-				
+
 				// 验证成功的情况
 				if nameLen < minPlayerName || nameLen > maxPlayerName {
 					t.Errorf("Name '%s' (len=%d) should have been rejected", name, nameLen)
 				}
-				
+
 				hasInvalidChar := false
 				for _, r := range trimmedName {
 					if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsSpace(r) && r != '_' && r != '-' {
@@ -373,18 +373,18 @@ func TestHandleChat(t *testing.T) {
 	r := createTestRoom()
 	r.AddPlayer(client.Player)
 	client.Room = r
-	
+
 	// 注册客户端到 hub 的 clientMap，这样 BroadcastToRoom 才能找到它
 	client.hub.clientMap[client.Player.ID] = client
-	
+
 	roomManager := room.NewManager(100, 16)
 
 	testCases := []struct {
-		name           string
-		input          string
+		name            string
+		input           string
 		shouldBroadcast bool
-		shouldError    bool
-		description    string
+		shouldError     bool
+		description     string
 	}{
 		{"normal message", `{"message":"Hello!"}`, true, false, "正常消息应该被广播"},
 		{"empty message", `{"message":""}`, false, false, "空消息不应该被广播"},
@@ -410,7 +410,7 @@ func TestHandleChat(t *testing.T) {
 				msgStr := string(msg)
 				hasError := strings.Contains(msgStr, "error")
 				hasChat := strings.Contains(msgStr, "chat")
-				
+
 				if tc.shouldBroadcast {
 					// 应该有 chat 广播
 					if !hasChat {
@@ -482,7 +482,7 @@ func TestWebSocketWithRealServer(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	header := http.Header{}
 	header.Set("Origin", "http://localhost")
-	
+
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
@@ -529,7 +529,7 @@ func TestWebSocketWithRealServer(t *testing.T) {
 // TestPlayerNameValidationDirect 直接测试玩家名称校验逻辑
 func TestPlayerNameValidationDirect(t *testing.T) {
 	testCases := []struct {
-		name      string
+		name       string
 		playerName string
 		shouldFail bool
 		failReason string
@@ -545,7 +545,7 @@ func TestPlayerNameValidationDirect(t *testing.T) {
 		{"with html", "Player<script>", true, "character"},
 		{"with emoji", "Player🎮", true, "character"},
 		{"with null", "Player\x00Name", true, "character"},
-		{"with tab", "Player\tName", false, ""}, // tab is allowed by unicode.IsSpace
+		{"with tab", "Player\tName", false, ""},     // tab is allowed by unicode.IsSpace
 		{"with newline", "Player\nName", false, ""}, // newline is allowed by unicode.IsSpace
 	}
 
@@ -566,7 +566,7 @@ func TestPlayerNameValidationDirect(t *testing.T) {
 			case msg := <-client.Send:
 				msgStr := string(msg)
 				hasError := strings.Contains(msgStr, "error")
-				
+
 				if tc.shouldFail && !hasError {
 					t.Errorf("Expected failure for %s (reason: %s), but got success", tc.name, tc.failReason)
 				}

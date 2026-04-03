@@ -219,7 +219,12 @@ func (m *Manager) JoinRoom(playerID string, roomID string) bool {
 	defer m.mu.Unlock()
 
 	room, exists := m.rooms[roomID]
-	if !exists || room.IsFull() {
+	if !exists {
+		return false
+	}
+
+	alreadyInRoom := room.GetPlayer(playerID) != nil
+	if room.IsFull() && !alreadyInRoom {
 		return false
 	}
 
@@ -231,6 +236,31 @@ func (m *Manager) JoinRoom(playerID string, roomID string) bool {
 	}
 
 	m.playerRooms[playerID] = roomID
+	return true
+}
+
+// JoinPlayer 玩家对象加入房间，并由管理器维护房间成员和映射的一致性
+func (m *Manager) JoinPlayer(p *player.Player, roomID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	room, exists := m.rooms[roomID]
+	if !exists {
+		return false
+	}
+
+	alreadyInTarget := room.GetPlayer(p.ID) != nil
+	if !alreadyInTarget && !room.AddPlayer(p) {
+		return false
+	}
+
+	if oldRoomID, exists := m.playerRooms[p.ID]; exists && oldRoomID != roomID {
+		if oldRoom, ok := m.rooms[oldRoomID]; ok {
+			oldRoom.RemovePlayer(p.ID)
+		}
+	}
+
+	m.playerRooms[p.ID] = roomID
 	return true
 }
 
@@ -267,6 +297,18 @@ func (m *Manager) GetRoomCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.rooms)
+}
+
+// GetTotalPlayerCount 获取所有房间内的玩家总数
+func (m *Manager) GetTotalPlayerCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	count := 0
+	for _, r := range m.rooms {
+		count += r.GetPlayerCount()
+	}
+	return count
 }
 
 // GetAllRooms 获取所有房间

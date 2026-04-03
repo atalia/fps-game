@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"fps-game/internal/config"
@@ -51,7 +52,7 @@ func main() {
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir(cfg.ClientPath)))
 
 	// 中间件
-	handler := withCORS(r)
+	handler := withCORS(cfg.CORS.AllowedOrigins, r)
 	handler = withLogging(handler)
 
 	// 启动服务器
@@ -80,7 +81,7 @@ func statsHandler(engine *game.Engine, rm *room.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"players": engine.GetPlayerCount(),
+			"players": rm.GetTotalPlayerCount(),
 			"rooms":   rm.GetRoomCount(),
 			"uptime":  time.Now().Unix(),
 		}); err != nil {
@@ -102,19 +103,44 @@ func listRoomsHandler(rm *room.Manager) http.HandlerFunc {
 	}
 }
 
-func withCORS(next http.Handler) http.Handler {
+func withCORS(allowedOrigins []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+		origin := r.Header.Get("Origin")
+		allowed := isAllowedOrigin(origin, allowedOrigins)
+		if origin != "" && allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+
 		if r.Method == "OPTIONS" {
+			if origin != "" && !allowed {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isAllowedOrigin(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return true
+	}
+	if len(allowedOrigins) == 0 {
+		return strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "http://127.0.0.1")
+	}
+	for _, allowed := range allowedOrigins {
+		if allowed == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func withLogging(next http.Handler) http.Handler {

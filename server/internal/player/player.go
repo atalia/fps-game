@@ -45,6 +45,17 @@ type Player struct {
 	mu             sync.RWMutex
 }
 
+// Snapshot 玩家状态快照
+type Snapshot struct {
+	Position    Position
+	Rotation    float64
+	Health      int
+	MaxHealth   int
+	Weapon      string
+	Ammo        int
+	AmmoReserve int
+}
+
 // Config 玩家配置
 type Config struct {
 	DefaultHealth      int
@@ -265,6 +276,22 @@ func (p *Player) ToMap() map[string]interface{} {
 		"team":     p.Team,
 		"weapon":   p.Weapon,
 		"ammo":     p.Ammo,
+	}
+}
+
+// Snapshot 返回玩家状态快照
+func (p *Player) Snapshot() Snapshot {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	return Snapshot{
+		Position:    p.Position,
+		Rotation:    p.Rotation,
+		Health:      p.Health,
+		MaxHealth:   p.MaxHealth,
+		Weapon:      p.Weapon,
+		Ammo:        p.Ammo,
+		AmmoReserve: p.AmmoReserve,
 	}
 }
 
