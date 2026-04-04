@@ -226,8 +226,17 @@ class GrenadeSystem {
             position: { ...grenade.position },
             radius: 4,
             damage: 40, // 每秒
-            startTime: Date.now()
+            startTime: Date.now(),
+            duration: grenade.fireDuration || 8000
         };
+
+        // 发送服务器计算伤害
+        if (window.network?.connected) {
+            window.network.send("molotov_explode", {
+                position: grenade.position,
+                duration: fire.duration
+            });
+        }
 
         this.fireEffects.push(fire);
 

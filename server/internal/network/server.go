@@ -521,6 +521,8 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 		c.handleGrenadeThrow(msg.Data, roomManager)
 	case "grenade_explode":
 		c.handleGrenadeExplode(msg.Data, roomManager)
+	case "molotov_explode":
+		c.handleMolotovExplode(msg.Data, roomManager)
 	// C4 爆破模式
 	case "c4_plant":
 		c.handleC4Plant(msg.Data, roomManager)
@@ -725,6 +727,76 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 		"position":  updated.Position,
 		"rotation":  updated.Rotation,
 	}, c.Player.ID)
+
+	// 检查火焰伤害
+	c.checkFireDamage(updated.Position)
+}
+
+// checkFireDamage 检查并应用火焰伤害
+func (c *Client) checkFireDamage(pos player.Position) {
+	if c.Room == nil {
+		return
+	}
+
+	fireZones := c.Room.GetFireZones()
+	now := time.Now()
+
+	for _, fire := range fireZones {
+		// 检查是否过期
+		if now.Sub(fire.StartTime) >= fire.Duration {
+			continue
+		}
+
+		// 检查距离
+		dx := pos.X - fire.Position.X
+		dy := pos.Y - fire.Position.Y
+		dz := pos.Z - fire.Position.Z
+		distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+
+		if distance <= fire.Radius {
+			// 计算伤害（基于距离和 DPS）
+			damage := fire.DPS / 10 // 每次移动 tick 约 0.1 秒
+
+			// 友军伤害减半
+			if fire.AttackerTeam != "" && fire.AttackerTeam == c.Player.GetTeam() && c.Player.ID != fire.AttackerID {
+				damage = damage / 2
+			}
+
+			remainingHealth := c.Player.TakeDamage(damage)
+
+			// 广播受伤消息
+			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
+				"player_id":        c.Player.ID,
+				"attacker_id":      fire.AttackerID,
+				"damage":           damage,
+				"remaining_health": remainingHealth,
+				"position":         pos,
+				"is_fire":          true,
+			}, "")
+
+			// 检查击杀
+			if remainingHealth <= 0 {
+				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
+					"victim_id":   c.Player.ID,
+					"killer_id":   fire.AttackerID,
+					"weapon":      "molotov",
+					"is_headshot": false,
+					"killer_pos":  fire.Position,
+					"victim_pos":  pos,
+				}, "")
+
+				// 更新击杀统计（需要获取攻击者）
+				if attacker := c.hub.GetClient(fire.AttackerID); attacker != nil {
+					attacker.Player.AddKill(1)
+				}
+				c.Player.Die()
+			}
+			break // 每次移动只受一个火焰区域伤害
+		}
+	}
+
+	// 清理过期火焰
+	c.Room.CleanExpiredFireZones()
 }
 
 func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
@@ -1594,6 +1666,52 @@ func (c *Client) handleGrenadeExplode(data json.RawMessage, roomManager *room.Ma
 			target.p.Die()
 		}
 	}
+}
+
+// handleMolotovExplode 处理燃烧瓶爆炸
+func (c *Client) handleMolotovExplode(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Position struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+		Duration int `json:"duration"` // 毫秒
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 广播火焰区域
+	c.hub.BroadcastToRoom(c.Room, "molotov_fire", map[string]interface{}{
+		"attacker_id": c.Player.ID,
+		"position": map[string]float64{
+			"x": req.Position.X,
+			"y": req.Position.Y,
+			"z": req.Position.Z,
+		},
+		"radius":    4.0,
+		"duration":  req.Duration,
+		"dps":       40, // 每秒40伤害
+		"team":      c.Player.GetTeam(),
+	}, "")
+
+	// 创建火焰伤害区域
+	fire := &room.FireZone{
+		Position:     player.Position{X: req.Position.X, Y: req.Position.Y, Z: req.Position.Z},
+		Radius:       4.0,
+		StartTime:    time.Now(),
+		Duration:     time.Duration(req.Duration) * time.Millisecond,
+		DPS:          40,
+		AttackerID:   c.Player.ID,
+		AttackerTeam: c.Player.GetTeam(),
+	}
+
+	c.Room.AddFireZone(fire)
 }
 
 // handleC4Plant 处理 C4 放置 (旧版即时放置，保留兼容)

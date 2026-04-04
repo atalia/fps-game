@@ -31,7 +31,20 @@ type Room struct {
 	GameMode          string
 	roundResetPending bool
 	broadcastFn       func(string, interface{}, string)
+	// 火焰区域
+	FireZones []*FireZone
 	mu                sync.RWMutex
+}
+
+// FireZone 火焰区域
+type FireZone struct {
+	Position     player.Position
+	Radius       float64
+	StartTime    time.Time
+	Duration     time.Duration
+	DPS          int
+	AttackerID   string
+	AttackerTeam string
 }
 
 // NewRoom 创建房间
@@ -43,9 +56,38 @@ func NewRoom(maxSize int) *Room {
 		BotManager:  ai.NewManager(),
 		TeamManager: team.NewTeamManagerForRoom(maxSize),
 		CreatedAt:   time.Now(),
+		FireZones:   make([]*FireZone, 0),
 	}
 	r.RoundManager = NewRoundManager(r, DefaultRoundConfig)
 	return r
+}
+
+// AddFireZone 添加火焰区域
+func (r *Room) AddFireZone(fire *FireZone) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.FireZones = append(r.FireZones, fire)
+}
+
+// GetFireZones 获取火焰区域列表
+func (r *Room) GetFireZones() []*FireZone {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.FireZones
+}
+
+// CleanExpiredFireZones 清理过期的火焰区域
+func (r *Room) CleanExpiredFireZones() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	active := make([]*FireZone, 0)
+	for _, fire := range r.FireZones {
+		if now.Sub(fire.StartTime) < fire.Duration {
+			active = append(active, fire)
+		}
+	}
+	r.FireZones = active
 }
 
 // GetPlayers 获取玩家列表的副本（线程安全）
