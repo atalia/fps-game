@@ -49,6 +49,9 @@ async function init() {
     }
     window.uiManager = new UIManager();
     window.screenEffects = new ScreenEffects();
+    if (typeof RadioMenu !== "undefined") {
+      window.radioMenu = new RadioMenu();
+    }
     if (typeof TeamSystem !== "undefined") {
       window.teamSystem = new TeamSystem();
     }
@@ -478,6 +481,13 @@ function setupNetworkHandlers() {
         weapon: 'ak47',
         duration: data.duration
       });
+    }
+  });
+
+  // 无线电消息
+  window.network.on("radio", (data) => {
+    if (window.radioMenu) {
+      window.radioMenu.receiveRadio(data);
     }
   });
 

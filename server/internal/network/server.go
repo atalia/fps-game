@@ -525,6 +525,8 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 		c.handleMolotovExplode(msg.Data, roomManager)
 	case "decoy_detonate":
 		c.handleDecoyDetonate(msg.Data, roomManager)
+	case "radio":
+		c.handleRadio(msg.Data, roomManager)
 	// C4 爆破模式
 	case "c4_plant":
 		c.handleC4Plant(msg.Data, roomManager)
@@ -1744,6 +1746,30 @@ func (c *Client) handleDecoyDetonate(data json.RawMessage, roomManager *room.Man
 		},
 		"duration": req.Duration,
 		"team":     c.Player.GetTeam(),
+	}, "")
+}
+
+// handleRadio 处理无线电指令
+func (c *Client) handleRadio(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Cmd  string `json:"cmd"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 广播无线电消息给所有玩家
+	c.hub.BroadcastToRoom(c.Room, "radio", map[string]interface{}{
+		"player_id":   c.Player.ID,
+		"player_name": c.Player.Name,
+		"cmd":         req.Cmd,
+		"text":        req.Text,
+		"team":        c.Player.GetTeam(),
 	}, "")
 }
 
