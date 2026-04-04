@@ -2470,6 +2470,30 @@
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
+      // 全局错误处理
+      window.onerror = function(msg, url, line, col, error) {
+        console.error("JS Error:", msg, "at", url, ":", line);
+        const loading = document.getElementById("loading");
+        if (loading) {
+          loading.innerHTML = 
+            "<h1>❌ JavaScript 错误</h1>" +
+            "<p>" + msg + "</p>" +
+            "<p style='font-size:12px;color:#888'>" + url + ":" + line + "</p>";
+        }
+        return false;
+      };
+      
+      // 未捕获的 Promise 错误
+      window.onunhandledrejection = function(e) {
+        console.error("Unhandled Promise Error:", e.reason);
+        const loading = document.getElementById("loading");
+        if (loading) {
+          loading.innerHTML = 
+            "<h1>❌ Promise 错误</h1>" +
+            "<p>" + (e.reason && e.reason.message || e.reason) + "</p>";
+        }
+      };
+      
       // 确保 Three.js 加载
       if (typeof THREE === "undefined") {
         document.getElementById("loading").innerHTML =
