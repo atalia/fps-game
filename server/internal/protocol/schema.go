@@ -98,6 +98,8 @@ func TestSchemaFilesExist(t *testing.T) {
 		"player_shot",
 		"player_damaged",
 		"player_killed",
+		"player_respawned",
+		"armor_updated",
 		"weapon_changed",
 		"money_updated",
 		"round_state",

@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["player_id", "armor"],
+  "properties": {
+    "player_id": {
+      "type": "string"
+    },
+    "armor": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "has_helmet": {
+      "type": "boolean"
+    }
+  }
+}

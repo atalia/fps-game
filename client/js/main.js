@@ -440,10 +440,26 @@ function setupNetworkHandlers() {
     }
   });
 
-  // 玩家重生
+  // 玩家重生（广播给其他玩家）
   window.network.on("player_respawned", (data) => {
     if (window.messageHandlers) {
       window.messageHandlers.handlePlayerRespawned(data);
+    }
+  });
+
+  // 玩家自己重生（直接消息）
+  window.network.on("respawn", (data) => {
+    if (window.game?.player) {
+      window.game.player.position = data.position;
+      window.game.player.health = data.health;
+      window.game.player.ammo = data.ammo;
+      if (typeof data.armor === "number") {
+        window.game.player.armor = data.armor;
+        window.game.player.hasHelmet = data.has_helmet;
+        window.uiManager.updateArmor(data.armor, data.has_helmet);
+      }
+      window.uiManager.updateHealth(data.health);
+      window.uiManager.hideDeathScreen();
     }
   });
 

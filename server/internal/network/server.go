@@ -1064,12 +1064,14 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 	state := c.Player.Snapshot()
 
 	c.Send <- NewMessage("respawn", map[string]interface{}{
-		"position": state.Position,
-		"health":   state.Health,
-		"ammo":     state.Ammo,
+		"position":   state.Position,
+		"health":     state.Health,
+		"armor":      state.Armor,
+		"has_helmet": state.HasHelmet,
+		"ammo":       state.Ammo,
 	}).ToJSON()
 
-	// 广播重生
+	// 广播重生（排除自己，因为已经收到 respawn 消息）
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
 		"player_id":  c.Player.ID,
 		"position":   state.Position,
