@@ -13,10 +13,11 @@ import (
 	"unicode"
 
 	"fps-game/internal/ai"
-	"fps-game/internal/team"
+	"fps-game/internal/economy"
 	"fps-game/internal/hitbox"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
+	"fps-game/internal/team"
 
 	"github.com/gorilla/websocket"
 )
@@ -438,6 +439,8 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	// 武器系统
 	case "weapon_change":
 		c.handleWeaponChange(msg.Data)
+	case "buy":
+		c.handleBuy(msg.Data)
 	// 语音系统
 	case "voice_start":
 		c.handleVoiceStart()
@@ -698,6 +701,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			if remainingHealth <= 0 {
 				// 更新击杀统计
 				c.Player.AddKill(1)
+				c.awardMoney(c.Player, economy.KillReward, "kill")
 				target.Die()
 
 				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
@@ -711,6 +715,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 				}, "")
 
 				if winner, teams, completed := c.Room.CompleteRoundIfWon(); completed {
+					c.awardRoundMoney(c.Room, winner)
 					c.hub.BroadcastToRoom(c.Room, "team_scores_updated", map[string]interface{}{
 						"winner": winner,
 						"teams":  teams,
@@ -1035,6 +1040,64 @@ func applyRespawnLoadout(p *player.Player) {
 	p.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
 }
 
+func (c *Client) sendMoneyUpdate(p *player.Player, delta int, reason string) {
+	if p == nil {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"player_id": p.ID,
+		"money":     p.GetMoney(),
+	}
+	if delta != 0 {
+		payload["delta"] = delta
+	}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+
+	if c.Room != nil {
+		c.hub.BroadcastToRoom(c.Room, "money_updated", payload, "")
+		return
+	}
+
+	target := c.hub.GetClient(p.ID)
+	if target == nil {
+		return
+	}
+	target.Send <- NewMessage("money_updated", payload).ToJSON()
+}
+
+func (c *Client) awardMoney(p *player.Player, amount int, reason string) {
+	if p == nil || amount == 0 {
+		return
+	}
+
+	p.AddMoney(amount)
+	c.sendMoneyUpdate(p, amount, reason)
+}
+
+func (c *Client) awardRoundMoney(r *room.Room, winner string) {
+	if r == nil {
+		return
+	}
+
+	normalizedWinner := team.NormalizeTeamID(winner)
+	for _, p := range r.GetPlayers() {
+		playerTeam := team.NormalizeTeamID(p.GetTeam())
+		if playerTeam == "" {
+			continue
+		}
+
+		if playerTeam == normalizedWinner {
+			c.awardMoney(p, economy.RoundWinReward, "round_win")
+			continue
+		}
+
+		c.awardMoney(p, economy.RoundLossReward, "round_loss")
+	}
+}
+
 // handleWeaponChange 处理武器切换
 func (c *Client) handleWeaponChange(data json.RawMessage) {
 	var req struct {
@@ -1066,6 +1129,13 @@ func (c *Client) handleWeaponChange(data json.RawMessage) {
 	if !ok {
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Unknown weapon",
+		}).ToJSON()
+		return
+	}
+
+	if teamID != "" && !c.Player.HasWeapon(loadout.ID) {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "You have not purchased that weapon yet",
 		}).ToJSON()
 		return
 	}
@@ -1143,6 +1213,8 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 		return
 	}
 
+	c.Player.ResetOwnedWeapons(team.DefaultWeaponForTeam(assignedTeam))
+	c.Player.SetWeapon(team.DefaultWeaponForTeam(assignedTeam))
 	spawn := spawnPositionForTeam(assignedTeam)
 	c.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
 	applyRespawnLoadout(c.Player)
@@ -1165,6 +1237,58 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 		"position":  state.Position,
 		"health":    state.Health,
 		"ammo":      state.Ammo,
+	}, "")
+}
+
+func (c *Client) handleBuy(data json.RawMessage) {
+	if c.Room == nil {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "You must join a room before buying",
+		}).ToJSON()
+		return
+	}
+
+	var req struct {
+		ItemID string `json:"item_id"`
+		Item   string `json:"item"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	itemID := req.ItemID
+	if itemID == "" {
+		itemID = req.Item
+	}
+	if itemID == "" {
+		return
+	}
+
+	item, err := economy.ApplyPurchase(c.Player, itemID)
+	if err != nil {
+		c.hub.BroadcastToRoom(c.Room, "buy_result", map[string]interface{}{
+			"player_id": c.Player.ID,
+			"item_id":   itemID,
+			"success":   false,
+			"message":   err.Error(),
+		}, "")
+		return
+	}
+
+	c.sendMoneyUpdate(c.Player, -item.Price, "purchase")
+	c.hub.BroadcastToRoom(c.Room, "buy_result", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"item_id":   item.ID,
+		"success":   true,
+	}, "")
+	if item.Category != economy.CategoryWeapon {
+		return
+	}
+
+	state := c.Player.Snapshot()
+	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"weapon":    state.Weapon,
 	}, "")
 }
 

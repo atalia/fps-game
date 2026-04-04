@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,11 +32,17 @@ type Player struct {
 	Velocity       Position             `json:"-"`
 	Health         int                  `json:"health"`
 	MaxHealth      int                  `json:"max_health"`
+	Money          int                  `json:"money"`
 	Score          int                  `json:"score"`
 	Kills          int                  `json:"kills"`
 	Deaths         int                  `json:"deaths"`
 	Team           string               `json:"team"`
 	Weapon         string               `json:"weapon"`
+	Armor          int                  `json:"armor"`
+	HasHelmet      bool                 `json:"has_helmet"`
+	Flashbangs     int                  `json:"flashbangs"`
+	HEGrenades     int                  `json:"he_grenades"`
+	SmokeGrenades  int                  `json:"smoke_grenades"`
 	Ammo           int                  `json:"ammo"`
 	AmmoReserve    int                  `json:"ammo_reserve"`
 	MaxAmmo        int                  `json:"max_ammo"`
@@ -43,6 +50,7 @@ type Player struct {
 	SkillCooldowns map[string]time.Time `json:"-"`
 	Connected      bool                 `json:"-"`
 	HitBoxes       []HitBox             `json:"hit_boxes"`
+	OwnedWeapons   map[string]bool      `json:"-"`
 	mu             sync.RWMutex
 }
 
@@ -52,8 +60,11 @@ type Snapshot struct {
 	Rotation    float64
 	Health      int
 	MaxHealth   int
+	Money       int
 	Team        string
 	Weapon      string
+	Armor       int
+	HasHelmet   bool
 	Ammo        int
 	AmmoReserve int
 }
@@ -63,6 +74,7 @@ type Config struct {
 	DefaultHealth      int
 	DefaultAmmo        int
 	DefaultAmmoReserve int
+	DefaultMoney       int
 	Speed              float64
 	JumpForce          float64
 	ShootCooldown      time.Duration
@@ -73,6 +85,7 @@ var DefaultConfig = Config{
 	DefaultHealth:      100,
 	DefaultAmmo:        30,
 	DefaultAmmoReserve: 90,
+	DefaultMoney:       800,
 	Speed:              5.0,
 	JumpForce:          8.0,
 	ShootCooldown:      100 * time.Millisecond,
@@ -99,6 +112,7 @@ func NewPlayerWithConfig(cfg Config) *Player {
 		ID:             generateID(),
 		Health:         cfg.DefaultHealth,
 		MaxHealth:      cfg.DefaultHealth,
+		Money:          cfg.DefaultMoney,
 		Score:          0,
 		Kills:          0,
 		Deaths:         0,
@@ -109,6 +123,7 @@ func NewPlayerWithConfig(cfg Config) *Player {
 		SkillCooldowns: make(map[string]time.Time),
 		Connected:      true,
 		HitBoxes:       DefaultHitBoxes,
+		OwnedWeapons:   make(map[string]bool),
 	}
 }
 
@@ -276,6 +291,7 @@ func (p *Player) ToMap() map[string]interface{} {
 		"position": p.Position,
 		"rotation": p.Rotation,
 		"health":   p.Health,
+		"money":    p.Money,
 		"score":    p.Score,
 		"kills":    p.Kills,
 		"deaths":   p.Deaths,
@@ -295,8 +311,11 @@ func (p *Player) Snapshot() Snapshot {
 		Rotation:    p.Rotation,
 		Health:      p.Health,
 		MaxHealth:   p.MaxHealth,
+		Money:       p.Money,
 		Team:        p.Team,
 		Weapon:      p.Weapon,
+		Armor:       p.Armor,
+		HasHelmet:   p.HasHelmet,
 		Ammo:        p.Ammo,
 		AmmoReserve: p.AmmoReserve,
 	}
@@ -327,6 +346,12 @@ func (p *Player) ApplyLoadout(weapon string, magSize, reserve int) {
 	p.MaxAmmo = magSize
 	p.Ammo = magSize
 	p.AmmoReserve = reserve
+	if p.OwnedWeapons == nil {
+		p.OwnedWeapons = make(map[string]bool)
+	}
+	if normalized := normalizeWeaponID(weapon); normalized != "" {
+		p.OwnedWeapons[normalized] = true
+	}
 }
 
 // SetTeam 设置队伍
@@ -341,6 +366,124 @@ func (p *Player) GetTeam() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.Team
+}
+
+func (p *Player) GetMoney() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Money
+}
+
+func (p *Player) SetMoney(amount int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if amount < 0 {
+		amount = 0
+	}
+	p.Money = amount
+}
+
+func (p *Player) AddMoney(amount int) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Money += amount
+	if p.Money < 0 {
+		p.Money = 0
+	}
+	return p.Money
+}
+
+func (p *Player) SpendMoney(amount int) bool {
+	if amount <= 0 {
+		return true
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.Money < amount {
+		return false
+	}
+	p.Money -= amount
+	return true
+}
+
+func (p *Player) SetArmor(armor int, hasHelmet bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if armor < 0 {
+		armor = 0
+	}
+	p.Armor = armor
+	p.HasHelmet = hasHelmet
+}
+
+func (p *Player) GetArmorState() (int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Armor, p.HasHelmet
+}
+
+func (p *Player) AddGrenade(grenadeType string, count int) {
+	if count <= 0 {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	switch strings.ToLower(strings.TrimSpace(grenadeType)) {
+	case "flashbang", "flash":
+		p.Flashbangs += count
+	case "he_grenade", "he":
+		p.HEGrenades += count
+	case "smoke":
+		p.SmokeGrenades += count
+	}
+}
+
+func (p *Player) GetGrenadeCounts() (int, int, int) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Flashbangs, p.HEGrenades, p.SmokeGrenades
+}
+
+func (p *Player) ResetOwnedWeapons(weapons ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.OwnedWeapons = make(map[string]bool, len(weapons))
+	for _, weapon := range weapons {
+		if normalized := normalizeWeaponID(weapon); normalized != "" {
+			p.OwnedWeapons[normalized] = true
+		}
+	}
+}
+
+func (p *Player) GrantWeapon(weapon string) {
+	normalized := normalizeWeaponID(weapon)
+	if normalized == "" {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.OwnedWeapons == nil {
+		p.OwnedWeapons = make(map[string]bool)
+	}
+	p.OwnedWeapons[normalized] = true
+}
+
+func (p *Player) HasWeapon(weapon string) bool {
+	normalized := normalizeWeaponID(weapon)
+	if normalized == "" {
+		return false
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.OwnedWeapons[normalized]
+}
+
+func normalizeWeaponID(weapon string) string {
+	return strings.ToLower(strings.TrimSpace(weapon))
 }
 
 // SkillConfig 技能配置

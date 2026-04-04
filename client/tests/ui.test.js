@@ -13,6 +13,7 @@ describe("UIManager", () => {
     document.body.innerHTML = `
       <div id="health-fill"></div>
       <div id="health-text"></div>
+      <div id="money-amount"></div>
       <span id="ammo-count"></span>
       <span id="ammo-reserve"></span>
       <span id="current-weapon"></span>
@@ -41,6 +42,11 @@ describe("UIManager", () => {
     ui.updateAmmo(30, 90);
     expect(ui.elements.ammo.textContent).toBe("30");
     expect(ui.elements.ammoReserve.textContent).toBe("90");
+  });
+
+  it("updates money display", () => {
+    ui.updateMoney(2450);
+    expect(ui.elements.money.textContent).toBe("$2450");
   });
 
   it("escapes html in player list names", () => {

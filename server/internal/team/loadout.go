@@ -61,6 +61,22 @@ var weaponLoadouts = map[string]WeaponLoadout{
 		MagazineSize: 7,
 		ReserveAmmo:  35,
 	},
+	"mp5": {
+		ID:           "mp5",
+		Name:         "MP5",
+		Damage:       22,
+		Range:        70,
+		MagazineSize: 30,
+		ReserveAmmo:  120,
+	},
+	"p90": {
+		ID:           "p90",
+		Name:         "P90",
+		Damage:       24,
+		Range:        80,
+		MagazineSize: 50,
+		ReserveAmmo:  100,
+	},
 	"m4a1": {
 		ID:           "m4a1",
 		Name:         "M4A1",
@@ -114,6 +130,8 @@ var weaponLoadouts = map[string]WeaponLoadout{
 var teamWeaponPools = map[string]map[string]bool{
 	TeamCounterTerrorists: {
 		"usp":    true,
+		"mp5":    true,
+		"p90":    true,
 		"m4a1":   true,
 		"famas":  true,
 		"awp":    true,
@@ -121,6 +139,8 @@ var teamWeaponPools = map[string]map[string]bool{
 	},
 	TeamTerrorists: {
 		"glock":  true,
+		"mp5":    true,
+		"p90":    true,
 		"ak47":   true,
 		"galil":  true,
 		"awp":    true,
@@ -143,6 +163,8 @@ func NormalizeWeaponID(teamID, weaponID string) string {
 			return "sniper"
 		}
 		return "awp"
+	case "smg":
+		return "mp5"
 	case "pistol":
 		if normalizedTeam == "" {
 			return "pistol"
@@ -206,7 +228,7 @@ func AvailableWeaponsForTeam(teamID string) []string {
 	}
 
 	weapons := make([]string, 0, len(teamWeaponPools[normalizedTeam]))
-	for _, weaponID := range []string{"usp", "glock", "m4a1", "famas", "ak47", "galil", "awp", "deagle"} {
+	for _, weaponID := range []string{"usp", "glock", "mp5", "p90", "m4a1", "famas", "ak47", "galil", "awp", "deagle"} {
 		if teamWeaponPools[normalizedTeam][weaponID] {
 			weapons = append(weapons, weaponID)
 		}

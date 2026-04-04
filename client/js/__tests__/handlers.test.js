@@ -38,6 +38,7 @@ const mockRenderer = {
 const mockUIManager = {
   updateHealth: vi.fn(),
   updateAmmo: vi.fn(),
+  updateMoney: vi.fn(),
   updateWeapon: vi.fn(),
   updateKills: vi.fn(),
   updateDeaths: vi.fn(),
@@ -102,6 +103,7 @@ function createGameState() {
       health: 100,
       ammo: 30,
       weapon: "rifle",
+      money: 800,
       kills: 0,
       deaths: 0,
     },
@@ -339,6 +341,32 @@ describe("消息处理链测试", () => {
       expect(gameState.players.get("other-player").weapon).toBe("sniper");
       // 不应该显示消息给自己
       expect(mockUIManager.showMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("money_updated 处理链", () => {
+    it("自己收到金钱更新：同步状态和 HUD", () => {
+      const data = {
+        player_id: "test-player-123",
+        money: 1100,
+        delta: 300,
+        reason: "kill",
+      };
+
+      handlers.handleMoneyUpdated(data);
+
+      expect(gameState.player.money).toBe(1100);
+      expect(mockUIManager.updateMoney).toHaveBeenCalledWith(1100);
+    });
+
+    it("其他玩家的金钱更新不会影响自己", () => {
+      handlers.handleMoneyUpdated({
+        player_id: "other-player",
+        money: 2500,
+      });
+
+      expect(gameState.player.money).toBe(800);
+      expect(mockUIManager.updateMoney).not.toHaveBeenCalled();
     });
   });
 

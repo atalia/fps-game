@@ -292,3 +292,33 @@ func TestPlayer_Weapon(t *testing.T) {
 		t.Errorf("Weapon = %s, want shotgun", p.Weapon)
 	}
 }
+
+func TestPlayer_StartsWithMoney(t *testing.T) {
+	p := NewPlayer()
+
+	if p.GetMoney() != 800 {
+		t.Fatalf("Money = %d, want 800", p.GetMoney())
+	}
+}
+
+func TestPlayer_SpendAndAddMoney(t *testing.T) {
+	p := NewPlayer()
+
+	if !p.SpendMoney(650) {
+		t.Fatal("SpendMoney should succeed")
+	}
+	if got := p.GetMoney(); got != 150 {
+		t.Fatalf("Money after spend = %d, want 150", got)
+	}
+
+	if p.SpendMoney(200) {
+		t.Fatal("SpendMoney should fail when funds are insufficient")
+	}
+	if got := p.GetMoney(); got != 150 {
+		t.Fatalf("Money after failed spend = %d, want 150", got)
+	}
+
+	if got := p.AddMoney(300); got != 450 {
+		t.Fatalf("AddMoney() = %d, want 450", got)
+	}
+}

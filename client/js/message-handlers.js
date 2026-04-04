@@ -152,6 +152,7 @@ function createMessageHandlers(deps) {
 
       // 更新本地玩家武器状态
       if (data.player_id === game?.player?.id) {
+        game.player.ownWeapon?.(data.weapon);
         game.player.weapon = data.weapon;
         if (weaponConfig) {
           game.player.maxAmmo = weaponConfig.magSize;
@@ -175,6 +176,16 @@ function createMessageHandlers(deps) {
           player.weapon = data.weapon;
         }
       }
+    },
+
+    handleMoneyUpdated(data) {
+      if (data.player_id !== game?.player?.id) {
+        return;
+      }
+
+      game.player.money = data.money;
+      uiManager.updateMoney?.(data.money);
+      window.buyMenuUI?.refresh?.();
     },
 
     /**

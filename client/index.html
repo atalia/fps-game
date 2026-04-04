@@ -68,6 +68,14 @@
         text-align: right;
       }
 
+      #money-amount {
+        font-size: 22px;
+        font-weight: 800;
+        color: #7cff9a;
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
+      }
+
       #ammo-count {
         font-size: 28px;
         font-weight: bold;
@@ -504,6 +512,7 @@
       </div>
 
       <div id="ammo-display">
+        <div id="money-amount">$0</div>
         <div id="ammo-count">30</div>
         <div id="ammo-reserve">/ 90</div>
         <div id="current-weapon">RIFLE</div>
@@ -550,7 +559,7 @@
     <!-- 武器提示 -->
     <div id="weapon-hint">
       [1] 队伍手枪 | [2] 主步枪 | [3] 次步枪 | [4] AWP | [5] Deagle | [R] 换弹 |
-      [Tab] 记分板 | [B] 添加机器人
+      [B] 购买菜单 | [N] 添加机器人 | [Tab] 记分板
     </div>
 
     <!-- Three.js -->

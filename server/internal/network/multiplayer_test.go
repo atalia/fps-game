@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"fps-game/internal/team"
 	"fps-game/internal/room"
+	"fps-game/internal/team"
 
 	"github.com/gorilla/websocket"
 )

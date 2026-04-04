@@ -3,8 +3,8 @@ class TeamSystem {
     this.teams = new Map();
     this.playerTeam = new Map();
     this.teamWeapons = {
-      ct: ["usp", "m4a1", "famas", "awp", "deagle"],
-      t: ["glock", "ak47", "galil", "awp", "deagle"],
+      ct: ["usp", "mp5", "p90", "m4a1", "famas", "awp", "deagle"],
+      t: ["glock", "mp5", "p90", "ak47", "galil", "awp", "deagle"],
     };
     this.setTeams(this.getDefaultTeams());
   }

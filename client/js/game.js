@@ -165,6 +165,28 @@ class Game {
 
   setupWeaponSwitch() {
     this._eventHandlers.weaponSwitchKeydown = (e) => {
+      if (this.chatFocused) {
+        return;
+      }
+
+      const buyMenuVisible = window.buyMenuUI?.isVisible?.();
+      switch (e.key) {
+        case "b":
+        case "B":
+          window.buyMenuUI?.toggle?.();
+          return;
+        case "n":
+        case "N":
+          console.log("[GAME] Adding bot...");
+          window.network.send("add_bot", { difficulty: "normal" });
+          window.uiManager.showMessage("已添加 AI 机器人");
+          return;
+      }
+
+      if (buyMenuVisible) {
+        return;
+      }
+
       switch (e.key) {
         case "1":
           this.switchWeaponById(
@@ -192,13 +214,6 @@ class Game {
           this.player.reload();
           window.audioManager.playReload();
           window.network.send("reload", {});
-          break;
-        case "b":
-        case "B":
-          // 添加机器人
-          console.log("[GAME] Adding bot...");
-          window.network.send("add_bot", { difficulty: "normal" });
-          window.uiManager.showMessage("已添加 AI 机器人");
           break;
       }
     };
@@ -253,11 +268,21 @@ class Game {
       return false;
     }
 
+    const normalizedWeapon =
+      window.teamSystem?.normalizeWeaponId(this.player.team, weaponId) ||
+      weaponId;
+
+    if (
+      this.player?.team &&
+      typeof this.player?.hasWeapon === "function" &&
+      !this.player.hasWeapon(normalizedWeapon)
+    ) {
+      window.uiManager.showMessage("先购买该武器", "error");
+      return false;
+    }
+
     // 尝试从 WeaponSystem 获取武器配置
     if (window.weaponSystem) {
-      const normalizedWeapon =
-        window.teamSystem?.normalizeWeaponId(this.player.team, weaponId) ||
-        weaponId;
       const weapon = window.weaponSystem.getWeapon(normalizedWeapon);
       if (weapon) {
         this.player.weapon = weapon.id;

@@ -52,6 +52,11 @@ async function init() {
     if (typeof TeamSystem !== "undefined") {
       window.teamSystem = new TeamSystem();
     }
+    if (typeof BuyMenuUI !== "undefined") {
+      window.buyMenuUI = new BuyMenuUI(
+        document.getElementById("game-container"),
+      );
+    }
     console.log("✅ UI initialized");
 
     // 初始化渲染器
@@ -270,6 +275,7 @@ function setupNetworkHandlers() {
         window.__pendingSelfState = {
           team: selfPlayerData.team || "",
           weapon: selfPlayerData.weapon || "",
+          money: selfPlayerData.money ?? 800,
         };
       }
 
@@ -429,6 +435,33 @@ function setupNetworkHandlers() {
     if (window.messageHandlers) {
       window.messageHandlers.handleWeaponChanged(data);
     }
+    window.buyMenuUI?.refresh?.();
+  });
+
+  window.network.on("money_updated", (data) => {
+    if (window.messageHandlers) {
+      window.messageHandlers.handleMoneyUpdated(data);
+    }
+  });
+
+  window.network.on("buy_result", (data) => {
+    if (data.player_id !== window.game?.player?.id) {
+      return;
+    }
+
+    const item = window.findBuyMenuItem?.(data.item_id);
+    const isEquipment = Boolean(
+      window.BUY_MENU_CATALOG?.find((category) => category.id === "equipment")
+        ?.items?.some((entry) => entry.id === data.item_id),
+    );
+
+    if (data.success && item && isEquipment) {
+      window.uiManager.showMessage(`已购买 ${item.name}`, "success", 1500);
+    } else if (data.message) {
+      window.uiManager.showMessage(data.message, "error");
+    }
+
+    window.buyMenuUI?.refresh?.();
   });
 
   window.network.on("team_changed", (data) => {
@@ -437,6 +470,7 @@ function setupNetworkHandlers() {
     applyPlayerTeam(data.player_id, data.team);
 
     if (window.game?.player?.id === data.player_id) {
+      window.game.player.resetOwnedWeapons?.([]);
       window.uiManager.showMessage(
         `已加入 ${data.team === "ct" ? "CT" : "T"}`,
         "success",
@@ -444,6 +478,7 @@ function setupNetworkHandlers() {
       maybeShowTeamSelect();
     }
 
+    window.buyMenuUI?.refresh?.();
     if (typeof refreshPlayerList === "function") refreshPlayerList();
   });
 
@@ -508,8 +543,18 @@ async function startGame(playerId) {
     if (window.__pendingSelfState.weapon) {
       window.game.player.weapon = window.__pendingSelfState.weapon;
     }
+    window.game.player.money = window.__pendingSelfState.money ?? 800;
+    const defaultWeapon = window.game.player.team
+      ? window.teamSystem?.getDefaultWeapon(window.game.player.team)
+      : "";
+    window.game.player.resetOwnedWeapons?.(
+      [defaultWeapon, window.__pendingSelfState.weapon].filter(Boolean),
+    );
     delete window.__pendingSelfState;
   }
+
+  window.uiManager.updateMoney(window.game?.player?.money ?? 800);
+  window.buyMenuUI?.refresh?.();
 
   // 初始化命中效果系统
   if (typeof HitEffects !== "undefined") {
@@ -644,6 +689,8 @@ function leaveRoom() {
   if (window.teamSelectUI) {
     window.teamSelectUI.hide();
   }
+  window.buyMenuUI?.hide?.();
+  window.uiManager.updateMoney(0);
   delete window.__pendingSelfState;
 
   gameStarted = false;

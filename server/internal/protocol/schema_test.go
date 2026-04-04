@@ -241,6 +241,50 @@ func TestWeaponChangedSchema(t *testing.T) {
 	}
 }
 
+func TestMoneyUpdatedSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid money update",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"money":     2300,
+				"delta":     300,
+				"reason":    "kill",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing money",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid reason",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"money":     1500,
+				"reason":    "bonus",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("money_updated", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestVoiceEventsSchema 测试语音事件
 func TestVoiceEventsSchema(t *testing.T) {
 	t.Run("voice_start", func(t *testing.T) {

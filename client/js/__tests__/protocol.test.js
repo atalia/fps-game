@@ -11,6 +11,8 @@ const weaponIds = [
   "usp",
   "glock",
   "deagle",
+  "mp5",
+  "p90",
   "m4a1",
   "famas",
   "ak47",
@@ -40,6 +42,7 @@ const schemas = {
         id: z.string(),
         name: z.string(),
         health: z.number().int().min(0).max(100).optional(),
+        money: z.number().int().min(0).optional(),
         position: z
           .object({
             x: z.number(),
@@ -130,6 +133,13 @@ const schemas = {
   weapon_changed: z.object({
     player_id: z.string(),
     weapon: z.enum(weaponIds),
+  }),
+
+  money_updated: z.object({
+    player_id: z.string(),
+    money: z.number().int().min(0),
+    delta: z.number().int().optional(),
+    reason: z.enum(["purchase", "kill", "round_win", "round_loss"]).optional(),
   }),
 
   voice_start: z.object({
@@ -264,6 +274,27 @@ describe("Protocol Schema Tests", () => {
         weapon: "laser",
       };
       expect(() => validateMessage("weapon_changed", msg)).toThrow();
+    });
+  });
+
+  describe("money_updated", () => {
+    it("validates a purchase update", () => {
+      const msg = {
+        player_id: "player-123",
+        money: 150,
+        delta: -650,
+        reason: "purchase",
+      };
+      expect(() => validateMessage("money_updated", msg)).not.toThrow();
+    });
+
+    it("rejects invalid money update reasons", () => {
+      const msg = {
+        player_id: "player-123",
+        money: 1100,
+        reason: "bonus",
+      };
+      expect(() => validateMessage("money_updated", msg)).toThrow();
     });
   });
 

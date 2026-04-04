@@ -9,6 +9,9 @@ class PlayerController {
 
     this.health = 100;
     this.maxHealth = 100;
+    this.money = 800;
+    this.armor = 0;
+    this.hasHelmet = false;
     this.ammo = 30;
     this.ammoReserve = 90;
     this.maxAmmo = 30;
@@ -19,6 +22,7 @@ class PlayerController {
 
     this.weapon = "rifle";
     this.team = "";
+    this.ownedWeapons = new Set();
     this.speed = 5;
     this.jumpForce = 8;
     this.isGrounded = true;
@@ -175,6 +179,8 @@ class PlayerController {
       case "famas":
       case "ak47":
       case "galil":
+      case "mp5":
+      case "p90":
         this.shootCooldown = 100;
         break;
       case "shotgun":
@@ -284,6 +290,26 @@ class PlayerController {
 
   addDeath() {
     this.deaths++;
+  }
+
+  resetOwnedWeapons(weapons = []) {
+    this.ownedWeapons = new Set(
+      (weapons || [])
+        .map((weapon) => String(weapon || "").trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }
+
+  ownWeapon(weaponId) {
+    const normalized = String(weaponId || "").trim().toLowerCase();
+    if (!normalized) return;
+    this.ownedWeapons.add(normalized);
+  }
+
+  hasWeapon(weaponId) {
+    const normalized = String(weaponId || "").trim().toLowerCase();
+    if (!normalized) return false;
+    return this.ownedWeapons.has(normalized);
   }
 
   respawn() {

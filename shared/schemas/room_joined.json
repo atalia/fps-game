@@ -24,6 +24,7 @@
           "id": { "type": "string" },
           "name": { "type": "string" },
           "health": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "money": { "type": "integer", "minimum": 0 },
           "position": {
             "type": "object",
             "properties": {
@@ -33,6 +34,26 @@
             }
           },
           "is_bot": { "type": "boolean" },
+          "team": { "type": "string", "enum": ["ct", "t"] },
+          "weapon": {
+            "type": "string",
+            "enum": [
+              "pistol",
+              "rifle",
+              "shotgun",
+              "sniper",
+              "usp",
+              "glock",
+              "deagle",
+              "mp5",
+              "p90",
+              "m4a1",
+              "famas",
+              "ak47",
+              "galil",
+              "awp"
+            ]
+          },
           "kills": { "type": "integer" },
           "deaths": { "type": "integer" }
         }

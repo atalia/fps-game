@@ -9,6 +9,7 @@ class UIManager {
     this.elements = {
       healthFill: document.getElementById("health-fill"),
       healthText: document.getElementById("health-text"),
+      money: document.getElementById("money-amount"),
       ammo: document.getElementById("ammo-count"),
       ammoReserve: document.getElementById("ammo-reserve"),
       currentWeapon: document.getElementById("current-weapon"),
@@ -102,6 +103,12 @@ class UIManager {
     }
   }
 
+  updateMoney(money) {
+    if (this.elements.money) {
+      this.elements.money.textContent = `$${Math.max(0, Math.floor(money || 0))}`;
+    }
+  }
+
   // 更新当前武器
   updateWeapon(weaponName) {
     if (this.elements.currentWeapon) {
@@ -117,6 +124,14 @@ class UIManager {
   // 更新击杀/死亡
   updateKD(kills, deaths) {
     console.log("K/D:", kills, "/", deaths);
+  }
+
+  updateKills(kills) {
+    console.log("Kills:", kills);
+  }
+
+  updateDeaths(deaths) {
+    console.log("Deaths:", deaths);
   }
 
   // 更新房间信息
@@ -278,6 +293,37 @@ class UIManager {
   updateCrosshairSpread(spread) {
     // 通过CSS变量控制准心大小
     document.documentElement.style.setProperty("--crosshair-spread", spread);
+  }
+
+  showDeathScreen() {
+    let overlay = document.getElementById("death-screen");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "death-screen";
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 32px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        z-index: 320;
+      `;
+      overlay.textContent = "ELIMINATED";
+      document.body.appendChild(overlay);
+    }
+    overlay.style.display = "flex";
+  }
+
+  hideDeathScreen() {
+    const overlay = document.getElementById("death-screen");
+    if (overlay) {
+      overlay.style.display = "none";
+    }
   }
 
   // 显示低血量警告
