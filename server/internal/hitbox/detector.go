@@ -47,8 +47,8 @@ func RaySphereIntersectSimple(origin, direction, center Position, radius float64
 	return RaySphereIntersect(origin, direction, center, radius) >= 0
 }
 
-// CalculateDamage 计算最终伤害
-func CalculateDamage(baseDamage int, hitBoxType HitBoxType, distance, weaponRange float64) int {
+// CalculateDamage 计算最终伤害（带护甲减伤）
+func CalculateDamage(baseDamage int, hitBoxType HitBoxType, distance, weaponRange float64, armor int, hasHelmet bool) (finalDamage int, armorDamage int) {
 	// 1. 基础伤害
 	damage := float64(baseDamage)
 
@@ -64,5 +64,28 @@ func CalculateDamage(baseDamage int, hitBoxType HitBoxType, distance, weaponRang
 		damage *= falloff
 	}
 
-	return int(damage)
+	// 4. 护甲减伤
+	// - 头部：只有头盔能减伤 50%
+	// - 身体/手臂/腿部：护甲减伤 50%
+	armorDamage = 0
+
+	if hitBoxType == HitBoxHead && hasHelmet {
+		// 头盔减少 50% 头部伤害
+		absorbed := damage * 0.5
+		armorDamage = int(math.Min(float64(armor), absorbed))
+		damage = damage - float64(armorDamage)
+	} else if hitBoxType != HitBoxHead && armor > 0 {
+		// 身体护甲减少 50% 伤害
+		absorbed := damage * 0.5
+		armorDamage = int(math.Min(float64(armor), absorbed))
+		damage = damage - float64(armorDamage)
+	}
+
+	return int(damage), armorDamage
+}
+
+// CalculateDamageSimple 计算最终伤害（简化版，向后兼容）
+func CalculateDamageSimple(baseDamage int, hitBoxType HitBoxType, distance, weaponRange float64) int {
+	damage, _ := CalculateDamage(baseDamage, hitBoxType, distance, weaponRange, 0, false)
+	return damage
 }

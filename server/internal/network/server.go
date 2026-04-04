@@ -775,9 +775,6 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 	hit := c.detectHit(origin, direction, weaponRange)
 	if hit != nil {
-		// 计算伤害
-		damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
-
 		// 获取被击中的目标（玩家或机器人）
 		var target *player.Player
 		var isBot bool
@@ -797,6 +794,28 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		}
 
 		if target != nil && target.IsAlive() {
+			// 获取目标护甲状态
+			armor, hasHelmet := target.GetArmorState()
+
+			// 计算伤害（带护甲减伤）
+			damage, armorDamage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange, armor, hasHelmet)
+
+			// 扣除护甲
+			if armorDamage > 0 {
+				newArmor := armor - armorDamage
+				if newArmor < 0 {
+					newArmor = 0
+				}
+				target.SetArmor(newArmor, hasHelmet)
+
+				// 广播护甲更新
+				c.hub.BroadcastToRoom(c.Room, "armor_updated", map[string]interface{}{
+					"player_id":  hit.PlayerID,
+					"armor":      newArmor,
+					"has_helmet": hasHelmet,
+				}, "")
+			}
+
 			remainingHealth := target.TakeDamage(damage)
 			targetState := target.Snapshot()
 			if c.Room.RoundManager != nil {
@@ -816,6 +835,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 				"remaining_health":  remainingHealth,
 				"position":          targetState.Position,
 				"is_bot":            isBot,
+				"armor_damage":      armorDamage,
 			}, "")
 
 			// 检查死亡
