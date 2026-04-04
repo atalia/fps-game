@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "C4PlantedEvent",
+  "type": "object",
+  "required": ["planter_id", "explosion_in", "position"],
+  "properties": {
+    "planter_id": {
+      "type": "string",
+      "description": "ID of the player who planted the C4"
+    },
+    "explosion_in": {
+      "type": "integer",
+      "description": "Seconds until explosion"
+    },
+    "position": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  }
+}

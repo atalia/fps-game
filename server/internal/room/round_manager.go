@@ -25,6 +25,8 @@ type RoundEndReason string
 const (
 	RoundEndReasonElimination RoundEndReason = "elimination"
 	RoundEndReasonTime        RoundEndReason = "time"
+	RoundEndReasonExplosion   RoundEndReason = "explosion"
+	RoundEndReasonDefused     RoundEndReason = "defused"
 )
 
 type RoundConfig struct {
@@ -47,6 +49,10 @@ var DefaultRoundConfig = RoundConfig{
 	HalftimeAfter:    15,
 }
 
+const C4ExplosionTime = 40 * time.Second
+const C4DefuseTime = 5 * time.Second
+const C4DefuseTimeWithKit = 2500 * time.Millisecond
+
 type RoundState struct {
 	Phase            RoundPhase   `json:"phase"`
 	RoundNumber      int          `json:"round_number"`
@@ -55,6 +61,7 @@ type RoundState struct {
 	FirstToWin       int          `json:"first_to_win"`
 	TimerSeconds     int          `json:"timer_seconds"`
 	BuyTimeLeft      int          `json:"buy_time_left"`
+	C4ExplosionIn    int          `json:"c4_explosion_in"`
 	CanMove          bool         `json:"can_move"`
 	CanShoot         bool         `json:"can_shoot"`
 	CanBuy           bool         `json:"can_buy"`
@@ -120,6 +127,8 @@ type RoundManager struct {
 	roundStats      map[string]*roundPlayerStats
 	phaseTimer      *time.Timer
 	nextRoundTimer  *time.Timer
+	c4ExplosionTimer *time.Timer
+	c4ExplosionAt   time.Time
 	stateTickerStop chan struct{}
 	closed          bool
 }
@@ -214,6 +223,78 @@ func (rm *RoundManager) HandleRosterChanged() {
 			rm.endRound(winner, RoundEndReasonElimination)
 		}
 	}
+}
+
+// HandleC4Planted starts the C4 explosion timer when C4 is planted.
+// Should be called when a terrorist successfully plants the bomb.
+func (rm *RoundManager) HandleC4Planted(planterID string) {
+	rm.mu.Lock()
+	if rm.closed || rm.phase != RoundPhaseLive {
+		rm.mu.Unlock()
+		return
+	}
+
+	rm.c4ExplosionAt = time.Now().Add(C4ExplosionTime)
+	rm.c4ExplosionTimer = time.AfterFunc(C4ExplosionTime, rm.handleC4Explosion)
+	rm.mu.Unlock()
+
+	rm.room.Broadcast("c4_planted", map[string]interface{}{
+		"planter_id":    planterID,
+		"explosion_in":  int(C4ExplosionTime.Seconds()),
+		"position":      rm.room.GetC4Position(),
+	}, "")
+	rm.broadcastRoundState()
+}
+
+// HandleC4Defused handles successful C4 defusal by a counter-terrorist.
+func (rm *RoundManager) HandleC4Defused(defuserID string) {
+	rm.mu.Lock()
+	if rm.closed || rm.phase != RoundPhaseLive || !rm.room.IsC4Planted() {
+		rm.mu.Unlock()
+		return
+	}
+
+	// Stop the explosion timer
+	if rm.c4ExplosionTimer != nil {
+		rm.c4ExplosionTimer.Stop()
+		rm.c4ExplosionTimer = nil
+	}
+	rm.c4ExplosionAt = time.Time{}
+	rm.mu.Unlock()
+
+	rm.endRound(team.TeamCounterTerrorists, RoundEndReasonDefused)
+	rm.room.Broadcast("c4_defused", map[string]interface{}{
+		"defuser_id": defuserID,
+	}, "")
+}
+
+// handleC4Explosion is called when the C4 timer expires.
+func (rm *RoundManager) handleC4Explosion() {
+	rm.mu.RLock()
+	if rm.closed || rm.phase != RoundPhaseLive {
+		rm.mu.RUnlock()
+		return
+	}
+	rm.mu.RUnlock()
+
+	rm.endRound(team.TeamTerrorists, RoundEndReasonExplosion)
+	rm.room.Broadcast("c4_exploded", map[string]interface{}{
+		"position": rm.room.GetC4Position(),
+	}, "")
+}
+
+// GetC4ExplosionTime returns seconds until C4 explodes, or 0 if not planted.
+func (rm *RoundManager) GetC4ExplosionTime() int {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	if rm.c4ExplosionAt.IsZero() {
+		return 0
+	}
+	remaining := time.Until(rm.c4ExplosionAt)
+	if remaining <= 0 {
+		return 0
+	}
+	return int((remaining + time.Second - 1) / time.Second)
 }
 
 func (rm *RoundManager) MaybeStart() bool {
@@ -488,6 +569,14 @@ func (rm *RoundManager) snapshotLocked(now time.Time) RoundState {
 		}
 	}
 
+	c4ExplosionIn := 0
+	if !rm.c4ExplosionAt.IsZero() {
+		remaining := time.Until(rm.c4ExplosionAt)
+		if remaining > 0 {
+			c4ExplosionIn = int((remaining + time.Second - 1) / time.Second)
+		}
+	}
+
 	canBuy := (rm.phase == RoundPhaseFreeze || rm.phase == RoundPhaseLive) && now.Before(rm.buyEndsAt)
 	return RoundState{
 		Phase:            rm.phase,
@@ -497,6 +586,7 @@ func (rm *RoundManager) snapshotLocked(now time.Time) RoundState {
 		FirstToWin:       rm.config.FirstToWin,
 		TimerSeconds:     timerSeconds,
 		BuyTimeLeft:      buyTimeLeft,
+		C4ExplosionIn:    c4ExplosionIn,
 		CanMove:          rm.phase != RoundPhaseFreeze && rm.phase != RoundPhaseEnded && rm.phase != RoundPhaseMatchOver,
 		CanShoot:         rm.phase != RoundPhaseFreeze && rm.phase != RoundPhaseEnded && rm.phase != RoundPhaseMatchOver,
 		CanBuy:           canBuy,
@@ -611,7 +701,13 @@ func (rm *RoundManager) applyHalftimeSideSwitch() {
 }
 
 func (rm *RoundManager) resetParticipantsForRound() {
+	// Clear C4 state
 	rm.room.SetC4Planted(false, "", player.Position{})
+	rm.c4ExplosionAt = time.Time{}
+	if rm.c4ExplosionTimer != nil {
+		rm.c4ExplosionTimer.Stop()
+		rm.c4ExplosionTimer = nil
+	}
 
 	for _, participant := range rm.room.roundParticipants() {
 		teamID := team.NormalizeTeamID(participant.GetTeam())
@@ -696,6 +792,10 @@ func (rm *RoundManager) stopTimersLocked() {
 	if rm.nextRoundTimer != nil {
 		rm.nextRoundTimer.Stop()
 		rm.nextRoundTimer = nil
+	}
+	if rm.c4ExplosionTimer != nil {
+		rm.c4ExplosionTimer.Stop()
+		rm.c4ExplosionTimer = nil
 	}
 }
 

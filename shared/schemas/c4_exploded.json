@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "C4ExplodedEvent",
+  "type": "object",
+  "properties": {
+    "position": {
+      "type": "object",
+      "description": "Position where C4 exploded",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  }
+}

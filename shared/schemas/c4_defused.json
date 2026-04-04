@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "C4DefusedEvent",
+  "type": "object",
+  "required": ["defuser_id"],
+  "properties": {
+    "defuser_id": {
+      "type": "string",
+      "description": "ID of the player who defused the C4"
+    }
+  }
+}
