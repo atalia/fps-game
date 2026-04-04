@@ -519,6 +519,8 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	// 投掷物
 	case "grenade_throw":
 		c.handleGrenadeThrow(msg.Data, roomManager)
+	case "grenade_explode":
+		c.handleGrenadeExplode(msg.Data, roomManager)
 	// C4 爆破模式
 	case "c4_plant":
 		c.handleC4Plant(msg.Data, roomManager)
@@ -1435,6 +1437,28 @@ func (c *Client) handleGrenadeThrow(data json.RawMessage, roomManager *room.Mana
 		return
 	}
 
+	// 扣除投掷物数量
+	switch req.Type {
+	case "flashbang":
+		if c.Player.Flashbangs > 0 {
+			c.Player.Flashbangs--
+		} else {
+			return // 没有闪光弹
+		}
+	case "he":
+		if c.Player.HEGrenades > 0 {
+			c.Player.HEGrenades--
+		} else {
+			return
+		}
+	case "smoke":
+		if c.Player.SmokeGrenades > 0 {
+			c.Player.SmokeGrenades--
+		} else {
+			return
+		}
+	}
+
 	// 广播投掷物
 	c.hub.BroadcastToRoom(c.Room, "grenade_thrown", map[string]interface{}{
 		"player_id": c.Player.ID,
@@ -1450,6 +1474,126 @@ func (c *Client) handleGrenadeThrow(data json.RawMessage, roomManager *room.Mana
 			"z": req.Vel.Z,
 		},
 	}, "")
+}
+
+// handleGrenadeExplode 处理投掷物爆炸（高爆手雷伤害）
+func (c *Client) handleGrenadeExplode(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Type     string `json:"type"`
+		Position struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 只处理高爆手雷
+	if req.Type != "he" {
+		return
+	}
+
+	// 高爆手雷参数
+	const (
+		maxDamage   = 98
+		damageRadius = 8.0
+		minDamage   = 1
+	)
+
+	// 获取所有玩家和机器人
+	var targets []struct {
+		id     string
+		pos    player.Position
+		health int
+		p      *player.Player
+	}
+
+	// 玩家
+	for _, p := range c.Room.GetPlayers() {
+		if p.IsAlive() {
+			state := p.Snapshot()
+			targets = append(targets, struct {
+				id     string
+				pos    player.Position
+				health int
+				p      *player.Player
+			}{id: p.ID, pos: state.Position, health: state.Health, p: p})
+		}
+	}
+
+	// 机器人
+	for _, bot := range c.Room.GetBots() {
+		if bot.Player.IsAlive() {
+			state := bot.Player.Snapshot()
+			targets = append(targets, struct {
+				id     string
+				pos    player.Position
+				health int
+				p      *player.Player
+			}{id: bot.Player.ID, pos: state.Position, health: state.Health, p: bot.Player})
+		}
+	}
+
+	// 计算范围伤害
+	for _, target := range targets {
+		dx := target.pos.X - req.Position.X
+		dy := target.pos.Y - req.Position.Y
+		dz := target.pos.Z - req.Position.Z
+		distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+
+		if distance > damageRadius {
+			continue
+		}
+
+		// 距离衰减：越远伤害越低
+		damageMultiplier := 1.0 - (distance / damageRadius)
+		damage := int(float64(maxDamage) * damageMultiplier)
+		if damage < minDamage {
+			damage = minDamage
+		}
+
+		// 友军伤害减半
+		attackerTeam := c.Player.GetTeam()
+		targetTeam := target.p.GetTeam()
+		if attackerTeam != "" && attackerTeam == targetTeam && target.id != c.Player.ID {
+			damage = damage / 2
+		}
+
+		// 造成伤害
+		remainingHealth := target.p.TakeDamage(damage)
+
+		// 广播受伤消息
+		c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
+			"player_id":        target.id,
+			"attacker_id":      c.Player.ID,
+			"damage":           damage,
+			"remaining_health": remainingHealth,
+			"position":         target.pos,
+			"is_explosion":     true,
+		}, "")
+
+		// 检查击杀
+		if remainingHealth <= 0 {
+			c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
+				"victim_id":    target.id,
+				"killer_id":    c.Player.ID,
+				"weapon":       "he_grenade",
+				"is_headshot":  false,
+				"killer_pos":   c.Player.Snapshot().Position,
+				"victim_pos":   target.pos,
+			}, "")
+
+			// 更新击杀统计
+			c.Player.AddKill(1)
+			target.p.Die()
+		}
+	}
 }
 
 // handleC4Plant 处理 C4 放置 (旧版即时放置，保留兼容)

@@ -207,6 +207,14 @@ class GrenadeSystem {
             radius: grenade.radius
         };
 
+        // 发送服务器计算伤害
+        if (window.network?.connected) {
+            window.network.send("grenade_explode", {
+                type: "he",
+                position: grenade.position
+            });
+        }
+
         if (this.onExplosion) {
             this.onExplosion(explosion);
         }
