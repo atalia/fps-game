@@ -529,6 +529,9 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	c.Room = r
+	r.SetBroadcaster(func(msgType string, data interface{}, excludeID string) {
+		c.hub.BroadcastToRoom(r, msgType, data, excludeID)
+	})
 
 	// 发送房间信息给新玩家
 	c.Send <- NewMessage("room_joined", map[string]interface{}{
@@ -536,6 +539,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		"player_id":    c.Player.ID,
 		"players":      r.GetPlayerList(),
 		"teams":        r.GetTeams(),
+		"round_state":  r.RoundManager.Snapshot(),
 		"player_count": r.GetPlayerCount(),
 		"max_size":     r.MaxSize,
 	}).ToJSON()
@@ -569,6 +573,8 @@ func (c *Client) handleLeaveRoom(roomManager *room.Manager) {
 	// 如果房间空了，移除房间
 	if r.GetPlayerCount() == 0 {
 		roomManager.RemoveRoom(r.ID)
+	} else if r.RoundManager != nil {
+		r.RoundManager.HandleRosterChanged()
 	}
 
 	c.Room = nil
@@ -591,7 +597,10 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 	}
 
 	current := c.Player.Snapshot()
-	x, z := clampAuthoritativePosition(*req.X, *req.Z)
+	x, z := current.Position.X, current.Position.Z
+	if c.Room.RoundManager == nil || c.Room.RoundManager.CanMove() {
+		x, z = clampAuthoritativePosition(*req.X, *req.Z)
+	}
 	rotation := current.Rotation
 	if req.Rotation != nil {
 		if !isFiniteFloat(*req.Rotation) {
@@ -615,6 +624,9 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 
 func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil {
+		return
+	}
+	if c.Room.RoundManager != nil && !c.Room.RoundManager.CanShoot() {
 		return
 	}
 
@@ -684,6 +696,9 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		if target != nil && target.IsAlive() {
 			remainingHealth := target.TakeDamage(damage)
 			targetState := target.Snapshot()
+			if c.Room.RoundManager != nil {
+				c.Room.RoundManager.RecordDamage(c.Player.ID, damage)
+			}
 
 			// 广播受伤消息（包含 attacker_position 用于显示受击方向指示）
 			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
@@ -703,6 +718,9 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 				c.Player.AddKill(1)
 				c.awardMoney(c.Player, economy.KillReward, "kill")
 				target.Die()
+				if c.Room.RoundManager != nil {
+					c.Room.RoundManager.RecordKill(c.Player.ID)
+				}
 
 				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
 					"victim_id":     hit.PlayerID,
@@ -714,16 +732,8 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 					"is_bot":        isBot,
 				}, "")
 
-				if winner, teams, completed := c.Room.CompleteRoundIfWon(); completed {
-					c.awardRoundMoney(c.Room, winner)
-					c.hub.BroadcastToRoom(c.Room, "team_scores_updated", map[string]interface{}{
-						"winner": winner,
-						"teams":  teams,
-					}, "")
-					go c.resetRoomForNextRound(c.Room)
-				} else if !isBot {
-					// 玩家自动重生，机器人不重生
-					go c.respawnPlayer(target, c.Room)
+				if c.Room.RoundManager != nil {
+					c.Room.RoundManager.HandleRosterChanged()
 				}
 			}
 		}
@@ -909,6 +919,15 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		}).ToJSON()
 		return
 	}
+	if c.Room.RoundManager != nil {
+		state := c.Room.RoundManager.Snapshot()
+		if state.Phase != room.RoundPhaseWaiting && state.Phase != room.RoundPhaseMatchOver {
+			c.Send <- NewMessage("error", map[string]string{
+				"message": "Respawn is disabled while rounds are active",
+			}).ToJSON()
+			return
+		}
+	}
 	spawn := spawnPositionForTeam(c.Player.GetTeam())
 	c.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
 	applyRespawnLoadout(c.Player)
@@ -985,59 +1004,12 @@ func resolveShootDirection(req shootRequest, rotation float64) (hitbox.Position,
 	}, true
 }
 
-func randomSpawnPosition() player.Position {
-	return player.Position{
-		X: rand.Float64()*respawnCoordinateLimit*2 - respawnCoordinateLimit,
-		Y: 0,
-		Z: rand.Float64()*respawnCoordinateLimit*2 - respawnCoordinateLimit,
-	}
-}
-
 func spawnPositionForTeam(teamID string) player.Position {
-	switch team.NormalizeTeamID(teamID) {
-	case team.TeamCounterTerrorists:
-		return ctSpawnPoints[rand.Intn(len(ctSpawnPoints))]
-	case team.TeamTerrorists:
-		return tSpawnPoints[rand.Intn(len(tSpawnPoints))]
-	default:
-		return randomSpawnPosition()
-	}
+	return room.SpawnPositionForTeam(teamID)
 }
 
 func applyRespawnLoadout(p *player.Player) {
-	teamID := p.GetTeam()
-	if teamID == "" {
-		return
-	}
-
-	// First-time team join: give team's default pistol
-	// If player has generic weapons (rifle/pistol/sniper), treat as "no weapon selected"
-	currentWeapon := p.Snapshot().Weapon
-	if currentWeapon == "rifle" || currentWeapon == "pistol" || currentWeapon == "sniper" || currentWeapon == "" {
-		// Give team's default pistol
-		loadout, ok := team.GetWeaponLoadout(teamID, team.DefaultWeaponForTeam(teamID))
-		if !ok {
-			return
-		}
-		p.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
-		return
-	}
-
-	// Player has a specific weapon, check if team can use it
-	preferredWeapon := currentWeapon
-	if !team.CanTeamUseWeapon(teamID, preferredWeapon) {
-		preferredWeapon = team.DefaultWeaponForTeam(teamID)
-	}
-
-	loadout, ok := team.GetWeaponLoadout(teamID, preferredWeapon)
-	if !ok {
-		loadout, ok = team.GetWeaponLoadout(teamID, team.DefaultWeaponForTeam(teamID))
-	}
-	if !ok {
-		return
-	}
-
-	p.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
+	room.ApplyRespawnLoadout(p)
 }
 
 func (c *Client) sendMoneyUpdate(p *player.Player, delta int, reason string) {
@@ -1230,6 +1202,7 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
 		"player_id": c.Player.ID,
 		"weapon":    state.Weapon,
+		"reason":    "team_join",
 	}, "")
 
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
@@ -1238,6 +1211,9 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 		"health":    state.Health,
 		"ammo":      state.Ammo,
 	}, "")
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.HandleRosterChanged()
+	}
 }
 
 func (c *Client) handleBuy(data json.RawMessage) {
@@ -1245,6 +1221,14 @@ func (c *Client) handleBuy(data json.RawMessage) {
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "You must join a room before buying",
 		}).ToJSON()
+		return
+	}
+	if c.Room.RoundManager != nil && !c.Room.RoundManager.CanBuy() {
+		c.hub.BroadcastToRoom(c.Room, "buy_result", map[string]interface{}{
+			"player_id": c.Player.ID,
+			"success":   false,
+			"message":   "Buy time is over",
+		}, "")
 		return
 	}
 
@@ -1522,6 +1506,9 @@ func (c *Client) handleAddBot(data json.RawMessage) {
 		"is_bot":     true,
 		"difficulty": bot.Config.Difficulty,
 	}, "")
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.HandleRosterChanged()
+	}
 }
 
 // handleRemoveBot 处理移除机器人
@@ -1543,4 +1530,7 @@ func (c *Client) handleRemoveBot(data json.RawMessage) {
 	c.hub.BroadcastToRoom(c.Room, "player_left", map[string]interface{}{
 		"player_id": req.BotID,
 	}, "")
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.HandleRosterChanged()
+	}
 }

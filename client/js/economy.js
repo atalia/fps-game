@@ -175,6 +175,10 @@ class BuyMenuUI {
     return window.teamSystem?.normalizeTeamId(this.getPlayer()?.team || "") || "";
   }
 
+  getRoundState() {
+    return window.roundState || null;
+  }
+
   isVisible() {
     return Boolean(this.element && this.element.style.display !== "none");
   }
@@ -188,9 +192,16 @@ class BuyMenuUI {
     return this.getMoney() >= item.price;
   }
 
+  canUseBuyWindow() {
+    const roundState = this.getRoundState();
+    if (!roundState) return true;
+    return roundState.can_buy !== false;
+  }
+
   canPurchase(item) {
     return (
       Boolean(this.getTeam()) &&
+      this.canUseBuyWindow() &&
       !this.isTeamLocked(item) &&
       this.canAfford(item) &&
       Boolean(window.network?.connected)
@@ -199,12 +210,17 @@ class BuyMenuUI {
 
   getStatusLabel(item) {
     if (!this.getTeam()) return "JOIN A TEAM";
+    if (!this.canUseBuyWindow()) return "BUY CLOSED";
     if (this.isTeamLocked(item)) return `${item.team.toUpperCase()} ONLY`;
     if (!this.canAfford(item)) return "NOT ENOUGH";
     return "BUY";
   }
 
   show() {
+    if (!this.canUseBuyWindow()) {
+      window.uiManager?.showMessage("Buy time is over", "error");
+      return;
+    }
     this.ensureElement();
     document.exitPointerLock?.();
     this.element.style.display = "flex";
@@ -394,6 +410,10 @@ class BuyMenuUI {
 
         if (!this.getTeam()) {
           window.uiManager?.showMessage("Join a team before buying", "error");
+          return;
+        }
+        if (!this.canUseBuyWindow()) {
+          window.uiManager?.showMessage("Buy time is over", "error");
           return;
         }
         if (this.isTeamLocked(item)) {

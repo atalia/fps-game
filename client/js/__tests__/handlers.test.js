@@ -39,6 +39,7 @@ const mockUIManager = {
   updateHealth: vi.fn(),
   updateAmmo: vi.fn(),
   updateMoney: vi.fn(),
+  updateRoundState: vi.fn(),
   updateWeapon: vi.fn(),
   updateKills: vi.fn(),
   updateDeaths: vi.fn(),
@@ -342,6 +343,17 @@ describe("消息处理链测试", () => {
       // 不应该显示消息给自己
       expect(mockUIManager.showMessage).not.toHaveBeenCalled();
     });
+
+    it("回合重置武器同步：更新状态但不弹提示", () => {
+      handlers.handleWeaponChanged({
+        player_id: "test-player-123",
+        weapon: "usp",
+        reason: "round_reset",
+      });
+
+      expect(gameState.player.weapon).toBe("usp");
+      expect(mockUIManager.showMessage).not.toHaveBeenCalled();
+    });
   });
 
   describe("money_updated 处理链", () => {
@@ -367,6 +379,41 @@ describe("消息处理链测试", () => {
 
       expect(gameState.player.money).toBe(800);
       expect(mockUIManager.updateMoney).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("round handlers", () => {
+    it("同步 round_state 到本地状态和 HUD", () => {
+      handlers.handleRoundState({
+        phase: "freeze",
+        round_number: 3,
+        regulation_rounds: 30,
+        timer_seconds: 5,
+      });
+
+      expect(gameState.roundState).toEqual({
+        phase: "freeze",
+        round_number: 3,
+        regulation_rounds: 30,
+        timer_seconds: 5,
+      });
+      expect(mockUIManager.updateRoundState).toHaveBeenCalled();
+    });
+
+    it("round_ended 会显示公告", () => {
+      handlers.handleRoundEnded({
+        round_number: 8,
+        phase: "ended",
+        is_overtime: false,
+        announcement: "CT win by elimination | MVP: Alice",
+        teams: [],
+      });
+
+      expect(mockUIManager.showMessage).toHaveBeenCalledWith(
+        "CT win by elimination | MVP: Alice",
+        "success",
+        2800,
+      );
     });
   });
 

@@ -8,20 +8,21 @@ import (
 	"time"
 
 	"fps-game/internal/ai"
-	"fps-game/internal/team"
 	"fps-game/internal/player"
+	"fps-game/internal/team"
 )
 
 // Room 游戏房间
 type Room struct {
-	ID          string
-	Name        string
-	MaxSize     int
-	Players     map[string]*player.Player
-	BotManager  *ai.Manager
-	CreatedAt   time.Time
-	StartedAt   time.Time
-	TeamManager *team.TeamManager
+	ID           string
+	Name         string
+	MaxSize      int
+	Players      map[string]*player.Player
+	BotManager   *ai.Manager
+	CreatedAt    time.Time
+	StartedAt    time.Time
+	TeamManager  *team.TeamManager
+	RoundManager *RoundManager
 	// C4 爆破模式
 	C4Planted         bool
 	C4Planter         string
@@ -29,12 +30,13 @@ type Room struct {
 	C4PlantedAt       time.Time
 	GameMode          string
 	roundResetPending bool
+	broadcastFn       func(string, interface{}, string)
 	mu                sync.RWMutex
 }
 
 // NewRoom 创建房间
 func NewRoom(maxSize int) *Room {
-	return &Room{
+	r := &Room{
 		ID:          generateID(),
 		MaxSize:     maxSize,
 		Players:     make(map[string]*player.Player),
@@ -42,6 +44,8 @@ func NewRoom(maxSize int) *Room {
 		TeamManager: team.NewTeamManagerForRoom(maxSize),
 		CreatedAt:   time.Now(),
 	}
+	r.RoundManager = NewRoundManager(r, DefaultRoundConfig)
+	return r
 }
 
 // GetPlayers 获取玩家列表的副本（线程安全）
@@ -166,7 +170,27 @@ func (r *Room) GetPlayerList() []map[string]interface{} {
 
 // Broadcast 广播消息（占位，实际由 network 层实现）
 func (r *Room) Broadcast(msgType string, data interface{}, excludeID string) {
-	// 由 network 层实现
+	r.mu.RLock()
+	broadcastFn := r.broadcastFn
+	r.mu.RUnlock()
+
+	if broadcastFn != nil {
+		broadcastFn(msgType, data, excludeID)
+	}
+}
+
+// SetBroadcaster 设置房间广播回调。
+func (r *Room) SetBroadcaster(fn func(string, interface{}, string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.broadcastFn = fn
+}
+
+// Close 释放房间资源。
+func (r *Room) Close() {
+	if r.RoundManager != nil {
+		r.RoundManager.Close()
+	}
 }
 
 // GetTeams 获取当前房间的队伍快照。
@@ -318,6 +342,7 @@ func (m *Manager) RemoveRoom(id string) {
 		for playerID := range room.Players {
 			delete(m.playerRooms, playerID)
 		}
+		room.Close()
 		delete(m.rooms, id)
 	}
 }
@@ -383,6 +408,7 @@ func (m *Manager) LeaveRoom(playerID string) {
 			room.RemovePlayer(playerID)
 			// 如果房间空了，移除房间
 			if room.GetPlayerCount() == 0 {
+				room.Close()
 				delete(m.rooms, roomID)
 			}
 		}

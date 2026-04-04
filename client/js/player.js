@@ -104,18 +104,21 @@ class PlayerController {
 
   update() {
     const dt = 1 / 60;
+    const canMove = this.canMoveDuringRound();
 
     // 移动
     let moveX = 0;
     let moveZ = 0;
 
-    if (this.keys["KeyW"]) moveZ -= 1;
-    if (this.keys["KeyS"]) moveZ += 1;
-    if (this.keys["KeyA"]) moveX -= 1;
-    if (this.keys["KeyD"]) moveX += 1;
+    if (canMove) {
+      if (this.keys["KeyW"]) moveZ -= 1;
+      if (this.keys["KeyS"]) moveZ += 1;
+      if (this.keys["KeyA"]) moveX -= 1;
+      if (this.keys["KeyD"]) moveX += 1;
+    }
 
     // 跳跃
-    if (this.keys["Space"] && this.isGrounded) {
+    if (canMove && this.keys["Space"] && this.isGrounded) {
       this.velocity.y = this.jumpForce;
       this.isGrounded = false;
     }
@@ -152,6 +155,7 @@ class PlayerController {
 
   shoot() {
     const now = Date.now();
+    if (!this.canShootDuringRound()) return false;
     if (now - this.lastShot < this.shootCooldown) return false;
     if (this.ammo <= 0) {
       // 播放空弹夹音效
@@ -320,6 +324,18 @@ class PlayerController {
       y: 0,
       z: (Math.random() - 0.5) * 40,
     };
+  }
+
+  canMoveDuringRound() {
+    const roundState = window.roundState || null;
+    if (!roundState) return true;
+    return roundState.can_move !== false;
+  }
+
+  canShootDuringRound() {
+    const roundState = window.roundState || null;
+    if (!roundState) return true;
+    return roundState.can_shoot !== false;
   }
 }
 

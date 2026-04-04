@@ -285,6 +285,45 @@ func TestMoneyUpdatedSchema(t *testing.T) {
 	}
 }
 
+func TestRoundStateSchema(t *testing.T) {
+	msg := map[string]interface{}{
+		"phase":             "freeze",
+		"round_number":      2,
+		"rounds_played":     1,
+		"regulation_rounds": 30,
+		"first_to_win":      16,
+		"timer_seconds":     5,
+		"buy_time_left":     15,
+		"can_move":          false,
+		"can_shoot":         false,
+		"can_buy":           true,
+		"is_overtime":       false,
+	}
+
+	if err := ValidateSchemaStrict("round_state", msg); err != nil {
+		t.Fatalf("round_state validation failed: %v", err)
+	}
+}
+
+func TestRoundEndedSchema(t *testing.T) {
+	msg := map[string]interface{}{
+		"round_number": 9,
+		"winner":       "ct",
+		"reason":       "elimination",
+		"announcement": "CT win by elimination | MVP: Alice",
+		"mvp": map[string]interface{}{
+			"player_id": "alice",
+			"name":      "Alice",
+			"kills":     2,
+			"damage":    145,
+		},
+	}
+
+	if err := ValidateSchemaStrict("round_ended", msg); err != nil {
+		t.Fatalf("round_ended validation failed: %v", err)
+	}
+}
+
 // TestVoiceEventsSchema 测试语音事件
 func TestVoiceEventsSchema(t *testing.T) {
 	t.Run("voice_start", func(t *testing.T) {

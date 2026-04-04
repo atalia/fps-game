@@ -23,6 +23,10 @@ class UIManager {
       scoreboard: document.getElementById("scoreboard"),
       scoreboardBody: document.getElementById("scoreboard-rows"),
       scoreboardTeamSummary: document.getElementById("scoreboard-team-summary"),
+      roundNumber: document.getElementById("round-number"),
+      roundScore: document.getElementById("round-score"),
+      roundTimer: document.getElementById("round-timer"),
+      roundPhase: document.getElementById("round-phase"),
     };
 
     // 当前玩家 ID
@@ -107,6 +111,45 @@ class UIManager {
     if (this.elements.money) {
       this.elements.money.textContent = `$${Math.max(0, Math.floor(money || 0))}`;
     }
+  }
+
+  updateRoundState(state) {
+    if (!state) return;
+
+    if (this.elements.roundNumber) {
+      this.elements.roundNumber.textContent = state.is_overtime
+        ? `Round ${state.round_number}/OT`
+        : `Round ${state.round_number}/${state.regulation_rounds || 30}`;
+    }
+
+    if (this.elements.roundScore) {
+      const teams = Array.isArray(state.teams) ? state.teams : [];
+      const ct = teams.find((entry) => entry.id === "ct") || { score: 0 };
+      const t = teams.find((entry) => entry.id === "t") || { score: 0 };
+      this.elements.roundScore.textContent = `CT ${ct.score || 0} - ${t.score || 0} T`;
+    }
+
+    if (this.elements.roundTimer) {
+      this.elements.roundTimer.textContent = this.formatClock(
+        state.timer_seconds || 0,
+      );
+    }
+
+    if (this.elements.roundPhase) {
+      this.elements.roundPhase.textContent = this.formatRoundPhase(state);
+    }
+  }
+
+  resetRoundState() {
+    this.updateRoundState({
+      phase: "waiting",
+      round_number: 1,
+      regulation_rounds: 30,
+      timer_seconds: 0,
+      teams: [],
+      is_overtime: false,
+      buy_time_left: 0,
+    });
   }
 
   // 更新当前武器
@@ -400,6 +443,31 @@ class UIManager {
       return { label: "T", color: "#f44336" };
     }
     return null;
+  }
+
+  formatClock(totalSeconds) {
+    const seconds = Math.max(0, Number(totalSeconds) || 0);
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  }
+
+  formatRoundPhase(state) {
+    switch (state.phase) {
+      case "freeze":
+        return "FREEZETIME";
+      case "live":
+        if ((state.buy_time_left || 0) > 0) {
+          return `BUY ${state.buy_time_left}s`;
+        }
+        return "LIVE";
+      case "ended":
+        return "ROUND END";
+      case "match_over":
+        return "MATCH OVER";
+      default:
+        return "WARMUP";
+    }
   }
 }
 

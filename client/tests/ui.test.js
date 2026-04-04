@@ -27,6 +27,10 @@ describe("UIManager", () => {
       <div id="scoreboard"></div>
       <div id="scoreboard-team-summary"></div>
       <tbody id="scoreboard-rows"></tbody>
+      <div id="round-number"></div>
+      <div id="round-score"></div>
+      <div id="round-timer"></div>
+      <div id="round-phase"></div>
     `;
     UIManager = await loadUIManager();
     ui = new UIManager();
@@ -76,5 +80,24 @@ describe("UIManager", () => {
     expect(ui.elements.chatMessages.textContent).toContain(
       "<b>alice</b>: <img src=x onerror=1 />",
     );
+  });
+
+  it("updates round hud state", () => {
+    ui.updateRoundState({
+      round_number: 12,
+      regulation_rounds: 30,
+      timer_seconds: 84,
+      phase: "live",
+      buy_time_left: 5,
+      teams: [
+        { id: "ct", score: 7 },
+        { id: "t", score: 4 },
+      ],
+    });
+
+    expect(ui.elements.roundNumber.textContent).toBe("Round 12/30");
+    expect(ui.elements.roundScore.textContent).toBe("CT 7 - 4 T");
+    expect(ui.elements.roundTimer.textContent).toBe("01:24");
+    expect(ui.elements.roundPhase.textContent).toBe("BUY 5s");
   });
 });

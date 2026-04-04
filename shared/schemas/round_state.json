@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "round_state.json",
+  "title": "RoundState",
+  "description": "Current round state snapshot",
+  "type": "object",
+  "required": [
+    "phase",
+    "round_number",
+    "regulation_rounds",
+    "timer_seconds",
+    "can_move",
+    "can_shoot",
+    "can_buy"
+  ],
+  "properties": {
+    "phase": {
+      "type": "string",
+      "enum": ["waiting", "freeze", "live", "ended", "match_over"]
+    },
+    "round_number": { "type": "integer", "minimum": 1 },
+    "rounds_played": { "type": "integer", "minimum": 0 },
+    "regulation_rounds": { "type": "integer", "minimum": 1 },
+    "first_to_win": { "type": "integer", "minimum": 1 },
+    "timer_seconds": { "type": "integer", "minimum": 0 },
+    "buy_time_left": { "type": "integer", "minimum": 0 },
+    "can_move": { "type": "boolean" },
+    "can_shoot": { "type": "boolean" },
+    "can_buy": { "type": "boolean" },
+    "is_overtime": { "type": "boolean" },
+    "match_winner": {
+      "type": "string",
+      "enum": ["ct", "t"]
+    },
+    "teams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "enum": ["ct", "t"] },
+          "score": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

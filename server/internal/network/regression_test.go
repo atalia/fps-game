@@ -8,6 +8,7 @@ import (
 
 	"fps-game/internal/player"
 	"fps-game/internal/room"
+	"fps-game/internal/team"
 )
 
 func registerClient(hub *Hub, client *Client) {
@@ -45,6 +46,22 @@ func assertNoClientMessage(t *testing.T, send <-chan []byte, wait time.Duration)
 		t.Fatal("unexpected raw client message")
 	case <-time.After(wait):
 	}
+}
+
+func waitForRoundPhase(t *testing.T, rm *room.RoundManager, want room.RoundPhase, timeout time.Duration) room.RoundState {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		state := rm.Snapshot()
+		if state.Phase == want {
+			return state
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	t.Fatalf("timed out waiting for round phase %s (last=%s)", want, rm.Snapshot().Phase)
+	return room.RoundState{}
 }
 
 func TestClient_handleJoinRoom_MovesExistingPlayerWithoutGhosts(t *testing.T) {
@@ -272,6 +289,128 @@ func TestClient_handleShoot_UsesAuthoritativeServerState(t *testing.T) {
 	if shotData.Ammo != 29 {
 		t.Fatalf("ammo = %d, want 29", shotData.Ammo)
 	}
+}
+
+func TestClient_handleMove_BlocksPositionDuringFreezeTime(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 4)
+	r := roomManager.CreateRoom()
+	r.RoundManager.Close()
+	r.RoundManager = room.NewRoundManager(r, room.RoundConfig{
+		FreezeTime:       40 * time.Millisecond,
+		RoundTime:        100 * time.Millisecond,
+		BuyTime:          50 * time.Millisecond,
+		RoundEndDelay:    20 * time.Millisecond,
+		RegulationRounds: 30,
+		FirstToWin:       16,
+		HalftimeAfter:    15,
+	})
+
+	client := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+	observer := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+
+	if !r.AddPlayer(client.Player) || !r.AddPlayer(observer.Player) {
+		t.Fatal("failed to seed room")
+	}
+	if _, err := r.JoinTeam(client.Player, team.TeamCounterTerrorists); err != nil {
+		t.Fatalf("failed to join ct: %v", err)
+	}
+	if _, err := r.JoinTeam(observer.Player, team.TeamTerrorists); err != nil {
+		t.Fatalf("failed to join t: %v", err)
+	}
+
+	registerClient(hub, client)
+	registerClient(hub, observer)
+	r.RoundManager.MaybeStart()
+	waitForRoundPhase(t, r.RoundManager, room.RoundPhaseFreeze, 200*time.Millisecond)
+
+	client.Player.SetPosition(0, 0, 0)
+	client.handleMove(mustMarshal(map[string]float64{
+		"x":        25,
+		"z":        -30,
+		"rotation": 1.1,
+	}), roomManager)
+
+	if client.Player.Position.X != 0 || client.Player.Position.Z != 0 {
+		t.Fatalf("position changed during freeze: %+v", client.Player.Position)
+	}
+	if client.Player.Rotation != 1.1 {
+		t.Fatalf("rotation = %f, want 1.1", client.Player.Rotation)
+	}
+
+	msg := recvClientMessage(t, observer.Send)
+	if msg.Type != "player_moved" {
+		t.Fatalf("expected player_moved, got %s", msg.Type)
+	}
+}
+
+func TestClient_handleShoot_DoesNotFireDuringFreezeTime(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 4)
+	r := roomManager.CreateRoom()
+	r.RoundManager.Close()
+	r.RoundManager = room.NewRoundManager(r, room.RoundConfig{
+		FreezeTime:       40 * time.Millisecond,
+		RoundTime:        100 * time.Millisecond,
+		BuyTime:          50 * time.Millisecond,
+		RoundEndDelay:    20 * time.Millisecond,
+		RegulationRounds: 30,
+		FirstToWin:       16,
+		HalftimeAfter:    15,
+	})
+
+	shooter := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+	observer := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+
+	if !r.AddPlayer(shooter.Player) || !r.AddPlayer(observer.Player) {
+		t.Fatal("failed to seed room")
+	}
+	if _, err := r.JoinTeam(shooter.Player, team.TeamCounterTerrorists); err != nil {
+		t.Fatalf("failed to join ct: %v", err)
+	}
+	if _, err := r.JoinTeam(observer.Player, team.TeamTerrorists); err != nil {
+		t.Fatalf("failed to join t: %v", err)
+	}
+
+	registerClient(hub, shooter)
+	registerClient(hub, observer)
+	r.RoundManager.MaybeStart()
+	waitForRoundPhase(t, r.RoundManager, room.RoundPhaseFreeze, 200*time.Millisecond)
+
+	ammoBefore := shooter.Player.Ammo
+	shooter.handleShoot(mustMarshal(map[string]interface{}{
+		"pitch": 0.0,
+		"direction": map[string]float64{
+			"x": 0,
+			"y": 0,
+			"z": -1,
+		},
+	}), roomManager)
+
+	if shooter.Player.Ammo != ammoBefore {
+		t.Fatalf("ammo changed during freeze: %d -> %d", ammoBefore, shooter.Player.Ammo)
+	}
+	assertNoClientMessage(t, observer.Send, 50*time.Millisecond)
 }
 
 func TestClient_handleRespawn_IgnoresClientSuppliedCoordinates(t *testing.T) {

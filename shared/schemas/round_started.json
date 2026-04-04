@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "round_started.json",
+  "title": "RoundStarted",
+  "description": "Broadcast when a new round starts",
+  "type": "object",
+  "required": [
+    "phase",
+    "round_number",
+    "regulation_rounds",
+    "timer_seconds",
+    "can_move",
+    "can_shoot",
+    "can_buy",
+    "announcement"
+  ],
+  "properties": {
+    "phase": {
+      "type": "string",
+      "enum": ["waiting", "freeze", "live", "ended", "match_over"]
+    },
+    "round_number": { "type": "integer", "minimum": 1 },
+    "regulation_rounds": { "type": "integer", "minimum": 1 },
+    "timer_seconds": { "type": "integer", "minimum": 0 },
+    "can_move": { "type": "boolean" },
+    "can_shoot": { "type": "boolean" },
+    "can_buy": { "type": "boolean" },
+    "announcement": { "type": "string" }
+  },
+  "additionalProperties": true
+}

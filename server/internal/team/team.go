@@ -290,6 +290,15 @@ func (tm *TeamManager) ResetScores() {
 	}
 }
 
+func (tm *TeamManager) SyncPlayerCounts(counts map[string]int) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	for _, id := range tm.order {
+		tm.teams[id].PlayerCount = counts[NormalizeTeamID(id)]
+	}
+}
+
 func (tm *TeamManager) GetWinningTeam() *Team {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()

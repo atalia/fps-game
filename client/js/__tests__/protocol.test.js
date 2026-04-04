@@ -133,6 +133,7 @@ const schemas = {
   weapon_changed: z.object({
     player_id: z.string(),
     weapon: z.enum(weaponIds),
+    reason: z.enum(["round_reset", "team_join"]).optional(),
   }),
 
   money_updated: z.object({
@@ -140,6 +141,66 @@ const schemas = {
     money: z.number().int().min(0),
     delta: z.number().int().optional(),
     reason: z.enum(["purchase", "kill", "round_win", "round_loss"]).optional(),
+  }),
+
+  round_state: z.object({
+    phase: z.enum(["waiting", "freeze", "live", "ended", "match_over"]),
+    round_number: z.number().int().min(1),
+    rounds_played: z.number().int().min(0).optional(),
+    regulation_rounds: z.number().int().min(1),
+    first_to_win: z.number().int().min(1).optional(),
+    timer_seconds: z.number().int().min(0),
+    buy_time_left: z.number().int().min(0).optional(),
+    can_move: z.boolean(),
+    can_shoot: z.boolean(),
+    can_buy: z.boolean(),
+    is_overtime: z.boolean().optional(),
+    match_winner: z.enum(["ct", "t"]).optional(),
+    teams: z
+      .array(
+        z.object({
+          id: z.enum(["ct", "t"]),
+          score: z.number().int().optional(),
+        }),
+      )
+      .optional(),
+  }),
+
+  round_started: z.object({
+    phase: z.enum(["waiting", "freeze", "live", "ended", "match_over"]),
+    round_number: z.number().int().min(1),
+    regulation_rounds: z.number().int().min(1),
+    timer_seconds: z.number().int().min(0),
+    can_move: z.boolean(),
+    can_shoot: z.boolean(),
+    can_buy: z.boolean(),
+    announcement: z.string(),
+    teams: z.array(z.object({ id: z.enum(["ct", "t"]) })).optional(),
+  }),
+
+  round_ended: z.object({
+    round_number: z.number().int().min(1),
+    winner: z.enum(["ct", "t"]),
+    reason: z.enum(["elimination", "time"]),
+    announcement: z.string(),
+    is_halftime: z.boolean().optional(),
+    is_overtime: z.boolean().optional(),
+    mvp: z
+      .object({
+        player_id: z.string(),
+        name: z.string(),
+        kills: z.number().int().min(0),
+        damage: z.number().int().min(0),
+      })
+      .optional(),
+    teams: z.array(z.object({ id: z.enum(["ct", "t"]) })).optional(),
+  }),
+
+  match_ended: z.object({
+    winner: z.enum(["ct", "t"]),
+    round_number: z.number().int().min(1),
+    is_overtime: z.boolean().optional(),
+    teams: z.array(z.object({ id: z.enum(["ct", "t"]) })).optional(),
   }),
 
   voice_start: z.object({
@@ -295,6 +356,44 @@ describe("Protocol Schema Tests", () => {
         reason: "bonus",
       };
       expect(() => validateMessage("money_updated", msg)).toThrow();
+    });
+  });
+
+  describe("round_state", () => {
+    it("validates an active round snapshot", () => {
+      const msg = {
+        phase: "freeze",
+        round_number: 2,
+        regulation_rounds: 30,
+        timer_seconds: 5,
+        buy_time_left: 15,
+        can_move: false,
+        can_shoot: false,
+        can_buy: true,
+        is_overtime: false,
+        teams: [{ id: "ct", score: 1 }, { id: "t", score: 0 }],
+      };
+      expect(() => validateMessage("round_state", msg)).not.toThrow();
+    });
+  });
+
+  describe("round_ended", () => {
+    it("validates MVP payload", () => {
+      const msg = {
+        round_number: 9,
+        winner: "ct",
+        reason: "elimination",
+        announcement: "CT win by elimination | MVP: Alice",
+        is_halftime: false,
+        is_overtime: false,
+        mvp: {
+          player_id: "alice",
+          name: "Alice",
+          kills: 2,
+          damage: 145,
+        },
+      };
+      expect(() => validateMessage("round_ended", msg)).not.toThrow();
     });
   });
 

@@ -149,6 +149,8 @@ function createMessageHandlers(deps) {
     handleWeaponChanged(data) {
       const weaponConfig = window.weaponSystem?.getWeapon?.(data.weapon);
       const weaponLabel = weaponConfig?.name || data.weapon;
+      const silentReason =
+        data.reason === "round_reset" || data.reason === "team_join";
 
       // 更新本地玩家武器状态
       if (data.player_id === game?.player?.id) {
@@ -166,7 +168,9 @@ function createMessageHandlers(deps) {
             game.player.ammoReserve,
           );
         }
-        uiManager.showMessage(`切换到 ${weaponLabel}`);
+        if (!silentReason) {
+          uiManager.showMessage(`切换到 ${weaponLabel}`);
+        }
       }
 
       // 更新玩家列表中的武器
@@ -186,6 +190,52 @@ function createMessageHandlers(deps) {
       game.player.money = data.money;
       uiManager.updateMoney?.(data.money);
       window.buyMenuUI?.refresh?.();
+    },
+
+    handleRoundState(data) {
+      if (game) {
+        game.roundState = { ...data };
+      }
+      if (typeof window !== "undefined") {
+        window.roundState = { ...data };
+      }
+      uiManager.updateRoundState?.(data);
+      window.buyMenuUI?.refresh?.();
+    },
+
+    handleRoundStarted(data) {
+      this.handleRoundState(data);
+      if (data.announcement) {
+        uiManager.showMessage(data.announcement, "info", 1800);
+      }
+    },
+
+    handleRoundEnded(data) {
+      if (data.teams) {
+        this.handleRoundState({
+          ...(game?.roundState || {}),
+          teams: data.teams,
+          phase: "ended",
+          round_number: data.round_number,
+          is_overtime: data.is_overtime,
+        });
+      }
+      if (data.announcement) {
+        uiManager.showMessage(data.announcement, "success", 2800);
+      }
+    },
+
+    handleMatchEnded(data) {
+      this.handleRoundState({
+        ...(game?.roundState || {}),
+        teams: data.teams,
+        phase: "match_over",
+        round_number: data.round_number,
+        is_overtime: data.is_overtime,
+        match_winner: data.winner,
+      });
+      const winner = data.winner === "ct" ? "CT" : data.winner === "t" ? "T" : "Unknown";
+      uiManager.showMessage(`${winner} win the match`, "success", 3500);
     },
 
     /**

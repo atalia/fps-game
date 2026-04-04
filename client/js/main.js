@@ -202,6 +202,18 @@ function setupNetworkHandlers() {
     );
   }
 
+  function syncRoundState(roundState) {
+    if (!roundState) return;
+    if (roundState.teams) {
+      syncTeamState(roundState.teams);
+    }
+    if (window.messageHandlers?.handleRoundState) {
+      window.messageHandlers.handleRoundState(roundState);
+      return;
+    }
+    window.__pendingRoundState = roundState;
+  }
+
   function applyPlayerTeam(playerId, teamId) {
     if (!window.teamSystem || !playerId || !teamId) return;
     window.teamSystem.setPlayerTeam(playerId, teamId);
@@ -278,6 +290,9 @@ function setupNetworkHandlers() {
           money: selfPlayerData.money ?? 800,
         };
       }
+      if (data.round_state) {
+        window.__pendingRoundState = data.round_state;
+      }
 
       // 更新玩家列表 UI
       window.uiManager.updatePlayerList(data.players);
@@ -333,6 +348,9 @@ function setupNetworkHandlers() {
     }
 
     maybeShowTeamSelect();
+    if (data.round_state) {
+      syncRoundState(data.round_state);
+    }
   });
 
   // 玩家加入
@@ -484,10 +502,31 @@ function setupNetworkHandlers() {
 
   window.network.on("team_scores_updated", (data) => {
     syncTeamState(data.teams);
-    if (data.winner) {
-      const label = data.winner === "ct" ? "CT" : "T";
-      window.uiManager.showMessage(`${label} wins the round`, "success");
+  });
+
+  window.network.on("round_state", (data) => {
+    syncRoundState(data);
+  });
+
+  window.network.on("round_started", (data) => {
+    if (data.teams) {
+      syncTeamState(data.teams);
     }
+    window.messageHandlers?.handleRoundStarted?.(data);
+  });
+
+  window.network.on("round_ended", (data) => {
+    if (data.teams) {
+      syncTeamState(data.teams);
+    }
+    window.messageHandlers?.handleRoundEnded?.(data);
+  });
+
+  window.network.on("match_ended", (data) => {
+    if (data.teams) {
+      syncTeamState(data.teams);
+    }
+    window.messageHandlers?.handleMatchEnded?.(data);
   });
 
   // 聊天消息
@@ -555,6 +594,10 @@ async function startGame(playerId) {
 
   window.uiManager.updateMoney(window.game?.player?.money ?? 800);
   window.buyMenuUI?.refresh?.();
+  if (window.__pendingRoundState && window.messageHandlers?.handleRoundState) {
+    window.messageHandlers.handleRoundState(window.__pendingRoundState);
+    delete window.__pendingRoundState;
+  }
 
   // 初始化命中效果系统
   if (typeof HitEffects !== "undefined") {
@@ -691,7 +734,10 @@ function leaveRoom() {
   }
   window.buyMenuUI?.hide?.();
   window.uiManager.updateMoney(0);
+  window.roundState = null;
+  window.uiManager.resetRoundState?.();
   delete window.__pendingSelfState;
+  delete window.__pendingRoundState;
 
   gameStarted = false;
 

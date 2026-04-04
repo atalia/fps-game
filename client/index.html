@@ -92,6 +92,51 @@
         margin-top: 5px;
       }
 
+      #round-panel {
+        min-width: 240px;
+        padding: 10px 16px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(
+          180deg,
+          rgba(8, 10, 14, 0.9),
+          rgba(14, 18, 24, 0.82)
+        );
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+      }
+
+      #round-number {
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #aeb8c5;
+      }
+
+      #round-score {
+        margin-top: 6px;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: #f3f6fb;
+      }
+
+      #round-timer {
+        margin-top: 4px;
+        font-size: 28px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        color: #ffdf8b;
+      }
+
+      #round-phase {
+        margin-top: 4px;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #7cff9a;
+      }
+
       /* 准星 */
       #crosshair {
         position: absolute;
@@ -503,6 +548,13 @@
         >
           退出房间
         </button>
+      </div>
+
+      <div id="round-panel">
+        <div id="round-number">Round 1/30</div>
+        <div id="round-score">CT 0 - 0 T</div>
+        <div id="round-timer">00:00</div>
+        <div id="round-phase">WARMUP</div>
       </div>
 
       <!-- 玩家列表 -->
