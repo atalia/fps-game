@@ -16,6 +16,8 @@ class Network {
     }
 
     connect() {
+        console.log('[NETWORK] connect() called, URL:', this.url);
+        
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -28,9 +30,17 @@ class Network {
             this.ws.onopen = null;
         }
 
-        this.ws = new WebSocket(this.url);
+        console.log('[NETWORK] Creating WebSocket...');
+        try {
+            this.ws = new WebSocket(this.url);
+            console.log('[NETWORK] WebSocket created, readyState:', this.ws.readyState);
+        } catch (e) {
+            console.error('[NETWORK] WebSocket creation failed:', e);
+            return;
+        }
 
         this.ws.onopen = () => {
+            console.log('[NETWORK] ✅ WebSocket onopen triggered');
             console.log('✅ WebSocket connected to:', this.url);
             this.connected = true;
             this.reconnectAttempts = 0;
@@ -38,6 +48,11 @@ class Network {
             // 发送测试消息
             this.send('ping', { time: Date.now() });
             if (this.onConnect) this.onConnect();
+        };
+
+        this.ws.onerror = (err) => {
+            console.error('[NETWORK] ❌ WebSocket onerror:', err);
+            if (this.onError) this.onError(err);
         };
 
         this.ws.onclose = (event) => {

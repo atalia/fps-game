@@ -102,13 +102,17 @@ async function init() {
 
     // 初始化网络
     loadingText.textContent = "连接服务器...";
+    console.log("[MAIN] Initializing network...");
     if (typeof Network === "undefined") {
+      console.error("[MAIN] Network class not defined!");
       throw new Error("Network 类未定义，请检查 network.js 加载");
     }
     const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
-    console.log("🔌 Connecting to:", wsUrl);
+    console.log("[MAIN] WebSocket URL:", wsUrl);
+    console.log("[MAIN] Creating Network instance...");
     window.network = new Network(wsUrl);
+    console.log("[MAIN] Network created, waiting for connection...");
 
     // 设置网络事件处理
     setupNetworkHandlers();
