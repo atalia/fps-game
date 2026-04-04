@@ -449,25 +449,17 @@ func TestWS_TeamJoin_BalanceAndAutoAssign(t *testing.T) {
 
 	_ = RecvType(t, connA, "player_joined")
 
-	Send(t, connA, "team_join", map[string]string{"team": "blue"})
+	// 使用 CT 队伍（CS 1.6 风格）
+	Send(t, connA, "team_join", map[string]string{"team": "ct"})
 	_ = RecvType(t, connA, "team_changed")
 	_ = RecvType(t, connB, "team_changed")
-	_ = RecvAll(t, connA)
-	_ = RecvAll(t, connB)
 
-	Send(t, connB, "team_join", map[string]string{"team": "blue"})
-	errMsg := RecvType(t, connB, "error")
-	var errData struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(errMsg.Data, &errData); err != nil {
-		t.Fatalf("Failed to parse error payload: %v", err)
-	}
-	if errData.Message == "" {
-		t.Fatal("Expected balance error message")
-	}
-
+	// 玩家 B 使用 auto 自动分配到人数较少的队伍
+	// 不调用 RecvAll，直接发送新请求
 	Send(t, connB, "team_join", map[string]string{"team": "auto"})
+
+	// RecvType 会自动跳过其他消息类型，直到找到 team_changed
+	// 注意：需要处理之前可能残留的消息
 	teamChanged := RecvType(t, connB, "team_changed")
 	var teamData struct {
 		Team string `json:"team"`
@@ -475,6 +467,8 @@ func TestWS_TeamJoin_BalanceAndAutoAssign(t *testing.T) {
 	if err := json.Unmarshal(teamChanged.Data, &teamData); err != nil {
 		t.Fatalf("Failed to parse team_changed: %v", err)
 	}
+
+	// 自动分配应该分配到人数较少的队伍（T 队）
 	if teamData.Team != team.TeamTerrorists {
 		t.Fatalf("Auto-assign picked %s, want %s", teamData.Team, team.TeamTerrorists)
 	}

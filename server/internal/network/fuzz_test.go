@@ -564,14 +564,20 @@ func TestPlayerNameValidationDirect(t *testing.T) {
 			// 检查结果
 			select {
 			case msg := <-client.Send:
-				msgStr := string(msg)
-				hasError := strings.Contains(msgStr, "error")
+				// 解析消息类型，而不是简单搜索 "error" 字符串（避免匹配 "Terrorists"）
+				var parsedMsg struct {
+					Type string `json:"type"`
+				}
+				if err := json.Unmarshal(msg, &parsedMsg); err != nil {
+					t.Fatalf("Failed to parse message: %v", err)
+				}
+				hasError := parsedMsg.Type == "error"
 
 				if tc.shouldFail && !hasError {
 					t.Errorf("Expected failure for %s (reason: %s), but got success", tc.name, tc.failReason)
 				}
 				if !tc.shouldFail && hasError {
-					t.Errorf("Expected success for %s, but got error: %s", tc.name, msgStr)
+					t.Errorf("Expected success for %s, but got error: %s", tc.name, string(msg))
 				}
 			case <-time.After(100 * time.Millisecond):
 				if tc.shouldFail {
