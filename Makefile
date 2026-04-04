@@ -1,4 +1,4 @@
-.PHONY: all build run test cover lint fmt clean docker-build docker-up docker-down dev prod
+.PHONY: all build run test cover lint fmt clean docker-build docker-up docker-down dev prod pre-deploy ci
 
 # ================================
 # 本地开发
@@ -32,6 +32,14 @@ clean:
 	rm -f server/coverage.out server/coverage.html
 
 # ================================
+# 预部署检查
+# ================================
+
+pre-deploy:
+	@chmod +x scripts/pre-deploy-check.sh
+	@./scripts/pre-deploy-check.sh
+
+# ================================
 # Docker 部署
 # ================================
 
@@ -62,8 +70,8 @@ dev:
 	@echo "✅ Dev environment started!"
 	@echo "🎮 Game: http://localhost:8080"
 
-# 生产环境 (+ nginx)
-prod:
+# 生产环境 (+ nginx) - 部署前先检查
+prod: pre-deploy
 	docker-compose --profile production up -d --build
 	@echo "✅ Production environment started!"
 	@echo "🎮 Game: http://localhost"
@@ -84,7 +92,7 @@ full:
 # CI
 # ================================
 
-ci: fmt test lint
+ci: fmt test lint pre-deploy
 	@echo "✅ CI checks passed"
 
 # ================================
@@ -101,6 +109,9 @@ help:
 	@echo "  make cover        测试覆盖率报告"
 	@echo "  make lint         代码检查"
 	@echo "  make fmt          格式化代码"
+	@echo ""
+	@echo "预部署检查:"
+	@echo "  make pre-deploy   部署前检查配置"
 	@echo ""
 	@echo "Docker 部署:"
 	@echo "  make dev          开发环境 (game-server + redis)"
