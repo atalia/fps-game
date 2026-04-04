@@ -210,4 +210,3 @@ class Network {
 
 window.Network = Network;
 
-export default Network;

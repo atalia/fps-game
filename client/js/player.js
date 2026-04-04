@@ -460,4 +460,3 @@ class PlayerController {
 
 window.PlayerController = PlayerController;
 
-export default PlayerController;

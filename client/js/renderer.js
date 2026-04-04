@@ -782,4 +782,3 @@ class Renderer {
 window.Renderer = Renderer;
 console.log("[RENDERER] renderer.js loaded");
 
-export default Renderer;

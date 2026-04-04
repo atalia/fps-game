@@ -1321,4 +1321,3 @@ class UIManager {
 
 window.UIManager = UIManager;
 
-export default UIManager;
