@@ -340,26 +340,32 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 		ReadBufferSize:  8192,
 		WriteBufferSize: 8192,
 		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			log.Printf("[WS] CheckOrigin: origin=%s, host=%s, remote=%s", origin, r.Host, r.RemoteAddr)
+			
 			// 如果没有配置允许的域名，则允许所有连接（开发/生产通用）
 			if len(allowedOrigins) == 0 {
-				origin := r.Header.Get("Origin")
 				// 允许所有来源（包括服务器 IP 和文件协议）
-				return origin == "" ||
+				result := origin == "" ||
 					strings.HasPrefix(origin, "http://localhost") ||
 					strings.HasPrefix(origin, "http://127.0.0.1") ||
 					strings.HasPrefix(origin, "http://101.33.117.73") ||
 					strings.HasPrefix(origin, "https://") ||
 					strings.HasPrefix(origin, "file:")
+				log.Printf("[WS] CheckOrigin result (dev mode): %v", result)
+				return result
 			}
 			// 生产环境：检查白名单
-			origin := r.Header.Get("Origin")
 			for _, allowed := range allowedOrigins {
 				if allowed == origin || allowed == "*" {
+					log.Printf("[WS] CheckOrigin result (whitelist): true")
 					return true
 				}
 			}
 			// 也允许无 Origin 的请求（直接连接）
-			return origin == ""
+			result := origin == ""
+			log.Printf("[WS] CheckOrigin result (fallback): %v", result)
+			return result
 		},
 	}
 
