@@ -38,6 +38,7 @@ type Player struct {
 	Weapon         string               `json:"weapon"`
 	Ammo           int                  `json:"ammo"`
 	AmmoReserve    int                  `json:"ammo_reserve"`
+	MaxAmmo        int                  `json:"max_ammo"`
 	LastShot       time.Time            `json:"-"`
 	SkillCooldowns map[string]time.Time `json:"-"`
 	Connected      bool                 `json:"-"`
@@ -51,6 +52,7 @@ type Snapshot struct {
 	Rotation    float64
 	Health      int
 	MaxHealth   int
+	Team        string
 	Weapon      string
 	Ammo        int
 	AmmoReserve int
@@ -103,6 +105,7 @@ func NewPlayerWithConfig(cfg Config) *Player {
 		Weapon:         "rifle",
 		Ammo:           cfg.DefaultAmmo,
 		AmmoReserve:    cfg.DefaultAmmoReserve,
+		MaxAmmo:        cfg.DefaultAmmo,
 		SkillCooldowns: make(map[string]time.Time),
 		Connected:      true,
 		HitBoxes:       DefaultHitBoxes,
@@ -207,7 +210,7 @@ func (p *Player) Respawn(x, y, z float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Health = p.MaxHealth
-	p.Ammo = DefaultConfig.DefaultAmmo
+	p.Ammo = p.MaxAmmo
 	p.Position = Position{X: x, Y: y, Z: z}
 }
 
@@ -246,6 +249,9 @@ func (p *Player) Reload() {
 	defer p.mu.Unlock()
 
 	needed := DefaultConfig.DefaultAmmo - p.Ammo
+	if p.MaxAmmo > 0 {
+		needed = p.MaxAmmo - p.Ammo
+	}
 	if needed <= 0 || p.AmmoReserve <= 0 {
 		return
 	}
@@ -289,6 +295,7 @@ func (p *Player) Snapshot() Snapshot {
 		Rotation:    p.Rotation,
 		Health:      p.Health,
 		MaxHealth:   p.MaxHealth,
+		Team:        p.Team,
 		Weapon:      p.Weapon,
 		Ammo:        p.Ammo,
 		AmmoReserve: p.AmmoReserve,
@@ -311,11 +318,29 @@ func (p *Player) SetWeapon(weapon string) {
 	p.Weapon = weapon
 }
 
+// ApplyLoadout 用武器配置原子性地更新玩家当前装备。
+func (p *Player) ApplyLoadout(weapon string, magSize, reserve int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.Weapon = weapon
+	p.MaxAmmo = magSize
+	p.Ammo = magSize
+	p.AmmoReserve = reserve
+}
+
 // SetTeam 设置队伍
 func (p *Player) SetTeam(team string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Team = team
+}
+
+// GetTeam 获取队伍
+func (p *Player) GetTeam() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Team
 }
 
 // SkillConfig 技能配置

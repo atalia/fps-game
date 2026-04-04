@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from "vitest";
 
 async function loadUIManager() {
-  const mod = await import('../js/ui.js')
-  return mod.default || window.UIManager
+  const mod = await import("../js/ui.js");
+  return mod.default || window.UIManager;
 }
 
-describe('UIManager', () => {
-  let UIManager
-  let ui
+describe("UIManager", () => {
+  let UIManager;
+  let ui;
 
   beforeEach(async () => {
     document.body.innerHTML = `
@@ -24,46 +24,51 @@ describe('UIManager', () => {
       <input id="chat-input" />
       <div id="kill-feed"></div>
       <div id="scoreboard"></div>
+      <div id="scoreboard-team-summary"></div>
       <tbody id="scoreboard-rows"></tbody>
-    `
-    UIManager = await loadUIManager()
-    ui = new UIManager()
-  })
+    `;
+    UIManager = await loadUIManager();
+    ui = new UIManager();
+  });
 
-  it('updates health bar and text', () => {
-    ui.updateHealth(50)
-    expect(ui.elements.healthFill.style.width).toBe('50%')
-    expect(ui.elements.healthText.textContent).toBe('50 HP')
-  })
+  it("updates health bar and text", () => {
+    ui.updateHealth(50);
+    expect(ui.elements.healthFill.style.width).toBe("50%");
+    expect(ui.elements.healthText.textContent).toBe("50 HP");
+  });
 
-  it('updates ammo counters', () => {
-    ui.updateAmmo(30, 90)
-    expect(ui.elements.ammo.textContent).toBe('30')
-    expect(ui.elements.ammoReserve.textContent).toBe('90')
-  })
+  it("updates ammo counters", () => {
+    ui.updateAmmo(30, 90);
+    expect(ui.elements.ammo.textContent).toBe("30");
+    expect(ui.elements.ammoReserve.textContent).toBe("90");
+  });
 
-  it('escapes html in player list names', () => {
+  it("escapes html in player list names", () => {
     ui.updatePlayerList([
-      { id: 'p1', name: '<script>alert(1)</script>', kills: 3, health: 90 }
-    ])
+      { id: "p1", name: "<script>alert(1)</script>", kills: 3, health: 90 },
+    ]);
 
-    expect(ui.elements.playersContainer.innerHTML).not.toContain('<script>')
-    expect(ui.elements.playersContainer.textContent).toContain('<script>alert(1)</script>')
-  })
+    expect(ui.elements.playersContainer.innerHTML).not.toContain("<script>");
+    expect(ui.elements.playersContainer.textContent).toContain(
+      "<script>alert(1)</script>",
+    );
+  });
 
-  it('updates connection status classes and text', () => {
-    ui.updateConnectionStatus(true)
-    expect(ui.elements.connectionStatus.textContent).toBe('已连接')
-    expect(ui.elements.connectionStatus.className).toBe('connected')
+  it("updates connection status classes and text", () => {
+    ui.updateConnectionStatus(true);
+    expect(ui.elements.connectionStatus.textContent).toBe("已连接");
+    expect(ui.elements.connectionStatus.className).toBe("connected");
 
-    ui.updateConnectionStatus(false)
-    expect(ui.elements.connectionStatus.textContent).toBe('已断开')
-    expect(ui.elements.connectionStatus.className).toBe('disconnected')
-  })
+    ui.updateConnectionStatus(false);
+    expect(ui.elements.connectionStatus.textContent).toBe("已断开");
+    expect(ui.elements.connectionStatus.className).toBe("disconnected");
+  });
 
-  it('renders chat messages with escaped content', () => {
-    ui.addChatMessage('<b>alice</b>', '<img src=x onerror=1 />')
-    expect(ui.elements.chatMessages.innerHTML).not.toContain('<img')
-    expect(ui.elements.chatMessages.textContent).toContain('<b>alice</b>: <img src=x onerror=1 />')
-  })
-})
+  it("renders chat messages with escaped content", () => {
+    ui.addChatMessage("<b>alice</b>", "<img src=x onerror=1 />");
+    expect(ui.elements.chatMessages.innerHTML).not.toContain("<img");
+    expect(ui.elements.chatMessages.textContent).toContain(
+      "<b>alice</b>: <img src=x onerror=1 />",
+    );
+  });
+});

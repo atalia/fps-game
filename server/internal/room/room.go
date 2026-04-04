@@ -8,35 +8,39 @@ import (
 	"time"
 
 	"fps-game/internal/ai"
+	"fps-game/internal/team"
 	"fps-game/internal/player"
 )
 
 // Room 游戏房间
 type Room struct {
-	ID         string
-	Name       string
-	MaxSize    int
-	Players    map[string]*player.Player
-	BotManager *ai.Manager
-	CreatedAt  time.Time
-	StartedAt  time.Time
+	ID          string
+	Name        string
+	MaxSize     int
+	Players     map[string]*player.Player
+	BotManager  *ai.Manager
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	TeamManager *team.TeamManager
 	// C4 爆破模式
-	C4Planted   bool
-	C4Planter   string
-	C4Position  player.Position
-	C4PlantedAt time.Time
-	GameMode    string
-	mu          sync.RWMutex
+	C4Planted         bool
+	C4Planter         string
+	C4Position        player.Position
+	C4PlantedAt       time.Time
+	GameMode          string
+	roundResetPending bool
+	mu                sync.RWMutex
 }
 
 // NewRoom 创建房间
 func NewRoom(maxSize int) *Room {
 	return &Room{
-		ID:         generateID(),
-		MaxSize:    maxSize,
-		Players:    make(map[string]*player.Player),
-		BotManager: ai.NewManager(),
-		CreatedAt:  time.Now(),
+		ID:          generateID(),
+		MaxSize:     maxSize,
+		Players:     make(map[string]*player.Player),
+		BotManager:  ai.NewManager(),
+		TeamManager: team.NewTeamManagerForRoom(maxSize),
+		CreatedAt:   time.Now(),
 	}
 }
 
@@ -100,7 +104,13 @@ func (r *Room) AddPlayer(p *player.Player) bool {
 func (r *Room) RemovePlayer(playerID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.Players, playerID)
+
+	if existing, ok := r.Players[playerID]; ok {
+		if existingTeam := existing.GetTeam(); existingTeam != "" && r.TeamManager != nil {
+			r.TeamManager.RemovePlayerFromTeam(existingTeam)
+		}
+		delete(r.Players, playerID)
+	}
 }
 
 // GetPlayer 获取玩家
@@ -157,6 +167,105 @@ func (r *Room) GetPlayerList() []map[string]interface{} {
 // Broadcast 广播消息（占位，实际由 network 层实现）
 func (r *Room) Broadcast(msgType string, data interface{}, excludeID string) {
 	// 由 network 层实现
+}
+
+// GetTeams 获取当前房间的队伍快照。
+func (r *Room) GetTeams() []*team.Team {
+	if r.TeamManager == nil {
+		return nil
+	}
+	return r.TeamManager.GetAllTeams()
+}
+
+// JoinTeam 将玩家加入到指定队伍，支持 auto/red/blue/ct/t。
+func (r *Room) JoinTeam(p *player.Player, requestedTeam string) (string, error) {
+	if r.TeamManager == nil {
+		return "", fmt.Errorf("team manager not initialized")
+	}
+
+	currentTeam := p.GetTeam()
+	targetTeam := requestedTeam
+	if team.NormalizeTeamID(requestedTeam) == "" && requestedTeam != team.AutoAssignTeam {
+		return "", fmt.Errorf("unknown team %q", requestedTeam)
+	}
+
+	if requestedTeam == team.AutoAssignTeam {
+		targetTeam = r.TeamManager.GetAutoAssignTeamForCurrent(currentTeam)
+	} else {
+		targetTeam = team.NormalizeTeamID(requestedTeam)
+	}
+
+	if targetTeam == "" {
+		return "", fmt.Errorf("no team available")
+	}
+
+	if !r.TeamManager.CanJoinTeam(targetTeam, currentTeam) {
+		return "", fmt.Errorf("team %s is locked for balance", targetTeam)
+	}
+
+	if normalizedCurrent := team.NormalizeTeamID(currentTeam); normalizedCurrent != "" && normalizedCurrent != targetTeam {
+		r.TeamManager.RemovePlayerFromTeam(normalizedCurrent)
+	}
+	if team.NormalizeTeamID(currentTeam) != targetTeam {
+		if !r.TeamManager.AddPlayerToTeam(targetTeam) {
+			return "", fmt.Errorf("team %s is full", targetTeam)
+		}
+	}
+
+	p.SetTeam(targetTeam)
+	return targetTeam, nil
+}
+
+// CompleteRoundIfWon 在任一队伍完成歼灭时结算该回合。
+func (r *Room) CompleteRoundIfWon() (string, []*team.Team, bool) {
+	r.mu.Lock()
+	if r.roundResetPending {
+		r.mu.Unlock()
+		return "", nil, false
+	}
+
+	teamMembers := map[string]int{}
+	aliveByTeam := map[string]int{}
+
+	for _, p := range r.Players {
+		teamID := team.NormalizeTeamID(p.GetTeam())
+		if teamID == "" {
+			continue
+		}
+
+		teamMembers[teamID]++
+		if p.IsAlive() {
+			aliveByTeam[teamID]++
+		}
+	}
+
+	winner := ""
+	if teamMembers[team.TeamCounterTerrorists] > 0 && teamMembers[team.TeamTerrorists] > 0 {
+		switch {
+		case aliveByTeam[team.TeamCounterTerrorists] > 0 && aliveByTeam[team.TeamTerrorists] == 0:
+			winner = team.TeamCounterTerrorists
+		case aliveByTeam[team.TeamTerrorists] > 0 && aliveByTeam[team.TeamCounterTerrorists] == 0:
+			winner = team.TeamTerrorists
+		}
+	}
+
+	if winner == "" {
+		r.mu.Unlock()
+		return "", nil, false
+	}
+
+	r.roundResetPending = true
+	r.mu.Unlock()
+
+	r.TeamManager.AddScore(winner, 1)
+	return winner, r.TeamManager.GetAllTeams(), true
+}
+
+// ResetRoundState 清除回合重置中的标记。
+func (r *Room) ResetRoundState() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.roundResetPending = false
 }
 
 // Manager 房间管理器

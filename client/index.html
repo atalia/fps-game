@@ -1,437 +1,467 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FPS Game - 多人对战</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: #1a1a2e;
-            color: #eee;
-            overflow: hidden;
-        }
+      body {
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        background: #1a1a2e;
+        color: #eee;
+        overflow: hidden;
+      }
 
-        #game-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-        }
+      #game-container {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
 
-        /* HUD */
-        #hud {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            pointer-events: none;
-            z-index: 100;
-        }
+      /* HUD */
+      #hud {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 100;
+      }
 
-        /* 血量条 */
-        #health-bar {
-            width: 200px;
-            height: 20px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 10px;
-            overflow: hidden;
-        }
+      /* 血量条 */
+      #health-bar {
+        width: 200px;
+        height: 20px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 10px;
+        overflow: hidden;
+      }
 
-        #health-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #ff4444, #ff6666);
-            transition: width 0.3s;
-        }
+      #health-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #ff4444, #ff6666);
+        transition: width 0.3s;
+      }
 
-        #health-text {
-            position: absolute;
-            left: 10px;
-            top: 5px;
-            font-size: 12px;
-            text-shadow: 1px 1px 2px #000;
-        }
+      #health-text {
+        position: absolute;
+        left: 10px;
+        top: 5px;
+        font-size: 12px;
+        text-shadow: 1px 1px 2px #000;
+      }
 
-        /* 弹药 */
-        #ammo-display {
-            background: rgba(0,0,0,0.5);
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-align: right;
-        }
+      /* 弹药 */
+      #ammo-display {
+        background: rgba(0, 0, 0, 0.5);
+        padding: 10px 20px;
+        border-radius: 5px;
+        text-align: right;
+      }
 
-        #ammo-count {
-            font-size: 28px;
-            font-weight: bold;
-        }
+      #ammo-count {
+        font-size: 28px;
+        font-weight: bold;
+      }
 
-        #ammo-reserve {
-            font-size: 14px;
-            color: #aaa;
-        }
+      #ammo-reserve {
+        font-size: 14px;
+        color: #aaa;
+      }
 
-        #current-weapon {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-        }
+      #current-weapon {
+        font-size: 12px;
+        color: #888;
+        margin-top: 5px;
+      }
 
-        /* 准星 */
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 30px;
-            height: 30px;
-            pointer-events: none;
-        }
+      /* 准星 */
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 30px;
+        height: 30px;
+        pointer-events: none;
+      }
 
-        #crosshair::before,
-        #crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255,255,255,0.8);
-        }
+      #crosshair::before,
+      #crosshair::after {
+        content: "";
+        position: absolute;
+        background: rgba(255, 255, 255, 0.8);
+      }
 
-        #crosshair::before {
-            width: 2px;
-            height: 20px;
-            left: 14px;
-            top: 5px;
-        }
+      #crosshair::before {
+        width: 2px;
+        height: 20px;
+        left: 14px;
+        top: 5px;
+      }
 
-        #crosshair::after {
-            width: 20px;
-            height: 2px;
-            left: 5px;
-            top: 14px;
-        }
+      #crosshair::after {
+        width: 20px;
+        height: 2px;
+        left: 5px;
+        top: 14px;
+      }
 
-        /* 记分板 */
-        #scoreboard {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.85);
-            padding: 20px;
-            border-radius: 10px;
-            display: none;
-            min-width: 400px;
-            z-index: 200;
-        }
+      /* 记分板 */
+      #scoreboard {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.85);
+        padding: 20px;
+        border-radius: 10px;
+        display: none;
+        min-width: 400px;
+        z-index: 200;
+      }
 
-        #scoreboard.visible {
-            display: block;
-        }
+      #scoreboard.visible {
+        display: block;
+      }
 
-        #scoreboard h2 {
-            text-align: center;
-            margin-bottom: 15px;
-            color: #fff;
-        }
+      #scoreboard h2 {
+        text-align: center;
+        margin-bottom: 15px;
+        color: #fff;
+      }
 
-        .score-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 15px;
-            border-bottom: 1px solid #333;
-        }
+      #scoreboard-team-summary {
+        text-align: center;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
 
-        .score-row.header {
-            background: #333;
-            font-weight: bold;
-        }
+      .score-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 15px;
+        border-bottom: 1px solid #333;
+      }
 
-        /* 小地图 */
-        #minimap {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 150px;
-            height: 150px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 5px;
-            border: 2px solid #444;
-            z-index: 100;
-        }
+      .score-row.header {
+        background: #333;
+        font-weight: bold;
+      }
 
-        #minimap-canvas {
-            width: 100%;
-            height: 100%;
-        }
+      /* 小地图 */
+      #minimap {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: 150px;
+        height: 150px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 5px;
+        border: 2px solid #444;
+        z-index: 100;
+      }
 
-        /* 聊天 */
-        #chat-container {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 300px;
-            z-index: 100;
-        }
+      #minimap-canvas {
+        width: 100%;
+        height: 100%;
+      }
 
-        #chat-messages {
-            height: 150px;
-            overflow-y: auto;
-            background: rgba(0,0,0,0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 5px;
-        }
+      /* 聊天 */
+      #chat-container {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        width: 300px;
+        z-index: 100;
+      }
 
-        .chat-message {
-            font-size: 12px;
-            margin-bottom: 3px;
-        }
+      #chat-messages {
+        height: 150px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 5px;
+      }
 
-        .chat-message .name {
-            color: #4fc3f7;
-        }
+      .chat-message {
+        font-size: 12px;
+        margin-bottom: 3px;
+      }
 
-        #chat-input {
-            width: 100%;
-            padding: 8px;
-            background: rgba(0,0,0,0.5);
-            border: 1px solid #444;
-            border-radius: 5px;
-            color: #fff;
-            font-size: 14px;
-        }
+      .chat-message .name {
+        color: #4fc3f7;
+      }
 
-        #chat-input:focus {
-            outline: none;
-            border-color: #4fc3f7;
-        }
+      #chat-input {
+        width: 100%;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid #444;
+        border-radius: 5px;
+        color: #fff;
+        font-size: 14px;
+      }
 
-        /* 击杀信息 */
-        #kill-feed {
-            position: absolute;
-            top: 60px;
-            right: 20px;
-            width: 250px;
-            z-index: 100;
-        }
+      #chat-input:focus {
+        outline: none;
+        border-color: #4fc3f7;
+      }
 
-        .kill-item {
-            background: rgba(0,0,0,0.5);
-            padding: 5px 10px;
-            margin-bottom: 5px;
-            border-radius: 3px;
-            font-size: 12px;
-            animation: fadeOut 3s forwards;
-        }
+      /* 击杀信息 */
+      #kill-feed {
+        position: absolute;
+        top: 60px;
+        right: 20px;
+        width: 250px;
+        z-index: 100;
+      }
 
-        @keyframes fadeOut {
-            0% { opacity: 1; }
-            70% { opacity: 1; }
-            100% { opacity: 0; }
-        }
+      .kill-item {
+        background: rgba(0, 0, 0, 0.5);
+        padding: 5px 10px;
+        margin-bottom: 5px;
+        border-radius: 3px;
+        font-size: 12px;
+        animation: fadeOut 3s forwards;
+      }
 
-        /* 房间信息 */
-        #room-info {
-            position: absolute;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-align: center;
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.2);
+      @keyframes fadeOut {
+        0% {
+          opacity: 1;
         }
-        
-        #room-id {
-            font-size: 14px;
-            color: #00ff88;
-            font-weight: bold;
-            margin-bottom: 5px;
+        70% {
+          opacity: 1;
         }
-        
-        #player-count {
-            font-size: 12px;
-            color: #aaa;
+        100% {
+          opacity: 0;
         }
-        
-        /* 玩家列表 */
-        #player-list {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 150px;
-            max-height: 300px;
-            overflow-y: auto;
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        
-        .player-list-header {
-            font-size: 12px;
-            color: #888;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 5px;
-            margin-bottom: 5px;
-        }
-        
-        .player-item {
-            display: flex;
-            align-items: center;
-            padding: 5px 0;
-            font-size: 13px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        
-        .player-item:last-child {
-            border-bottom: none;
-        }
-        
-        .player-item.self {
-            color: #00ff88;
-            font-weight: bold;
-        }
-        
-        .player-item.bot {
-            color: #ffaa00;
-        }
-        
-        .player-item .name {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .player-item .kills {
-            color: #ff4444;
-            font-size: 11px;
-            margin-left: 8px;
-        }
-        
-        .player-item .health {
-            color: #44ff44;
-            font-size: 11px;
-            margin-left: 5px;
-        }
+      }
 
-        /* 伤害闪烁 */
-        #damage-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            z-index: 50;
-        }
+      /* 房间信息 */
+      #room-info {
+        position: absolute;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px 20px;
+        border-radius: 5px;
+        text-align: center;
+        z-index: 100;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
 
-        #damage-overlay.hit {
-            background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.3) 100%);
-            animation: damageFlash 0.3s;
-        }
+      #room-id {
+        font-size: 14px;
+        color: #00ff88;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
 
-        #damage-overlay.kill {
-            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,255,0,0.3) 100%);
-            animation: killFlash 0.5s;
-        }
+      #player-count {
+        font-size: 12px;
+        color: #aaa;
+      }
 
-        #damage-overlay.death {
-            background: rgba(0,0,0,0.8);
-        }
+      /* 玩家列表 */
+      #player-list {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+        min-width: 150px;
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 100;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
 
-        @keyframes damageFlash {
-            0% { opacity: 1; }
-            100% { opacity: 0; }
-        }
+      .player-list-header {
+        font-size: 12px;
+        color: #888;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 5px;
+        margin-bottom: 5px;
+      }
 
-        @keyframes killFlash {
-            0% { opacity: 1; }
-            100% { opacity: 0; }
-        }
+      .player-item {
+        display: flex;
+        align-items: center;
+        padding: 5px 0;
+        font-size: 13px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
 
-        /* 消息提示 */
-        #message-center {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 24px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px #000;
-            z-index: 100;
-            text-align: center;
-        }
+      .player-item:last-child {
+        border-bottom: none;
+      }
 
-        /* 武器选择提示 */
-        #weapon-hint {
-            position: absolute;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.5);
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-size: 12px;
-            color: #888;
-            z-index: 100;
-        }
+      .player-item.self {
+        color: #00ff88;
+        font-weight: bold;
+      }
 
-        /* 加载画面 */
-        #loading {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #1a1a2e;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
+      .player-item.bot {
+        color: #ffaa00;
+      }
 
-        #loading h1 {
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
+      .player-item .name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
-        #loading p {
-            color: #888;
-        }
+      .player-item .kills {
+        color: #ff4444;
+        font-size: 11px;
+        margin-left: 8px;
+      }
 
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid #333;
-            border-top-color: #4fc3f7;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 20px 0;
-        }
+      .player-item .health {
+        color: #44ff44;
+        font-size: 11px;
+        margin-left: 5px;
+      }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+      /* 伤害闪烁 */
+      #damage-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 50;
+      }
+
+      #damage-overlay.hit {
+        background: radial-gradient(
+          ellipse at center,
+          transparent 50%,
+          rgba(255, 0, 0, 0.3) 100%
+        );
+        animation: damageFlash 0.3s;
+      }
+
+      #damage-overlay.kill {
+        background: radial-gradient(
+          ellipse at center,
+          transparent 50%,
+          rgba(0, 255, 0, 0.3) 100%
+        );
+        animation: killFlash 0.5s;
+      }
+
+      #damage-overlay.death {
+        background: rgba(0, 0, 0, 0.8);
+      }
+
+      @keyframes damageFlash {
+        0% {
+          opacity: 1;
         }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes killFlash {
+        0% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* 消息提示 */
+      #message-center {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 24px;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px #000;
+        z-index: 100;
+        text-align: center;
+      }
+
+      /* 武器选择提示 */
+      #weapon-hint {
+        position: absolute;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 12px;
+        color: #888;
+        z-index: 100;
+      }
+
+      /* 加载画面 */
+      #loading {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #1a1a2e;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      #loading h1 {
+        font-size: 48px;
+        margin-bottom: 20px;
+      }
+
+      #loading p {
+        color: #888;
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid #333;
+        border-top-color: #4fc3f7;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 20px 0;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- 加载画面 -->
     <div id="loading">
-        <h1>🎮 FPS Game</h1>
-        <div class="spinner"></div>
-        <p>连接服务器中...</p>
+      <h1>🎮 FPS Game</h1>
+      <div class="spinner"></div>
+      <p>连接服务器中...</p>
     </div>
 
     <!-- 游戏容器 -->
@@ -439,40 +469,45 @@
 
     <!-- HUD -->
     <div id="hud">
-        <div style="position: relative;">
-            <div id="health-bar">
-                <div id="health-fill" style="width: 100%"></div>
-            </div>
-            <span id="health-text">100 HP</span>
+      <div style="position: relative">
+        <div id="health-bar">
+          <div id="health-fill" style="width: 100%"></div>
         </div>
+        <span id="health-text">100 HP</span>
+      </div>
 
-        <div id="room-info">
-            <div id="room-id">等待加入...</div>
-            <div id="player-count">玩家: 0/10</div>
-            <button id="leave-room-btn" style="
-                margin-top: 8px;
-                padding: 5px 15px;
-                background: rgba(255, 68, 68, 0.8);
-                border: none;
-                border-radius: 3px;
-                color: white;
-                cursor: pointer;
-                font-size: 12px;
-                display: none;
-            ">退出房间</button>
-        </div>
-        
-        <!-- 玩家列表 -->
-        <div id="player-list">
-            <div class="player-list-header">房间玩家</div>
-            <div id="players-container"></div>
-        </div>
+      <div id="room-info">
+        <div id="room-id">等待加入...</div>
+        <div id="player-count">玩家: 0/10</div>
+        <button
+          id="leave-room-btn"
+          style="
+            margin-top: 8px;
+            padding: 5px 15px;
+            background: rgba(255, 68, 68, 0.8);
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            display: none;
+          "
+        >
+          退出房间
+        </button>
+      </div>
 
-        <div id="ammo-display">
-            <div id="ammo-count">30</div>
-            <div id="ammo-reserve">/ 90</div>
-            <div id="current-weapon">RIFLE</div>
-        </div>
+      <!-- 玩家列表 -->
+      <div id="player-list">
+        <div class="player-list-header">房间玩家</div>
+        <div id="players-container"></div>
+      </div>
+
+      <div id="ammo-display">
+        <div id="ammo-count">30</div>
+        <div id="ammo-reserve">/ 90</div>
+        <div id="current-weapon">RIFLE</div>
+      </div>
     </div>
 
     <!-- 准星 -->
@@ -480,13 +515,13 @@
 
     <!-- 小地图 -->
     <div id="minimap">
-        <canvas id="minimap-canvas"></canvas>
+      <canvas id="minimap-canvas"></canvas>
     </div>
 
     <!-- 聊天 -->
     <div id="chat-container">
-        <div id="chat-messages"></div>
-        <input type="text" id="chat-input" placeholder="按 Enter 发送消息..." />
+      <div id="chat-messages"></div>
+      <input type="text" id="chat-input" placeholder="按 Enter 发送消息..." />
     </div>
 
     <!-- 击杀信息 -->
@@ -494,14 +529,16 @@
 
     <!-- 记分板 -->
     <div id="scoreboard">
-        <h2>记分板</h2>
-        <div class="score-row header">
-            <span>玩家</span>
-            <span>击杀</span>
-            <span>死亡</span>
-            <span>分数</span>
-        </div>
-        <div id="scoreboard-rows"></div>
+      <h2>记分板</h2>
+      <div id="scoreboard-team-summary"></div>
+      <div class="score-row header">
+        <span>玩家</span>
+        <span>队伍</span>
+        <span>击杀</span>
+        <span>死亡</span>
+        <span>分数</span>
+      </div>
+      <div id="scoreboard-rows"></div>
     </div>
 
     <!-- 伤害覆盖层 -->
@@ -512,18 +549,20 @@
 
     <!-- 武器提示 -->
     <div id="weapon-hint">
-        [1] 手枪 | [2] 步枪 | [3] 霰弹枪 | [4] 狙击枪 | [R] 换弹 | [Tab] 记分板 | [B] 添加机器人
+      [1] 队伍手枪 | [2] 主步枪 | [3] 次步枪 | [4] AWP | [5] Deagle | [R] 换弹 |
+      [Tab] 记分板 | [B] 添加机器人
     </div>
 
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        // 确保 Three.js 加载
-        if (typeof THREE === 'undefined') {
-            document.getElementById('loading').innerHTML = '<h1>❌ Three.js 加载失败</h1><p>请检查网络连接</p>';
-            throw new Error('Three.js not loaded');
-        }
-        console.log('✅ Three.js loaded:', THREE.REVISION);
+      // 确保 Three.js 加载
+      if (typeof THREE === "undefined") {
+        document.getElementById("loading").innerHTML =
+          "<h1>❌ Three.js 加载失败</h1><p>请检查网络连接</p>";
+        throw new Error("Three.js not loaded");
+      }
+      console.log("✅ Three.js loaded:", THREE.REVISION);
     </script>
 
     <!-- 游戏模块 -->
@@ -584,11 +623,11 @@
 
     <!-- 全局错误处理 -->
     <script>
-        // 捕获全局错误
-        window.onerror = function(msg, url, line, col, error) {
-            const loading = document.getElementById('loading');
-            if (loading) {
-                loading.innerHTML = `
+      // 捕获全局错误
+      window.onerror = function (msg, url, line, col, error) {
+        const loading = document.getElementById("loading");
+        if (loading) {
+          loading.innerHTML = `
                     <h1>❌ JavaScript 错误</h1>
                     <p style="color: #ff6b6b; margin: 10px 0;">${msg}</p>
                     <p style="color: #888; font-size: 12px;">${url}:${line}:${col}</p>
@@ -604,16 +643,16 @@
                         ">🔄 重试</button>
                     </p>
                 `;
-            }
-            console.error('Global error:', msg, url, line, col, error);
-            return true;
-        };
+        }
+        console.error("Global error:", msg, url, line, col, error);
+        return true;
+      };
 
-        // 捕获未处理的 Promise 拒绝
-        window.onunhandledrejection = function(event) {
-            const loading = document.getElementById('loading');
-            if (loading) {
-                loading.innerHTML = `
+      // 捕获未处理的 Promise 拒绝
+      window.onunhandledrejection = function (event) {
+        const loading = document.getElementById("loading");
+        if (loading) {
+          loading.innerHTML = `
                     <h1>❌ 异步错误</h1>
                     <p style="color: #ff6b6b; margin: 10px 0;">${event.reason}</p>
                     <p style="margin-top: 20px">
@@ -628,9 +667,9 @@
                         ">🔄 重试</button>
                     </p>
                 `;
-            }
-            console.error('Unhandled rejection:', event.reason);
-        };
+        }
+        console.error("Unhandled rejection:", event.reason);
+      };
     </script>
-</body>
+  </body>
 </html>

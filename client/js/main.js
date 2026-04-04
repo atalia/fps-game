@@ -2,119 +2,140 @@
 let gameStarted = false;
 
 async function init() {
-    const loading = document.getElementById('loading');
-    const loadingText = loading ? loading.querySelector('p') : null;
+  const loading = document.getElementById("loading");
+  const loadingText = loading ? loading.querySelector("p") : null;
 
-    try {
-        console.log('🚀 Starting game initialization...');
-        console.log('📍 DOM Elements:', {
-            loading: !!loading,
-            loadingText: !!loadingText,
-            gameContainer: !!document.getElementById('game-container')
-        });
+  try {
+    console.log("🚀 Starting game initialization...");
+    console.log("📍 DOM Elements:", {
+      loading: !!loading,
+      loadingText: !!loadingText,
+      gameContainer: !!document.getElementById("game-container"),
+    });
 
-        if (!loading || !loadingText) {
-            throw new Error('DOM 元素未找到，请检查 HTML 结构');
-        }
-        
-        // 更新加载状态
-        loadingText.textContent = '初始化音效系统...';
-        
-        // 检查类是否存在
-        console.log('📦 Checking required classes:', {
-            AudioManager: typeof AudioManager !== 'undefined',
-            UIManager: typeof UIManager !== 'undefined',
-            ScreenEffects: typeof ScreenEffects !== 'undefined',
-            Renderer: typeof Renderer !== 'undefined',
-            Network: typeof Network !== 'undefined',
-            Lobby: typeof Lobby !== 'undefined',
-            Game: typeof Game !== 'undefined'
-        });
+    if (!loading || !loadingText) {
+      throw new Error("DOM 元素未找到，请检查 HTML 结构");
+    }
 
-        // 初始化音效
-        if (typeof AudioManager === 'undefined') {
-            throw new Error('AudioManager 类未定义，请检查 audio.js 加载');
-        }
-        window.audioManager = new AudioManager();
-        await window.audioManager.init();
-        console.log('✅ Audio initialized');
+    // 更新加载状态
+    loadingText.textContent = "初始化音效系统...";
 
-        // 初始化 UI
-        loadingText.textContent = '初始化界面...';
-        if (typeof UIManager === 'undefined') {
-            throw new Error('UIManager 类未定义，请检查 ui.js 加载');
-        }
-        if (typeof ScreenEffects === 'undefined') {
-            throw new Error('ScreenEffects 类未定义，请检查 effects.js 加载');
-        }
-        window.uiManager = new UIManager();
-        window.screenEffects = new ScreenEffects();
-        console.log('✅ UI initialized');
+    // 检查类是否存在
+    console.log("📦 Checking required classes:", {
+      AudioManager: typeof AudioManager !== "undefined",
+      UIManager: typeof UIManager !== "undefined",
+      ScreenEffects: typeof ScreenEffects !== "undefined",
+      Renderer: typeof Renderer !== "undefined",
+      Network: typeof Network !== "undefined",
+      Lobby: typeof Lobby !== "undefined",
+      Game: typeof Game !== "undefined",
+    });
 
-        // 初始化渲染器
-        loadingText.textContent = '初始化渲染器...';
-        if (typeof Renderer === 'undefined') {
-            throw new Error('Renderer 类未定义，请检查 renderer.js 加载');
-        }
-        window.renderer = new Renderer('game-container');
-        console.log('✅ Renderer initialized');
+    // 初始化音效
+    if (typeof AudioManager === "undefined") {
+      throw new Error("AudioManager 类未定义，请检查 audio.js 加载");
+    }
+    window.audioManager = new AudioManager();
+    await window.audioManager.init();
+    console.log("✅ Audio initialized");
 
-        // 初始化特效系统
-        loadingText.textContent = '初始化特效系统...';
-        if (typeof EffectsSystem !== 'undefined' && typeof PerformanceMonitor !== 'undefined') {
-            window.performanceMonitor = new PerformanceMonitor();
-            window.effectsSystem = new EffectsSystem();
-            window.effectsSystem.init(window.renderer);  // 调用 init 方法完成初始化
-            console.log('✅ Effects system initialized');
-        } else {
-            console.warn('⚠️ Effects system not loaded, using fallback');
-        }
+    // 初始化 UI
+    loadingText.textContent = "初始化界面...";
+    if (typeof UIManager === "undefined") {
+      throw new Error("UIManager 类未定义，请检查 ui.js 加载");
+    }
+    if (typeof ScreenEffects === "undefined") {
+      throw new Error("ScreenEffects 类未定义，请检查 effects.js 加载");
+    }
+    window.uiManager = new UIManager();
+    window.screenEffects = new ScreenEffects();
+    if (typeof TeamSystem !== "undefined") {
+      window.teamSystem = new TeamSystem();
+    }
+    console.log("✅ UI initialized");
 
-        // 初始化网络
-        loadingText.textContent = '连接服务器...';
-        if (typeof Network === 'undefined') {
-            throw new Error('Network 类未定义，请检查 network.js 加载');
-        }
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
-        console.log('🔌 Connecting to:', wsUrl);
-        window.network = new Network(wsUrl);
+    // 初始化渲染器
+    loadingText.textContent = "初始化渲染器...";
+    if (typeof Renderer === "undefined") {
+      throw new Error("Renderer 类未定义，请检查 renderer.js 加载");
+    }
+    window.renderer = new Renderer("game-container");
+    console.log("✅ Renderer initialized");
 
-        // 设置网络事件处理
-        setupNetworkHandlers();
+    if (typeof TeamSelectUI !== "undefined" && window.teamSystem) {
+      window.teamSelectUI = new TeamSelectUI(
+        document.getElementById("game-container"),
+        window.teamSystem,
+      );
+    }
+    if (typeof TeamScoreUI !== "undefined" && window.teamSystem) {
+      window.teamScoreUI = new TeamScoreUI(
+        document.getElementById("game-container"),
+      );
+      window.teamScoreUI.show(window.teamSystem.getAllTeams());
+    }
+    if (typeof WeaponSystem !== "undefined") {
+      window.weaponSystem = new WeaponSystem();
+    }
 
-        // 等待连接
-        await new Promise((resolve, reject) => {
-            window.network.onConnect = () => {
-                console.log('✅ WebSocket connected');
-                resolve();
-            };
-            window.network.onError = (err) => {
-                console.error('❌ WebSocket error:', err);
-                reject(new Error('WebSocket 连接失败'));
-            };
-            setTimeout(() => reject(new Error('连接超时 (10秒)')), 10000);
-        });
+    // 初始化特效系统
+    loadingText.textContent = "初始化特效系统...";
+    if (
+      typeof EffectsSystem !== "undefined" &&
+      typeof PerformanceMonitor !== "undefined"
+    ) {
+      window.performanceMonitor = new PerformanceMonitor();
+      window.effectsSystem = new EffectsSystem();
+      window.effectsSystem.init(window.renderer); // 调用 init 方法完成初始化
+      console.log("✅ Effects system initialized");
+    } else {
+      console.warn("⚠️ Effects system not loaded, using fallback");
+    }
 
-        // 初始化大厅
-        loadingText.textContent = '加载大厅...';
-        if (typeof Lobby === 'undefined') {
-            throw new Error('Lobby 类未定义，请检查 lobby.js 加载');
-        }
-        window.lobby = new Lobby();
+    // 初始化网络
+    loadingText.textContent = "连接服务器...";
+    if (typeof Network === "undefined") {
+      throw new Error("Network 类未定义，请检查 network.js 加载");
+    }
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${wsProtocol}://${window.location.host}/ws`;
+    console.log("🔌 Connecting to:", wsUrl);
+    window.network = new Network(wsUrl);
 
-        // 设置退出房间按钮
-        setupLeaveRoomButton();
+    // 设置网络事件处理
+    setupNetworkHandlers();
 
-        // 隐藏加载画面
-        loading.style.display = 'none';
+    // 等待连接
+    await new Promise((resolve, reject) => {
+      window.network.onConnect = () => {
+        console.log("✅ WebSocket connected");
+        resolve();
+      };
+      window.network.onError = (err) => {
+        console.error("❌ WebSocket error:", err);
+        reject(new Error("WebSocket 连接失败"));
+      };
+      setTimeout(() => reject(new Error("连接超时 (10秒)")), 10000);
+    });
 
-        console.log('🎮 Game initialized successfully!');
+    // 初始化大厅
+    loadingText.textContent = "加载大厅...";
+    if (typeof Lobby === "undefined") {
+      throw new Error("Lobby 类未定义，请检查 lobby.js 加载");
+    }
+    window.lobby = new Lobby();
 
-    } catch (error) {
-        console.error('初始化失败:', error);
-        if (loading) {
-            loading.innerHTML = `
+    // 设置退出房间按钮
+    setupLeaveRoomButton();
+
+    // 隐藏加载画面
+    loading.style.display = "none";
+
+    console.log("🎮 Game initialized successfully!");
+  } catch (error) {
+    console.error("初始化失败:", error);
+    if (loading) {
+      loading.innerHTML = `
                 <h1>❌ 初始化失败</h1>
                 <p style="color: #ff6b6b;">${error.message}</p>
                 <p style="color: #888; margin-top: 10px; font-size: 14px;">
@@ -134,356 +155,530 @@ async function init() {
                     </button>
                 </p>
             `;
-        }
     }
+  }
 }
 
 function setupNetworkHandlers() {
-    // 注意：messageHandlers 在 startGame() 中初始化，因为那时 window.game 才创建
-    
-    // 辅助函数：刷新玩家列表 UI
-    function refreshPlayerList() {
-        if (!window.game || !window.game.players) return
-        const players = Array.from(window.game.players.values())
-        // 添加自己
-        if (window.game.player) {
-            const selfInList = players.find(p => p.id === window.game.player.id)
-            if (!selfInList) {
-                players.unshift({
-                    id: window.game.player.id,
-                    name: window.game.player.name || 'You',
-                    kills: window.game.player.kills || 0,
-                    health: window.game.player.health || 100,
-                    is_bot: false
-                })
-            }
-        }
-        window.uiManager.updatePlayerList(players)
+  // 注意：messageHandlers 在 startGame() 中初始化，因为那时 window.game 才创建
+
+  // 辅助函数：刷新玩家列表 UI
+  function refreshPlayerList() {
+    if (!window.game || !window.game.players) return;
+    const players = Array.from(window.game.players.values());
+    // 添加自己
+    if (window.game.player) {
+      const selfInList = players.find((p) => p.id === window.game.player.id);
+      if (!selfInList) {
+        players.unshift({
+          id: window.game.player.id,
+          name: window.game.player.name || "You",
+          kills: window.game.player.kills || 0,
+          deaths: window.game.player.deaths || 0,
+          score: window.game.player.score || 0,
+          health: window.game.player.health || 100,
+          team: window.game.player.team || "",
+          is_bot: false,
+        });
+      }
     }
-    
-    // 房间加入成功
-    window.network.on('room_joined', (data) => {
-        console.log('✅ Joined room:', data.room_id);
-        
-        window.uiManager.updateRoom(data.room_id, data.player_count);
-        window.uiManager.showMessage(`已加入房间 ${data.room_id}`);
-        
-        // 设置当前玩家 ID
-        window.uiManager.setSelfPlayerId(data.player_id);
+    window.uiManager.updatePlayerList(players);
+  }
 
-        // 初始化游戏
-        if (!gameStarted) {
-            startGame(data.player_id);
+  function syncTeamState(teams) {
+    if (!window.teamSystem || !teams) return;
+    window.teamSystem.setTeams(teams);
+    if (window.teamScoreUI) {
+      window.teamScoreUI.show(window.teamSystem.getAllTeams());
+    }
+    window.teamSelectUI?.render();
+    window.uiManager.updateScoreboardTeamSummary(
+      window.teamSystem.getAllTeams(),
+    );
+  }
+
+  function applyPlayerTeam(playerId, teamId) {
+    if (!window.teamSystem || !playerId || !teamId) return;
+    window.teamSystem.setPlayerTeam(playerId, teamId);
+    window.teamScoreUI?.updateTeams(window.teamSystem.getAllTeams());
+    window.uiManager.updateScoreboardTeamSummary(
+      window.teamSystem.getAllTeams(),
+    );
+
+    if (window.game?.player?.id === playerId) {
+      window.game.player.team = teamId;
+    }
+
+    const remotePlayer = window.game?.players?.get(playerId);
+    if (remotePlayer) {
+      remotePlayer.team = teamId;
+    }
+
+    if (window.renderer && playerId !== window.network.playerId) {
+      window.renderer.setPlayerTeam(
+        playerId,
+        teamId,
+        remotePlayer?.is_bot || false,
+      );
+    }
+  }
+
+  function maybeShowTeamSelect() {
+    if (!window.teamSelectUI || !window.game?.player) return;
+    if (window.game.player.team) {
+      window.teamSelectUI.hide();
+    } else {
+      window.teamSelectUI.show();
+    }
+  }
+
+  if (window.teamSelectUI) {
+    window.teamSelectUI.onSelect = (teamId) => {
+      if (window.network?.connected) {
+        window.network.send("team_join", { team: teamId });
+      }
+    };
+  }
+
+  // 房间加入成功
+  window.network.on("room_joined", (data) => {
+    console.log("✅ Joined room:", data.room_id);
+
+    window.uiManager.updateRoom(data.room_id, data.player_count);
+    window.uiManager.showMessage(`已加入房间 ${data.room_id}`);
+    syncTeamState(data.teams);
+
+    // 设置当前玩家 ID
+    window.uiManager.setSelfPlayerId(data.player_id);
+
+    // 初始化游戏
+    if (!gameStarted) {
+      startGame(data.player_id);
+    }
+
+    // 创建房间内现有玩家的模型（排除自己）
+    if (data.players && Array.isArray(data.players)) {
+      console.log("Room has", data.players.length, "players");
+      if (window.teamSystem) {
+        window.teamSystem.syncPlayers(data.players);
+        window.teamScoreUI?.updateTeams(window.teamSystem.getAllTeams());
+      }
+      const selfPlayerData = data.players.find(
+        (player) => player.id === data.player_id,
+      );
+      if (selfPlayerData) {
+        window.__pendingSelfState = {
+          team: selfPlayerData.team || "",
+          weapon: selfPlayerData.weapon || "",
+        };
+      }
+
+      // 更新玩家列表 UI
+      window.uiManager.updatePlayerList(data.players);
+
+      data.players.forEach((player) => {
+        if (player.id === data.player_id && window.game?.player) {
+          window.game.player.team = player.team || "";
+          window.game.player.weapon =
+            player.weapon || window.game.player.weapon;
+          return;
         }
-        
-        // 创建房间内现有玩家的模型（排除自己）
-        if (data.players && Array.isArray(data.players)) {
-            console.log('Room has', data.players.length, 'players');
-            
-            // 更新玩家列表 UI
-            window.uiManager.updatePlayerList(data.players);
-            
-            data.players.forEach(player => {
-                if (player.id !== data.player_id) {
-                    console.log('Creating existing player:', player.id, 'position:', player.position);
-                    const position = player.position || { x: 0, y: 0, z: 0 };
-                    window.renderer.addPlayer(player.id, position, player.is_bot || false);
-                    
-                    // 如果是机器人，显示 AI 标签
-                    if (player.is_bot && window.aiLabels) {
-                        window.aiLabels.createLabel(player.id, player.name, player.difficulty);
-                    }
-                    
-                    // 同步到 game.players Map
-                    if (window.game && window.game.players) {
-                        window.game.players.set(player.id, {
-                            id: player.id,
-                            name: player.name,
-                            position: position,
-                            rotation: player.rotation || 0,
-                            is_bot: player.is_bot,
-                            kills: player.kills || 0,
-                            health: player.health || 100
-                        });
-                    }
-                }
+
+        if (player.id !== data.player_id) {
+          console.log(
+            "Creating existing player:",
+            player.id,
+            "position:",
+            player.position,
+          );
+          const position = player.position || { x: 0, y: 0, z: 0 };
+          window.renderer.addPlayer(player.id, position, {
+            isBot: player.is_bot || false,
+            team: player.team || "",
+          });
+
+          // 如果是机器人，显示 AI 标签
+          if (player.is_bot && window.aiLabels) {
+            window.aiLabels.createLabel(
+              player.id,
+              player.name,
+              player.difficulty,
+            );
+          }
+
+          // 同步到 game.players Map
+          if (window.game && window.game.players) {
+            window.game.players.set(player.id, {
+              id: player.id,
+              name: player.name,
+              position: position,
+              rotation: player.rotation || 0,
+              is_bot: player.is_bot,
+              team: player.team || "",
+              weapon: player.weapon || "",
+              kills: player.kills || 0,
+              deaths: player.deaths || 0,
+              score: player.score || 0,
+              health: player.health || 100,
             });
+          }
         }
-    });
+      });
+    }
 
-    // 玩家加入
-    window.network.on('player_joined', (data) => {
-        console.log('Player joined:', data.name, 'position:', data.position, 'is_bot:', data.is_bot);
-        if (window.messageHandlers) {
-            window.messageHandlers.handlePlayerJoined(data);
-        }
-        
-        // 更新玩家列表 UI
-        if (typeof refreshPlayerList === 'function') refreshPlayerList();
-    });
+    maybeShowTeamSelect();
+  });
 
-    // 玩家离开
-    window.network.on('player_left', (data) => {
-        console.log('Player left:', data.player_id);
-        window.renderer.removePlayer(data.player_id);
-        
-        // 移除 AI 标签
-        if (window.aiLabels) {
-            window.aiLabels.removeLabel(data.player_id);
-        }
-        
-        window.uiManager.addKillFeed(`${data.name || data.player_id} 离开了游戏`);
-        
-        // 从 game.players Map 移除
-        if (window.game && window.game.players) {
-            window.game.players.delete(data.player_id);
-        }
-        
-        // 更新玩家列表 UI
-        if (typeof refreshPlayerList === 'function') refreshPlayerList();
-    });
+  // 玩家加入
+  window.network.on("player_joined", (data) => {
+    console.log(
+      "Player joined:",
+      data.name,
+      "position:",
+      data.position,
+      "is_bot:",
+      data.is_bot,
+    );
+    if (window.messageHandlers) {
+      window.messageHandlers.handlePlayerJoined(data);
+    }
+    if (data.team) {
+      applyPlayerTeam(data.player_id, data.team);
+    }
 
-    // 玩家移动
-    window.network.on('player_moved', (data) => {
-        window.renderer.updatePlayer(data.player_id, data.position, data.rotation);
-        
-        // 同步到 game.players Map
-        if (window.game && window.game.players) {
-            const player = window.game.players.get(data.player_id);
-            if (player) {
-                player.position = data.position;
-                player.rotation = data.rotation;
-            }
-        }
-    });
+    // 更新玩家列表 UI
+    if (typeof refreshPlayerList === "function") refreshPlayerList();
+  });
 
-    // 玩家射击
-    window.network.on('player_shot', (data) => {
-        if (window.messageHandlers) {
-            window.messageHandlers.handlePlayerShot(data);
-        }
-    });
+  // 玩家离开
+  window.network.on("player_left", (data) => {
+    console.log("Player left:", data.player_id);
+    window.renderer.removePlayer(data.player_id);
 
-    // 玩家受伤
-    window.network.on('player_damaged', (data) => {
-        console.log(`Player ${data.player_id} took ${data.damage} damage (${data.hitbox})`);
-        if (window.messageHandlers) {
-            window.messageHandlers.handlePlayerDamaged(data);
-        }
-    });
+    // 移除 AI 标签
+    if (window.aiLabels) {
+      window.aiLabels.removeLabel(data.player_id);
+    }
 
-    // 玩家死亡
-    window.network.on('player_killed', (data) => {
-        console.log(`Player ${data.victim_id} killed by ${data.killer_id}`);
-        if (window.messageHandlers) {
-            window.messageHandlers.handlePlayerKilled(data);
-        }
-    });
+    window.uiManager.addKillFeed(`${data.name || data.player_id} 离开了游戏`);
 
-    // 玩家重生
-    window.network.on('player_respawned', (data) => {
-        if (window.messageHandlers) {
-            window.messageHandlers.handlePlayerRespawned(data);
-        }
-    });
+    // 从 game.players Map 移除
+    if (window.game && window.game.players) {
+      window.game.players.delete(data.player_id);
+    }
+    if (window.teamSystem) {
+      window.teamSystem.removePlayer(data.player_id);
+      if (window.teamScoreUI) {
+        window.teamScoreUI.updateTeams(window.teamSystem.getAllTeams());
+      }
+    }
 
-    // 武器切换
-    window.network.on('weapon_changed', (data) => {
-        console.log(`Player ${data.player_id} switched to ${data.weapon}`);
-        if (window.messageHandlers) {
-            window.messageHandlers.handleWeaponChanged(data);
-        }
-    });
+    // 更新玩家列表 UI
+    if (typeof refreshPlayerList === "function") refreshPlayerList();
+  });
 
-    // 聊天消息
-    window.network.on('chat', (data) => {
-        console.log('[MAIN] Received chat message:', data);
-        window.uiManager.addChatMessage(data.name, data.message);
-    });
+  // 玩家移动
+  window.network.on("player_moved", (data) => {
+    window.renderer.updatePlayer(data.player_id, data.position, data.rotation);
 
-    // 错误消息
-    window.network.on('error', (data) => {
-        console.error('Server error:', data.message);
-        window.uiManager.showMessage(data.message, 'error');
-    });
+    // 同步到 game.players Map
+    if (window.game && window.game.players) {
+      const player = window.game.players.get(data.player_id);
+      if (player) {
+        player.position = data.position;
+        player.rotation = data.rotation;
+      }
+    }
+  });
+
+  // 玩家射击
+  window.network.on("player_shot", (data) => {
+    if (window.messageHandlers) {
+      window.messageHandlers.handlePlayerShot(data);
+    }
+  });
+
+  // 玩家受伤
+  window.network.on("player_damaged", (data) => {
+    console.log(
+      `Player ${data.player_id} took ${data.damage} damage (${data.hitbox})`,
+    );
+    if (window.messageHandlers) {
+      window.messageHandlers.handlePlayerDamaged(data);
+    }
+  });
+
+  // 玩家死亡
+  window.network.on("player_killed", (data) => {
+    console.log(`Player ${data.victim_id} killed by ${data.killer_id}`);
+    if (window.messageHandlers) {
+      window.messageHandlers.handlePlayerKilled(data);
+    }
+  });
+
+  // 玩家重生
+  window.network.on("player_respawned", (data) => {
+    if (window.messageHandlers) {
+      window.messageHandlers.handlePlayerRespawned(data);
+    }
+  });
+
+  // 武器切换
+  window.network.on("weapon_changed", (data) => {
+    console.log(`Player ${data.player_id} switched to ${data.weapon}`);
+    if (window.messageHandlers) {
+      window.messageHandlers.handleWeaponChanged(data);
+    }
+  });
+
+  window.network.on("team_changed", (data) => {
+    console.log(`Player ${data.player_id} joined team ${data.team}`);
+    syncTeamState(data.teams);
+    applyPlayerTeam(data.player_id, data.team);
+
+    if (window.game?.player?.id === data.player_id) {
+      window.uiManager.showMessage(
+        `已加入 ${data.team === "ct" ? "CT" : "T"}`,
+        "success",
+      );
+      maybeShowTeamSelect();
+    }
+
+    if (typeof refreshPlayerList === "function") refreshPlayerList();
+  });
+
+  window.network.on("team_scores_updated", (data) => {
+    syncTeamState(data.teams);
+    if (data.winner) {
+      const label = data.winner === "ct" ? "CT" : "T";
+      window.uiManager.showMessage(`${label} wins the round`, "success");
+    }
+  });
+
+  // 聊天消息
+  window.network.on("chat", (data) => {
+    console.log("[MAIN] Received chat message:", data);
+    window.uiManager.addChatMessage(data.name, data.message);
+  });
+
+  // 错误消息
+  window.network.on("error", (data) => {
+    console.error("Server error:", data.message);
+    window.uiManager.showMessage(data.message, "error");
+  });
 }
 
 async function startGame(playerId) {
-    gameStarted = true;
+  gameStarted = true;
 
-    // 初始化游戏
-    window.game = new Game();
-    
-    // 【重要】先设置玩家 ID，防止消息处理时找不到自己
-    // Game 构造函数会创建默认 player 对象
-    if (window.game.player) {
-        window.game.player.id = playerId;
-        console.log('[MAIN] Player ID set early:', playerId);
-    }
-    
-    // 创建 messageHandlers，此时 player.id 已设置
-    if (typeof createMessageHandlers !== 'undefined') {
-        window.messageHandlers = createMessageHandlers({
-            game: window.game,
-            renderer: window.renderer,
-            uiManager: window.uiManager,
-            audioManager: window.audioManager,
-            screenEffects: window.screenEffects,
-            hitIndicator: window.hitIndicator,
-            effectsSystem: window.effectsSystem,
-            damageNumber: window.damageNumber,
-            dynamicCrosshair: window.dynamicCrosshair,
-            hitEffects: window.hitEffects,
-            killNotice: window.killNotice,
-            killstreakEnhanced: window.killstreakEnhanced,
-            aiLabels: window.aiLabels
-        });
-        console.log('[MAIN] Message handlers initialized (early with player ID)');
-    }
+  // 初始化游戏
+  window.game = new Game();
 
-    await window.game.init();
+  // 【重要】先设置玩家 ID，防止消息处理时找不到自己
+  // Game 构造函数会创建默认 player 对象
+  if (window.game.player) {
+    window.game.player.id = playerId;
+    console.log("[MAIN] Player ID set early:", playerId);
+  }
 
-    // 初始化命中效果系统
-    if (typeof HitEffects !== 'undefined') {
-        window.hitEffects = new HitEffects(window.renderer.scene, window.renderer.camera);
-    }
+  // 创建 messageHandlers，此时 player.id 已设置
+  if (typeof createMessageHandlers !== "undefined") {
+    window.messageHandlers = createMessageHandlers({
+      game: window.game,
+      renderer: window.renderer,
+      uiManager: window.uiManager,
+      audioManager: window.audioManager,
+      screenEffects: window.screenEffects,
+      hitIndicator: window.hitIndicator,
+      effectsSystem: window.effectsSystem,
+      damageNumber: window.damageNumber,
+      dynamicCrosshair: window.dynamicCrosshair,
+      hitEffects: window.hitEffects,
+      killNotice: window.killNotice,
+      killstreakEnhanced: window.killstreakEnhanced,
+      aiLabels: window.aiLabels,
+    });
+    console.log("[MAIN] Message handlers initialized (early with player ID)");
+  }
 
-    // 初始化 AI 标签系统
-    if (typeof AILabels !== 'undefined') {
-        window.aiLabels = new AILabels();
-    }
+  await window.game.init();
 
-    // 初始化语音系统
-    if (typeof VoiceSystem !== 'undefined') {
-        window.voiceSystem = new VoiceSystem();
-        window.voiceSystem.init().then(success => {
-            if (success) {
-                console.log('[MAIN] Voice system initialized');
-                setupVoiceHandlers();
-            }
-        }).catch(err => {
-            console.warn('[MAIN] Voice system init failed:', err);
-        });
+  if (window.__pendingSelfState && window.game?.player) {
+    window.game.player.team = window.__pendingSelfState.team || "";
+    if (window.__pendingSelfState.weapon) {
+      window.game.player.weapon = window.__pendingSelfState.weapon;
     }
+    delete window.__pendingSelfState;
+  }
 
-    // 重新创建 messageHandlers，包含新初始化的依赖（hitEffects, aiLabels 等）
-    if (typeof createMessageHandlers !== 'undefined') {
-        window.messageHandlers = createMessageHandlers({
-            game: window.game,
-            renderer: window.renderer,
-            uiManager: window.uiManager,
-            audioManager: window.audioManager,
-            screenEffects: window.screenEffects,
-            hitIndicator: window.hitIndicator,
-            effectsSystem: window.effectsSystem,
-            damageNumber: window.damageNumber,
-            dynamicCrosshair: window.dynamicCrosshair,
-            hitEffects: window.hitEffects,
-            killNotice: window.killNotice,
-            killstreakEnhanced: window.killstreakEnhanced,
-            aiLabels: window.aiLabels
-        });
-        console.log('[MAIN] Message handlers re-initialized with full dependencies');
-    }
+  // 初始化命中效果系统
+  if (typeof HitEffects !== "undefined") {
+    window.hitEffects = new HitEffects(
+      window.renderer.scene,
+      window.renderer.camera,
+    );
+  }
 
-    // 隐藏大厅
-    if (window.lobby) {
-        window.lobby.hide();
+  // 初始化 AI 标签系统
+  if (typeof AILabels !== "undefined") {
+    window.aiLabels = new AILabels();
+  }
+
+  // 初始化语音系统
+  if (typeof VoiceSystem !== "undefined") {
+    window.voiceSystem = new VoiceSystem();
+    window.voiceSystem
+      .init()
+      .then((success) => {
+        if (success) {
+          console.log("[MAIN] Voice system initialized");
+          setupVoiceHandlers();
+        }
+      })
+      .catch((err) => {
+        console.warn("[MAIN] Voice system init failed:", err);
+      });
+  }
+
+  // 重新创建 messageHandlers，包含新初始化的依赖（hitEffects, aiLabels 等）
+  if (typeof createMessageHandlers !== "undefined") {
+    window.messageHandlers = createMessageHandlers({
+      game: window.game,
+      renderer: window.renderer,
+      uiManager: window.uiManager,
+      audioManager: window.audioManager,
+      screenEffects: window.screenEffects,
+      hitIndicator: window.hitIndicator,
+      effectsSystem: window.effectsSystem,
+      damageNumber: window.damageNumber,
+      dynamicCrosshair: window.dynamicCrosshair,
+      hitEffects: window.hitEffects,
+      killNotice: window.killNotice,
+      killstreakEnhanced: window.killstreakEnhanced,
+      aiLabels: window.aiLabels,
+    });
+    console.log(
+      "[MAIN] Message handlers re-initialized with full dependencies",
+    );
+  }
+
+  // 隐藏大厅
+  if (window.lobby) {
+    window.lobby.hide();
+  }
+
+  // 显示退出按钮
+  const leaveBtn = document.getElementById("leave-room-btn");
+  if (leaveBtn) {
+    leaveBtn.style.display = "block";
+  }
+
+  if (window.teamSelectUI && window.game?.player) {
+    if (window.game.player.team) {
+      window.teamSelectUI.hide();
+    } else {
+      window.teamSelectUI.show();
     }
-    
-    // 显示退出按钮
-    const leaveBtn = document.getElementById('leave-room-btn');
-    if (leaveBtn) {
-        leaveBtn.style.display = 'block';
-    }
+  }
 }
 
 // 设置退出房间按钮
 function setupLeaveRoomButton() {
-    const leaveBtn = document.getElementById('leave-room-btn');
-    if (!leaveBtn) return;
-    
-    // 点击按钮退出房间
-    leaveBtn.addEventListener('click', leaveRoom);
-    
-    // ESC 键退出房间
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !e.repeat && gameStarted) {
-            leaveRoom();
-        }
-    });
+  const leaveBtn = document.getElementById("leave-room-btn");
+  if (!leaveBtn) return;
+
+  // 点击按钮退出房间
+  leaveBtn.addEventListener("click", leaveRoom);
+
+  // ESC 键退出房间
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !e.repeat && gameStarted) {
+      leaveRoom();
+    }
+  });
 }
 
 // 退出房间
 function leaveRoom() {
-    console.log('[MAIN] Leaving room...');
+  console.log("[MAIN] Leaving room...");
 
-    // 发送离开消息
-    if (window.network && window.network.connected) {
-        window.network.send('leave_room', {});
+  // 发送离开消息
+  if (window.network && window.network.connected) {
+    window.network.send("leave_room", {});
+  }
+
+  // 清理游戏实例（包括所有事件监听器）
+  if (window.game) {
+    if (typeof window.game.destroy === "function") {
+      window.game.destroy();
     }
+    window.game = null;
+  }
 
-    // 清理游戏实例（包括所有事件监听器）
-    if (window.game) {
-        if (typeof window.game.destroy === 'function') {
-            window.game.destroy();
-        }
-        window.game = null;
-    }
+  // 清理渲染器中的其他玩家
+  if (window.renderer) {
+    window.renderer.clearPlayers();
+  }
 
-    // 清理渲染器中的其他玩家
-    if (window.renderer) {
-        window.renderer.clearPlayers();
-    }
+  // 隐藏退出按钮
+  const leaveBtn = document.getElementById("leave-room-btn");
+  if (leaveBtn) {
+    leaveBtn.style.display = "none";
+  }
 
-    // 隐藏退出按钮
-    const leaveBtn = document.getElementById('leave-room-btn');
-    if (leaveBtn) {
-        leaveBtn.style.display = 'none';
-    }
+  // 显示大厅
+  if (window.lobby) {
+    window.lobby.show();
+  }
 
-    // 显示大厅
-    if (window.lobby) {
-        window.lobby.show();
-    }
+  // 更新 UI
+  window.uiManager.updateRoom("等待加入...", 0);
+  window.uiManager.updatePlayerList([]);
+  if (window.teamSystem) {
+    window.teamSystem.playerTeam.clear();
+    window.teamSystem.setTeams(window.teamSystem.getDefaultTeams());
+  }
+  if (window.teamScoreUI && window.teamSystem) {
+    window.teamScoreUI.updateTeams(window.teamSystem.getAllTeams());
+  }
+  if (window.teamSelectUI) {
+    window.teamSelectUI.hide();
+  }
+  delete window.__pendingSelfState;
 
-    // 更新 UI
-    window.uiManager.updateRoom('等待加入...', 0);
-    window.uiManager.updatePlayerList([]);
+  gameStarted = false;
 
-    gameStarted = false;
-
-    console.log('[MAIN] Left room successfully');
+  console.log("[MAIN] Left room successfully");
 }
 
 // 设置语音事件处理
 function setupVoiceHandlers() {
-    if (!window.network || !window.voiceSystem) return;
+  if (!window.network || !window.voiceSystem) return;
 
-    // 接收语音数据
-    window.network.on('voice_data', (data) => {
-        if (window.voiceSystem && data.playerId && data.audio) {
-            window.voiceSystem.receiveAudio(data.playerId, data.audio);
-        }
-    });
+  // 接收语音数据
+  window.network.on("voice_data", (data) => {
+    if (window.voiceSystem && data.playerId && data.audio) {
+      window.voiceSystem.receiveAudio(data.playerId, data.audio);
+    }
+  });
 
-    // 语音开始
-    window.network.on('voice_start', (data) => {
-        console.log('[VOICE] Player started speaking:', data.playerId);
-    });
+  // 语音开始
+  window.network.on("voice_start", (data) => {
+    console.log("[VOICE] Player started speaking:", data.playerId);
+  });
 
-    // 语音停止
-    window.network.on('voice_stop', (data) => {
-        console.log('[VOICE] Player stopped speaking:', data.playerId);
-        if (window.voiceSystem) {
-            window.voiceSystem.stopReceiving(data.playerId);
-        }
-    });
+  // 语音停止
+  window.network.on("voice_stop", (data) => {
+    console.log("[VOICE] Player stopped speaking:", data.playerId);
+    if (window.voiceSystem) {
+      window.voiceSystem.stopReceiving(data.playerId);
+    }
+  });
 }
 
 // 启动
-if (typeof window !== 'undefined' && !window.__FPS_DISABLE_AUTO_INIT__) {
-    init();
+if (typeof window !== "undefined" && !window.__FPS_DISABLE_AUTO_INIT__) {
+  init();
 }
 
 export { init, setupNetworkHandlers };

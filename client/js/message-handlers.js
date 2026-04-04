@@ -19,8 +19,8 @@ function createMessageHandlers(deps) {
     hitEffects,
     killNotice,
     killstreakEnhanced,
-    aiLabels
-  } = deps
+    aiLabels,
+  } = deps;
 
   return {
     /**
@@ -30,47 +30,60 @@ function createMessageHandlers(deps) {
     handlePlayerDamaged(data) {
       // 更新血量
       if (data.player_id === game?.player?.id) {
-        game.player.health = data.remaining_health
-        uiManager.updateHealth(data.remaining_health)
+        game.player.health = data.remaining_health;
+        uiManager.updateHealth(data.remaining_health);
 
         // 屏幕闪红 + 受击指示
         if (screenEffects) {
-          screenEffects.flashDamage()
+          screenEffects.flashDamage();
         }
         if (hitIndicator && data.attacker_position) {
-          hitIndicator.show(data.attacker_position, data.damage)
+          hitIndicator.show(data.attacker_position, data.damage);
         }
       } else {
         // 显示命中标记 (射击者视角)
         if (data.attacker_id === game?.player?.id) {
           // 命中粒子效果
           if (effectsSystem?.core) {
-            effectsSystem.core.createHitBurst(data.position, data.hitbox === 'head')
+            effectsSystem.core.createHitBurst(
+              data.position,
+              data.hitbox === "head",
+            );
           }
           // 血迹效果
           if (effectsSystem?.core) {
-            effectsSystem.core.createBloodSplatter(data.position)
+            effectsSystem.core.createBloodSplatter(data.position);
           }
           // 伤害数字
           if (damageNumber) {
-            damageNumber.show(data.damage, data.position, { isHeadshot: data.hitbox === 'head' })
+            damageNumber.show(data.damage, data.position, {
+              isHeadshot: data.hitbox === "head",
+            });
           }
           // 准星命中反馈
           if (dynamicCrosshair) {
-            dynamicCrosshair.showHit()
+            dynamicCrosshair.showHit();
           }
           // 命中音效
           if (audioManager) {
-            audioManager.playHit()
+            audioManager.playHit();
           }
           // 兼容旧系统 - hitEffects
           if (hitEffects && data.position) {
             // 使用 THREE.Vector3 如果可用，否则直接传对象
-            let pos = data.position
-            if (typeof THREE !== 'undefined' && THREE !== null && THREE.Vector3) {
-              pos = new THREE.Vector3(data.position.x, data.position.y, data.position.z)
+            let pos = data.position;
+            if (
+              typeof THREE !== "undefined" &&
+              THREE !== null &&
+              THREE.Vector3
+            ) {
+              pos = new THREE.Vector3(
+                data.position.x,
+                data.position.y,
+                data.position.z,
+              );
             }
-            hitEffects.showHitMarker(pos, data.hitbox, data.damage)
+            hitEffects.showHitMarker(pos, data.hitbox, data.damage);
           }
         }
       }
@@ -82,13 +95,13 @@ function createMessageHandlers(deps) {
      */
     handlePlayerShot(data) {
       // 使用正确的武器音效
-      const weaponId = data.weapon_id || 'rifle'
-      audioManager.playShoot(weaponId)
+      const weaponId = data.weapon_id || "rifle";
+      audioManager.playShoot(weaponId);
 
       // 使用服务端提供的方向，如果没有则使用默认方向
       if (data.position) {
-        const direction = data.direction || { x: 0, y: 0, z: -1 }
-        renderer.addProjectile(data.position, direction)
+        const direction = data.direction || { x: 0, y: 0, z: -1 };
+        renderer.addProjectile(data.position, direction);
       }
     },
 
@@ -99,31 +112,33 @@ function createMessageHandlers(deps) {
     handlePlayerKilled(data) {
       // 更新击杀计数
       if (data.killer_id === game?.player?.id) {
-        game.player.kills++
-        uiManager.updateKills(game.player.kills)
-        uiManager.addKillFeed(`击杀 ${data.victim_id}${data.is_headshot ? ' (爆头!)' : ''}`)
-        
+        game.player.kills++;
+        uiManager.updateKills(game.player.kills);
+        uiManager.addKillFeed(
+          `击杀 ${data.victim_id}${data.is_headshot ? " (爆头!)" : ""}`,
+        );
+
         // 击杀音效
         if (audioManager) {
-          audioManager.playKill()
+          audioManager.playKill();
         }
-        
+
         // 新特效系统
         if (killNotice) {
-          killNotice.show(data.victim_id, { isHeadshot: data.is_headshot })
+          killNotice.show(data.victim_id, { isHeadshot: data.is_headshot });
         }
         if (killstreakEnhanced) {
-          killstreakEnhanced.addKill()
+          killstreakEnhanced.addKill();
         }
         if (screenEffects) {
-          screenEffects.flashKill()
+          screenEffects.flashKill();
         }
       }
 
       if (data.victim_id === game?.player?.id) {
-        game.player.deaths++
-        uiManager.updateDeaths(game.player.deaths)
-        uiManager.showDeathScreen()
+        game.player.deaths++;
+        uiManager.updateDeaths(game.player.deaths);
+        uiManager.showDeathScreen();
       }
     },
 
@@ -132,17 +147,32 @@ function createMessageHandlers(deps) {
      * 对应 main.js line 387-401
      */
     handleWeaponChanged(data) {
+      const weaponConfig = window.weaponSystem?.getWeapon?.(data.weapon);
+      const weaponLabel = weaponConfig?.name || data.weapon;
+
       // 更新本地玩家武器状态
       if (data.player_id === game?.player?.id) {
-        game.player.weapon = data.weapon
-        uiManager.showMessage(`切换到 ${data.weapon}`)
+        game.player.weapon = data.weapon;
+        if (weaponConfig) {
+          game.player.maxAmmo = weaponConfig.magSize;
+          game.player.ammoReserve =
+            weaponConfig.reserveAmmo ?? game.player.ammoReserve;
+        }
+        uiManager.updateWeapon(weaponLabel);
+        if (weaponConfig) {
+          uiManager.updateAmmo(
+            game.player.ammo || weaponConfig.magSize,
+            game.player.ammoReserve,
+          );
+        }
+        uiManager.showMessage(`切换到 ${weaponLabel}`);
       }
-      
+
       // 更新玩家列表中的武器
       if (game?.players) {
-        const player = game.players.get(data.player_id)
+        const player = game.players.get(data.player_id);
         if (player) {
-          player.weapon = data.weapon
+          player.weapon = data.weapon;
         }
       }
     },
@@ -152,16 +182,19 @@ function createMessageHandlers(deps) {
      * 对应 main.js line 186-217
      */
     handlePlayerJoined(data) {
-      const position = data.position || { x: 0, y: 0, z: 0 }
-      const isBot = data.is_bot || false
-      renderer.addPlayer(data.player_id, position, isBot)
+      const position = data.position || { x: 0, y: 0, z: 0 };
+      const isBot = data.is_bot || false;
+      renderer.addPlayer(data.player_id, position, {
+        isBot,
+        team: data.team || "",
+      });
 
       // 如果是机器人，显示 AI 标签
       if (isBot && aiLabels) {
-        aiLabels.createLabel(data.player_id, data.name, data.difficulty)
+        aiLabels.createLabel(data.player_id, data.name, data.difficulty);
       }
 
-      uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`)
+      uiManager.addKillFeed(`${data.name || data.player_id} 加入了游戏`);
 
       // 同步到 game.players Map
       if (game?.players) {
@@ -171,9 +204,13 @@ function createMessageHandlers(deps) {
           position: position,
           rotation: 0,
           is_bot: isBot,
+          team: data.team || "",
+          weapon: data.weapon || "rifle",
           kills: data.kills || 0,
-          health: data.health || 100
-        })
+          deaths: data.deaths || 0,
+          score: data.score || 0,
+          health: data.health || 100,
+        });
       }
     },
 
@@ -183,18 +220,32 @@ function createMessageHandlers(deps) {
      */
     handlePlayerRespawned(data) {
       if (data.player_id === game?.player?.id) {
-        game.player.health = data.health
-        game.player.position = data.position
-        uiManager.updateHealth(data.health)
-        uiManager.hideDeathScreen()
+        game.player.health = data.health;
+        game.player.position = data.position;
+        uiManager.updateHealth(data.health);
+        if (typeof data.ammo === "number") {
+          game.player.ammo = data.ammo;
+          uiManager.updateAmmo(game.player.ammo, game.player.ammoReserve);
+        }
+        uiManager.hideDeathScreen();
       }
 
-      renderer.updatePlayer(data.player_id, data.position, 0)
-    }
-  }
+      if (game?.players) {
+        const player = game.players.get(data.player_id);
+        if (player) {
+          player.position = data.position;
+          if (typeof data.health === "number") {
+            player.health = data.health;
+          }
+        }
+      }
+
+      renderer.updatePlayer(data.player_id, data.position, 0);
+    },
+  };
 }
 
 // 暴露给测试使用（仅在有全局 window 对象时）
-if (typeof window !== 'undefined') {
-  window.createMessageHandlers = createMessageHandlers
+if (typeof window !== "undefined") {
+  window.createMessageHandlers = createMessageHandlers;
 }

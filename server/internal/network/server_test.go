@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"fps-game/internal/team"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
 
@@ -744,8 +745,11 @@ func TestClient_handleTeamJoin(t *testing.T) {
 
 	client.handleTeamJoin(data, roomManager)
 
-	if client.Player.Team != "red" {
-		t.Errorf("Team = %s, want red", client.Player.Team)
+	if client.Player.Team != team.TeamTerrorists {
+		t.Errorf("Team = %s, want %s", client.Player.Team, team.TeamTerrorists)
+	}
+	if client.Player.Weapon != "glock" {
+		t.Errorf("Weapon = %s, want glock", client.Player.Weapon)
 	}
 }
 

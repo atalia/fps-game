@@ -210,7 +210,7 @@ func TestWeaponChangedSchema(t *testing.T) {
 			name: "valid weapon change",
 			msg: map[string]interface{}{
 				"player_id": "player-123",
-				"weapon":    "sniper",
+				"weapon":    "awp",
 			},
 			wantErr: false,
 		},

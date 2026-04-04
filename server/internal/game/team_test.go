@@ -1,172 +1,98 @@
 package game
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestNewTeamManager(t *testing.T) {
 	tm := NewTeamManager()
 
 	if tm == nil {
-		t.Fatal("TeamManager should not be nil")
+		t.Fatal("Team manager should not be nil")
 	}
 
 	teams := tm.GetAllTeams()
 	if len(teams) != 2 {
-		t.Errorf("Expected 2 default teams, got %d", len(teams))
+		t.Fatalf("Expected 2 default teams, got %d", len(teams))
+	}
+	if teams[0].ID != TeamCounterTerrorists || teams[1].ID != TeamTerrorists {
+		t.Fatalf("Unexpected default team order: %+v", teams)
 	}
 }
 
-func TestTeamManager_CreateTeam(t *testing.T) {
-	tm := NewTeamManager()
-
-	team := tm.CreateTeam("green", "绿队", "#4CAF50", 5)
-	if team == nil {
-		t.Fatal("Team should not be nil")
+func TestNormalizeTeamID(t *testing.T) {
+	tests := map[string]string{
+		"blue": TeamCounterTerrorists,
+		"ct":   TeamCounterTerrorists,
+		"red":  TeamTerrorists,
+		"t":    TeamTerrorists,
 	}
 
-	if team.Name != "绿队" {
-		t.Errorf("Team name = %s, want 绿队", team.Name)
-	}
-
-	// 获取新创建的队伍
-	team = tm.GetTeam("green")
-	if team == nil {
-		t.Fatal("Should find green team")
+	for input, want := range tests {
+		if got := NormalizeTeamID(input); got != want {
+			t.Errorf("NormalizeTeamID(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
-func TestTeamManager_GetTeam(t *testing.T) {
+func TestTeamManager_AddAndRemovePlayer(t *testing.T) {
 	tm := NewTeamManager()
 
-	// 默认队伍
-	red := tm.GetTeam("red")
-	if red == nil {
-		t.Fatal("Should find red team")
+	if !tm.AddPlayerToTeam(TeamCounterTerrorists) {
+		t.Fatal("Should add player to CT")
 	}
+	tm.RemovePlayerFromTeam("blue")
 
-	if red.Name != "红队" {
-		t.Errorf("Team name = %s, want 红队", red.Name)
-	}
-
-	// 不存在的队伍
-	team := tm.GetTeam("nonexistent")
-	if team != nil {
-		t.Fatal("Should return nil for nonexistent team")
+	ct := tm.GetTeam(TeamCounterTerrorists)
+	if ct.PlayerCount != 0 {
+		t.Fatalf("PlayerCount = %d, want 0", ct.PlayerCount)
 	}
 }
 
-func TestTeamManager_AddPlayerToTeam(t *testing.T) {
+func TestTeamManager_GetAutoAssignTeamBalancesCounts(t *testing.T) {
 	tm := NewTeamManager()
+	tm.AddPlayerToTeam(TeamCounterTerrorists)
 
-	// 添加玩家
-	if !tm.AddPlayerToTeam("red") {
-		t.Fatal("Should add player to red team")
-	}
-
-	red := tm.GetTeam("red")
-	if red.PlayerCount != 1 {
-		t.Errorf("Player count = %d, want 1", red.PlayerCount)
-	}
-}
-
-func TestTeamManager_AddPlayerToTeam_Full(t *testing.T) {
-	tm := NewTeamManager()
-
-	// 创建小队伍
-	tm.CreateTeam("small", "小队", "#fff", 1)
-
-	// 添加第一个玩家
-	if !tm.AddPlayerToTeam("small") {
-		t.Fatal("Should add first player")
-	}
-
-	// 添加第二个玩家（应该失败）
-	if tm.AddPlayerToTeam("small") {
-		t.Fatal("Should not add player to full team")
-	}
-}
-
-func TestTeamManager_RemovePlayerFromTeam(t *testing.T) {
-	tm := NewTeamManager()
-
-	// 添加后移除
-	tm.AddPlayerToTeam("red")
-	tm.RemovePlayerFromTeam("red")
-
-	red := tm.GetTeam("red")
-	if red.PlayerCount != 0 {
-		t.Errorf("Player count = %d, want 0", red.PlayerCount)
-	}
-}
-
-func TestTeamManager_GetAutoAssignTeam(t *testing.T) {
-	tm := NewTeamManager()
-
-	// 初始应该返回第一个队伍
 	team := tm.GetAutoAssignTeam()
-	if team == "" {
-		t.Fatal("Should return a team")
-	}
-
-	// 添加玩家到红队
-	tm.AddPlayerToTeam("red")
-
-	// 自动分配应该选择人少的蓝队
-	team = tm.GetAutoAssignTeam()
-	if team != "blue" {
-		t.Errorf("Auto assign team = %s, want blue", team)
+	if team != TeamTerrorists {
+		t.Fatalf("GetAutoAssignTeam() = %s, want %s", team, TeamTerrorists)
 	}
 }
 
-func TestTeamManager_AddScore(t *testing.T) {
+func TestTeamManager_CanJoinTeamPreventsOverstacking(t *testing.T) {
 	tm := NewTeamManager()
+	tm.AddPlayerToTeam(TeamCounterTerrorists)
+	tm.AddPlayerToTeam(TeamCounterTerrorists)
+	tm.AddPlayerToTeam(TeamTerrorists)
 
-	tm.AddScore("red", 10)
-	tm.AddScore("red", 5)
-
-	if tm.GetScore("red") != 15 {
-		t.Errorf("Score = %d, want 15", tm.GetScore("red"))
+	if tm.CanJoinTeam(TeamCounterTerrorists, "") {
+		t.Fatal("Should block joining the fuller team")
+	}
+	if !tm.CanJoinTeam(TeamTerrorists, "") {
+		t.Fatal("Should allow joining the smaller team")
 	}
 }
 
-func TestTeamManager_ResetScores(t *testing.T) {
+func TestTeamManager_AddScoreAndWinner(t *testing.T) {
 	tm := NewTeamManager()
+	tm.AddScore(TeamCounterTerrorists, 2)
+	tm.AddScore(TeamTerrorists, 1)
 
-	tm.AddScore("red", 100)
-	tm.AddScore("blue", 50)
-	tm.ResetScores()
-
-	if tm.GetScore("red") != 0 || tm.GetScore("blue") != 0 {
-		t.Error("Scores should be reset to 0")
+	if score := tm.GetScore("ct"); score != 2 {
+		t.Fatalf("CT score = %d, want 2", score)
 	}
-}
-
-func TestTeamManager_GetWinningTeam(t *testing.T) {
-	tm := NewTeamManager()
-
-	tm.AddScore("red", 100)
-	tm.AddScore("blue", 50)
 
 	winner := tm.GetWinningTeam()
-	if winner == nil || winner.ID != "red" {
-		t.Fatal("Red team should be winning")
+	if winner == nil || winner.ID != TeamCounterTerrorists {
+		t.Fatalf("Winner = %+v, want CT", winner)
 	}
 }
 
 func TestTeamManager_GetTeamCounts(t *testing.T) {
 	tm := NewTeamManager()
-
-	tm.AddPlayerToTeam("red")
-	tm.AddPlayerToTeam("red")
-	tm.AddPlayerToTeam("blue")
+	tm.AddPlayerToTeam(TeamCounterTerrorists)
+	tm.AddPlayerToTeam(TeamTerrorists)
 
 	counts := tm.GetTeamCounts()
-
-	if counts["red"] != 2 {
-		t.Errorf("Red team count = %d, want 2", counts["red"])
-	}
-	if counts["blue"] != 1 {
-		t.Errorf("Blue team count = %d, want 1", counts["blue"])
+	if counts[TeamCounterTerrorists] != 1 || counts[TeamTerrorists] != 1 {
+		t.Fatalf("Unexpected counts: %+v", counts)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"fps-game/internal/team"
 	"fps-game/internal/room"
 
 	"github.com/gorilla/websocket"
@@ -268,8 +269,8 @@ func TestMultiplayer_TeamMode(t *testing.T) {
 		if err := json.Unmarshal(msg.Data, &teamData); err != nil {
 			t.Fatalf("Failed to parse team_changed: %v", err)
 		}
-		if teamData.Team != "red" {
-			t.Errorf("Expected team 'red', got '%s'", teamData.Team)
+		if teamData.Team != team.TeamTerrorists {
+			t.Errorf("Expected team '%s', got '%s'", team.TeamTerrorists, teamData.Team)
 		}
 
 		// A 也收到自己的 team_changed，清空它
@@ -285,8 +286,8 @@ func TestMultiplayer_TeamMode(t *testing.T) {
 		if err := json.Unmarshal(msgA.Data, &teamData); err != nil {
 			t.Fatalf("Failed to parse team_changed: %v", err)
 		}
-		if teamData.Team != "blue" {
-			t.Errorf("Expected team 'blue', got '%s'", teamData.Team)
+		if teamData.Team != team.TeamCounterTerrorists {
+			t.Errorf("Expected team '%s', got '%s'", team.TeamCounterTerrorists, teamData.Team)
 		}
 	})
 }

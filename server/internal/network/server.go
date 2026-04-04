@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"fps-game/internal/ai"
+	"fps-game/internal/team"
 	"fps-game/internal/hitbox"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
@@ -38,6 +39,22 @@ const (
 )
 
 var respawnDelay = 3 * time.Second
+
+var ctSpawnPoints = []player.Position{
+	{X: -40, Y: 0, Z: 0},
+	{X: -40, Y: 0, Z: 10},
+	{X: -40, Y: 0, Z: -10},
+	{X: -35, Y: 0, Z: 5},
+	{X: -35, Y: 0, Z: -5},
+}
+
+var tSpawnPoints = []player.Position{
+	{X: 40, Y: 0, Z: 0},
+	{X: 40, Y: 0, Z: 10},
+	{X: 40, Y: 0, Z: -10},
+	{X: 35, Y: 0, Z: 5},
+	{X: 35, Y: 0, Z: -5},
+}
 
 type moveRequest struct {
 	X        *float64 `json:"x"`
@@ -515,6 +532,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		"room_id":      r.ID,
 		"player_id":    c.Player.ID,
 		"players":      r.GetPlayerList(),
+		"teams":        r.GetTeams(),
 		"player_count": r.GetPlayerCount(),
 		"max_size":     r.MaxSize,
 	}).ToJSON()
@@ -524,6 +542,8 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		"player_id": c.Player.ID,
 		"name":      c.Player.Name,
 		"position":  c.Player.Position,
+		"team":      c.Player.GetTeam(),
+		"weapon":    c.Player.Snapshot().Weapon,
 	}, c.Player.ID)
 }
 
@@ -611,6 +631,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 	shooter = c.Player.Snapshot()
 	weaponID := shooter.Weapon
+	loadout, hasLoadout := team.GetWeaponLoadout(shooter.Team, weaponID)
 	origin := hitbox.Position{
 		X: shooter.Position.X,
 		Y: shooter.Position.Y,
@@ -627,22 +648,15 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		"direction": map[string]float64{"x": direction.X, "y": direction.Y, "z": direction.Z},
 	}, c.Player.ID)
 
-	// 命中检测
-	// 武器射程 (默认 50)
 	weaponRange := 50.0
+	baseDamage := 30
+	if hasLoadout {
+		weaponRange = loadout.Range
+		baseDamage = loadout.Damage
+	}
 
 	hit := c.detectHit(origin, direction, weaponRange)
 	if hit != nil {
-		// 基础伤害 (根据武器类型)
-		baseDamage := 30
-		if weaponID == "sniper" {
-			baseDamage = 100
-		} else if weaponID == "shotgun" {
-			baseDamage = 80
-		} else if weaponID == "pistol" {
-			baseDamage = 25
-		}
-
 		// 计算伤害
 		damage := hitbox.CalculateDamage(baseDamage, hitbox.HitBoxType(hit.HitBoxType), hit.Distance, weaponRange)
 
@@ -696,8 +710,14 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 					"is_bot":        isBot,
 				}, "")
 
-				// 玩家自动重生，机器人不重生
-				if !isBot {
+				if winner, teams, completed := c.Room.CompleteRoundIfWon(); completed {
+					c.hub.BroadcastToRoom(c.Room, "team_scores_updated", map[string]interface{}{
+						"winner": winner,
+						"teams":  teams,
+					}, "")
+					go c.resetRoomForNextRound(c.Room)
+				} else if !isBot {
+					// 玩家自动重生，机器人不重生
 					go c.respawnPlayer(target, c.Room)
 				}
 			}
@@ -782,15 +802,50 @@ func (c *Client) detectHit(origin, direction hitbox.Position, maxRange float64) 
 func (c *Client) respawnPlayer(p *player.Player, respawnRoom *room.Room) {
 	time.Sleep(respawnDelay)
 
-	spawn := randomSpawnPosition()
+	spawn := spawnPositionForTeam(p.GetTeam())
 	p.Respawn(spawn.X, spawn.Y, spawn.Z)
+	applyRespawnLoadout(p)
 	state := p.Snapshot()
 
 	c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
 		"player_id": p.ID,
 		"position":  state.Position,
 		"health":    state.Health,
+		"ammo":      state.Ammo,
 	}, "")
+	c.hub.BroadcastToRoom(respawnRoom, "weapon_changed", map[string]interface{}{
+		"player_id": p.ID,
+		"weapon":    state.Weapon,
+	}, "")
+}
+
+func (c *Client) resetRoomForNextRound(respawnRoom *room.Room) {
+	time.Sleep(respawnDelay)
+
+	for _, p := range respawnRoom.GetPlayers() {
+		teamID := team.NormalizeTeamID(p.GetTeam())
+		if teamID == "" {
+			continue
+		}
+
+		spawn := spawnPositionForTeam(teamID)
+		p.Respawn(spawn.X, spawn.Y, spawn.Z)
+		applyRespawnLoadout(p)
+		state := p.Snapshot()
+
+		c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
+			"player_id": p.ID,
+			"position":  state.Position,
+			"health":    state.Health,
+			"ammo":      state.Ammo,
+		}, "")
+		c.hub.BroadcastToRoom(respawnRoom, "weapon_changed", map[string]interface{}{
+			"player_id": p.ID,
+			"weapon":    state.Weapon,
+		}, "")
+	}
+
+	respawnRoom.ResetRoundState()
 }
 
 func (c *Client) handleReload() {
@@ -849,8 +904,9 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 		}).ToJSON()
 		return
 	}
-	spawn := randomSpawnPosition()
+	spawn := spawnPositionForTeam(c.Player.GetTeam())
 	c.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
+	applyRespawnLoadout(c.Player)
 	state := c.Player.Snapshot()
 
 	c.Send <- NewMessage("respawn", map[string]interface{}{
@@ -863,6 +919,7 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
 		"player_id": c.Player.ID,
 		"position":  state.Position,
+		"health":    state.Health,
 	}, c.Player.ID)
 }
 
@@ -931,6 +988,53 @@ func randomSpawnPosition() player.Position {
 	}
 }
 
+func spawnPositionForTeam(teamID string) player.Position {
+	switch team.NormalizeTeamID(teamID) {
+	case team.TeamCounterTerrorists:
+		return ctSpawnPoints[rand.Intn(len(ctSpawnPoints))]
+	case team.TeamTerrorists:
+		return tSpawnPoints[rand.Intn(len(tSpawnPoints))]
+	default:
+		return randomSpawnPosition()
+	}
+}
+
+func applyRespawnLoadout(p *player.Player) {
+	teamID := p.GetTeam()
+	if teamID == "" {
+		return
+	}
+
+	// First-time team join: give team's default pistol
+	// If player has generic weapons (rifle/pistol/sniper), treat as "no weapon selected"
+	currentWeapon := p.Snapshot().Weapon
+	if currentWeapon == "rifle" || currentWeapon == "pistol" || currentWeapon == "sniper" || currentWeapon == "" {
+		// Give team's default pistol
+		loadout, ok := team.GetWeaponLoadout(teamID, team.DefaultWeaponForTeam(teamID))
+		if !ok {
+			return
+		}
+		p.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
+		return
+	}
+
+	// Player has a specific weapon, check if team can use it
+	preferredWeapon := currentWeapon
+	if !team.CanTeamUseWeapon(teamID, preferredWeapon) {
+		preferredWeapon = team.DefaultWeaponForTeam(teamID)
+	}
+
+	loadout, ok := team.GetWeaponLoadout(teamID, preferredWeapon)
+	if !ok {
+		loadout, ok = team.GetWeaponLoadout(teamID, team.DefaultWeaponForTeam(teamID))
+	}
+	if !ok {
+		return
+	}
+
+	p.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
+}
+
 // handleWeaponChange 处理武器切换
 func (c *Client) handleWeaponChange(data json.RawMessage) {
 	var req struct {
@@ -950,12 +1054,28 @@ func (c *Client) handleWeaponChange(data json.RawMessage) {
 		return
 	}
 
-	c.Player.SetWeapon(weapon)
+	teamID := c.Player.GetTeam()
+	if teamID != "" && !team.CanTeamUseWeapon(teamID, weapon) {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "That weapon is not available for your team",
+		}).ToJSON()
+		return
+	}
+
+	loadout, ok := team.GetWeaponLoadout(teamID, weapon)
+	if !ok {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Unknown weapon",
+		}).ToJSON()
+		return
+	}
+
+	c.Player.ApplyLoadout(loadout.ID, loadout.MagazineSize, loadout.ReserveAmmo)
 
 	// 广播武器切换
 	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"weapon":    weapon,
+		"weapon":    loadout.ID,
 	}, "")
 }
 
@@ -1015,11 +1135,36 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 		return
 	}
 
-	c.Player.SetTeam(req.Team)
+	assignedTeam, err := c.Room.JoinTeam(c.Player, req.Team)
+	if err != nil {
+		c.Send <- NewMessage("error", map[string]string{
+			"message": err.Error(),
+		}).ToJSON()
+		return
+	}
+
+	spawn := spawnPositionForTeam(assignedTeam)
+	c.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
+	applyRespawnLoadout(c.Player)
+	state := c.Player.Snapshot()
+	teams := c.Room.GetTeams()
 
 	c.hub.BroadcastToRoom(c.Room, "team_changed", map[string]interface{}{
 		"player_id": c.Player.ID,
-		"team":      req.Team,
+		"team":      assignedTeam,
+		"teams":     teams,
+	}, "")
+
+	c.hub.BroadcastToRoom(c.Room, "weapon_changed", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"weapon":    state.Weapon,
+	}, "")
+
+	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position":  state.Position,
+		"health":    state.Health,
+		"ammo":      state.Ammo,
 	}, "")
 }
 
@@ -1225,8 +1370,9 @@ func (c *Client) handleAddBot(data json.RawMessage) {
 		difficulty = ai.DifficultyNormal
 	}
 
+	normalizedTeam := team.NormalizeTeamID(req.Team)
 	log.Printf("[DEBUG] Adding bot with difficulty: %s", difficulty)
-	bot := c.Room.AddBot(difficulty, req.Team)
+	bot := c.Room.AddBot(difficulty, normalizedTeam)
 	if bot == nil {
 		log.Printf("[DEBUG] handleAddBot: failed to add bot")
 		c.Send <- NewMessage("error", map[string]string{
@@ -1235,12 +1381,20 @@ func (c *Client) handleAddBot(data json.RawMessage) {
 		return
 	}
 
+	if normalizedTeam != "" {
+		spawn := spawnPositionForTeam(normalizedTeam)
+		bot.Player.Respawn(spawn.X, spawn.Y, spawn.Z)
+		applyRespawnLoadout(bot.Player)
+	}
+
 	log.Printf("[DEBUG] Bot added: %s, broadcasting player_joined", bot.ID)
 	// 广播机器人加入
 	c.hub.BroadcastToRoom(c.Room, "player_joined", map[string]interface{}{
 		"player_id":  bot.ID,
 		"name":       bot.Name,
 		"position":   bot.Position,
+		"team":       bot.Team,
+		"weapon":     bot.Player.Snapshot().Weapon,
 		"is_bot":     true,
 		"difficulty": bot.Config.Difficulty,
 	}, "")

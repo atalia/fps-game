@@ -12,7 +12,20 @@
     },
     "weapon": {
       "type": "string",
-      "enum": ["pistol", "rifle", "shotgun", "sniper"],
+      "enum": [
+        "pistol",
+        "rifle",
+        "shotgun",
+        "sniper",
+        "usp",
+        "glock",
+        "deagle",
+        "m4a1",
+        "famas",
+        "ak47",
+        "galil",
+        "awp"
+      ],
       "description": "New weapon type"
     }
   },

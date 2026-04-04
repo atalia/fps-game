@@ -1,7 +1,10 @@
 package network
 
 import (
+	"encoding/json"
 	"testing"
+
+	"fps-game/internal/team"
 )
 
 // ==================== 单元 4a：Self 响应消息 ====================
@@ -432,6 +435,48 @@ func TestWS_TeamJoin(t *testing.T) {
 	teamCountB := CountType(msgsB, "team_changed")
 	if teamCountB == 0 {
 		t.Error("B should receive team_changed")
+	}
+}
+
+func TestWS_TeamJoin_BalanceAndAutoAssign(t *testing.T) {
+	ts := NewTestServer(t)
+
+	connA, _, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	connB, _ := JoinRoom(t, ts, roomID)
+	defer connB.Close()
+
+	_ = RecvType(t, connA, "player_joined")
+
+	Send(t, connA, "team_join", map[string]string{"team": "blue"})
+	_ = RecvType(t, connA, "team_changed")
+	_ = RecvType(t, connB, "team_changed")
+	_ = RecvAll(t, connA)
+	_ = RecvAll(t, connB)
+
+	Send(t, connB, "team_join", map[string]string{"team": "blue"})
+	errMsg := RecvType(t, connB, "error")
+	var errData struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(errMsg.Data, &errData); err != nil {
+		t.Fatalf("Failed to parse error payload: %v", err)
+	}
+	if errData.Message == "" {
+		t.Fatal("Expected balance error message")
+	}
+
+	Send(t, connB, "team_join", map[string]string{"team": "auto"})
+	teamChanged := RecvType(t, connB, "team_changed")
+	var teamData struct {
+		Team string `json:"team"`
+	}
+	if err := json.Unmarshal(teamChanged.Data, &teamData); err != nil {
+		t.Fatalf("Failed to parse team_changed: %v", err)
+	}
+	if teamData.Team != team.TeamTerrorists {
+		t.Fatalf("Auto-assign picked %s, want %s", teamData.Team, team.TeamTerrorists)
 	}
 }
 
