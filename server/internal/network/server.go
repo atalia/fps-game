@@ -523,6 +523,8 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 		c.handleGrenadeExplode(msg.Data, roomManager)
 	case "molotov_explode":
 		c.handleMolotovExplode(msg.Data, roomManager)
+	case "decoy_detonate":
+		c.handleDecoyDetonate(msg.Data, roomManager)
 	// C4 爆破模式
 	case "c4_plant":
 		c.handleC4Plant(msg.Data, roomManager)
@@ -1712,6 +1714,37 @@ func (c *Client) handleMolotovExplode(data json.RawMessage, roomManager *room.Ma
 	}
 
 	c.Room.AddFireZone(fire)
+}
+
+// handleDecoyDetonate 处理诱饵弹
+func (c *Client) handleDecoyDetonate(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	var req struct {
+		Position struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+		Duration int `json:"duration"` // 毫秒
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return
+	}
+
+	// 广播诱饵弹位置给其他玩家
+	c.hub.BroadcastToRoom(c.Room, "decoy_active", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position": map[string]float64{
+			"x": req.Position.X,
+			"y": req.Position.Y,
+			"z": req.Position.Z,
+		},
+		"duration": req.Duration,
+		"team":     c.Player.GetTeam(),
+	}, "")
 }
 
 // handleC4Plant 处理 C4 放置 (旧版即时放置，保留兼容)

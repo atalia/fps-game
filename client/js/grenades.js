@@ -254,6 +254,43 @@ class GrenadeSystem {
                 weapon: 'ak47'
             });
         }
+
+        // 发送服务器通知其他玩家
+        if (window.network?.connected) {
+            window.network.send("decoy_detonate", {
+                position: grenade.position,
+                duration: grenade.decoyDuration || 15000
+            });
+        }
+
+        // 启动诱饵射击循环
+        this.startDecoyFire(grenade);
+    }
+
+    // 诱饵射击循环
+    startDecoyFire(grenade) {
+        const fireInterval = 100 + Math.random() * 200; // 随机间隔
+        const duration = grenade.decoyDuration || 15000;
+        const startTime = Date.now();
+
+        const fire = () => {
+            if (Date.now() - startTime > duration) {
+                return; // 诱饵弹结束
+            }
+
+            // 触发射击音效
+            if (this.onDecoyFire) {
+                this.onDecoyFire({
+                    position: grenade.position,
+                    weapon: grenade.weapon || 'ak47'
+                });
+            }
+
+            // 随机间隔继续射击
+            setTimeout(fire, fireInterval + Math.random() * 300);
+        };
+
+        fire();
     }
 
     // 移除烟雾效果

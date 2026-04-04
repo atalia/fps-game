@@ -470,6 +470,17 @@ function setupNetworkHandlers() {
     }
   });
 
+  // 诱饵弹激活
+  window.network.on("decoy_active", (data) => {
+    if (window.grenadeSystem?.onDecoyEffect) {
+      window.grenadeSystem.onDecoyEffect({
+        position: data.position,
+        weapon: 'ak47',
+        duration: data.duration
+      });
+    }
+  });
+
   // 武器切换
   window.network.on("weapon_changed", (data) => {
     console.log(`Player ${data.player_id} switched to ${data.weapon}`);
