@@ -107,4 +107,26 @@ describe('Network', () => {
     MockWebSocket.instances[0].onclose({ code: 1006 })
     expect(network.onError).toHaveBeenCalled()
   })
+
+  it('cancels pending reconnects when closed manually', () => {
+    const network = new Network('ws://localhost:8080/ws')
+
+    MockWebSocket.instances[0].onclose({ code: 1006 })
+    expect(network.reconnectAttempts).toBe(1)
+
+    network.close()
+    vi.advanceTimersByTime(2000)
+
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
+  it('continues processing valid messages after a malformed frame in the same batch', () => {
+    const network = new Network('ws://localhost:8080/ws')
+    const handler = vi.fn()
+    network.on('player_joined', handler)
+
+    network.handleMessage('{bad json}\n{"type":"player_joined","data":{"id":"p2"}}\n')
+
+    expect(handler).toHaveBeenCalledWith({ id: 'p2' })
+  })
 })

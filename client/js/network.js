@@ -7,13 +7,20 @@ class Network {
         this.playerId = null;
         this.handlers = new Map();
         this.heartbeatInterval = null;
+        this.reconnectTimer = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
+        this.allowReconnect = true;
 
         this.connect();
     }
 
     connect() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
         if (this.ws) {
             this.ws.onclose = null;
             this.ws.onerror = null;
@@ -35,13 +42,21 @@ class Network {
             console.log('❌ WebSocket disconnected, code:', event.code);
             this.connected = false;
             this.stopHeartbeat();
+            this.ws = null;
+
+            if (!this.allowReconnect) {
+                return;
+            }
             
             // 自动重连
             if (this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
                 console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
-                setTimeout(() => this.connect(), delay);
+                this.reconnectTimer = setTimeout(() => {
+                    this.reconnectTimer = null;
+                    this.connect();
+                }, delay);
             } else {
                 console.error('Max reconnect attempts reached');
                 if (this.onError) this.onError(new Error('连接断开，请刷新页面重试'));
@@ -77,10 +92,15 @@ class Network {
     }
 
     handleMessage(data) {
-        try {
-            const messages = data.split('\n').filter(m => m.trim());
+        const messages = data.split('\n');
 
-            messages.forEach(msg => {
+        for (const rawMessage of messages) {
+            const msg = rawMessage.trim();
+            if (!msg) {
+                continue;
+            }
+
+            try {
                 const parsed = JSON.parse(msg);
                 // 只在 DEBUG 模式下打印详细日志
                 if (window.DEBUG_MODE) {
@@ -90,20 +110,21 @@ class Network {
 
                 if (handler) {
                     handler(parsed.data);
-                } else {
-                    // 默认处理
-                    switch (parsed.type) {
-                        case 'welcome':
-                            this.playerId = parsed.data.player_id;
-                            console.log('🎮 Player ID:', this.playerId);
-                            break;
-                        default:
-                            console.log('Message:', parsed.type, parsed.data);
-                    }
+                    continue;
                 }
-            });
-        } catch (error) {
-            console.error('Parse error:', error);
+
+                // 默认处理
+                switch (parsed.type) {
+                    case 'welcome':
+                        this.playerId = parsed.data?.player_id ?? null;
+                        console.log('🎮 Player ID:', this.playerId);
+                        break;
+                    default:
+                        console.log('Message:', parsed.type, parsed.data);
+                }
+            } catch (error) {
+                console.error('Parse error:', error);
+            }
         }
     }
 
@@ -152,8 +173,20 @@ class Network {
     }
 
     close() {
+        this.allowReconnect = false;
+        this.connected = false;
+        this.stopHeartbeat();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.ws) {
+            this.ws.onclose = null;
+            this.ws.onerror = null;
+            this.ws.onmessage = null;
+            this.ws.onopen = null;
             this.ws.close();
+            this.ws = null;
         }
     }
 }

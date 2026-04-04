@@ -21,6 +21,7 @@ class EffectsSystem {
         this.screenEffects = null
         this.crosshair = null
         this.ammoDisplay = null
+        this.smokeEffects = []
     }
 
     init(renderer) {
@@ -73,9 +74,14 @@ class EffectsSystem {
         }
         
         // 监听性能等级变化
-        this.performanceMonitor.onLevelChange((oldLevel, newLevel, fps, config) => {
+        this.performanceMonitor?.onLevelChange?.((oldLevel, newLevel, fps, config) => {
             this.applyPerformanceLevel(config)
         })
+
+        const initialConfig = this.performanceMonitor?.getConfig?.()
+        if (initialConfig) {
+            this.applyPerformanceLevel(initialConfig)
+        }
         
         this.initialized = true
         console.log('[EFFECTS] Effects system initialized')
@@ -93,8 +99,6 @@ class EffectsSystem {
 
     // 每帧更新
     update(deltaTime) {
-        this.performanceMonitor.tick()
-        
         if (this.core) this.core.update(deltaTime)
         if (this.healthBar) this.healthBar.update(deltaTime)
         if (this.crosshair) this.crosshair.update(deltaTime)
@@ -106,11 +110,7 @@ class EffectsSystem {
                 if (now - smoke.startTime > smoke.duration) {
                     // 移除过期烟雾
                     if (smoke.group && this.renderer?.scene) {
-                        this.renderer.scene.remove(smoke.group)
-                        smoke.group.traverse(child => {
-                            if (child.geometry) child.geometry.dispose()
-                            if (child.material) child.material.dispose()
-                        })
+                        this.disposeSmokeEffect(smoke)
                     }
                     return false
                 }
@@ -130,8 +130,7 @@ class EffectsSystem {
         if (this.core) this.core.clear()
         if (this.healthBar) this.healthBar.clear()
         if (this.damageNumber) this.damageNumber.clear()
-        // 清理烟雾效果
-        this.smokeEffects = []
+        this.disposeSmokeEffects()
     }
 
     // 添加烟雾效果
@@ -181,7 +180,6 @@ class EffectsSystem {
         this.renderer.scene.add(smokeGroup)
 
         // 存储以便清理
-        if (!this.smokeEffects) this.smokeEffects = []
         this.smokeEffects.push({
             group: smokeGroup,
             startTime: Date.now(),
@@ -224,6 +222,29 @@ class EffectsSystem {
         animate()
 
         return sphere
+    }
+
+    disposeSmokeEffects() {
+        this.smokeEffects.forEach(smoke => this.disposeSmokeEffect(smoke))
+        this.smokeEffects = []
+    }
+
+    disposeSmokeEffect(smoke) {
+        if (!smoke?.group) {
+            return
+        }
+
+        this.renderer?.scene?.remove(smoke.group)
+        smoke.group.traverse(child => {
+            if (child.geometry) {
+                child.geometry.dispose()
+            }
+            if (Array.isArray(child.material)) {
+                child.material.forEach(material => material?.dispose?.())
+            } else if (child.material) {
+                child.material.dispose()
+            }
+        })
     }
 }
 

@@ -14,10 +14,10 @@ func TestWS_Reload_InRoom(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// A reload
 	Send(t, connA, "reload", map[string]string{})
@@ -60,10 +60,10 @@ func TestWS_Chat(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "chat", map[string]string{"message": "hello"})
 
@@ -100,7 +100,7 @@ func TestWS_Chat_InvalidJSON(t *testing.T) {
 	defer conn.Close()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// Drain 背景消息
 	Drain(t, conn)
@@ -116,10 +116,10 @@ func TestWS_Move(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "move", map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0})
 
@@ -154,10 +154,10 @@ func TestWS_Shoot(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "shoot", map[string]interface{}{
 		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
@@ -215,7 +215,7 @@ func TestWS_Shoot_InvalidJSON(t *testing.T) {
 	defer conn.Close()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// Drain 背景消息
 	Drain(t, conn)
@@ -237,10 +237,10 @@ func TestWS_Respawn(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "respawn", map[string]float64{"x": 10.0, "y": 0.0, "z": 5.0})
 
@@ -299,10 +299,10 @@ func TestWS_WeaponChange(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "weapon_change", map[string]string{"weapon": "rifle"})
 
@@ -336,10 +336,10 @@ func TestWS_VoiceStart(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "voice_start", map[string]string{})
 
@@ -363,10 +363,10 @@ func TestWS_VoiceStop(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "voice_stop", map[string]string{})
 
@@ -390,10 +390,10 @@ func TestWS_VoiceData(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "voice_data", map[string]string{"data": "base64audio"})
 
@@ -417,10 +417,10 @@ func TestWS_TeamJoin(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "team_join", map[string]string{"team": "red"})
 
@@ -442,10 +442,10 @@ func TestWS_TeamJoin_BalanceAndAutoAssign(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	_ = RecvType(t, connA, "player_joined")
 
@@ -479,10 +479,10 @@ func TestWS_GrenadeThrow(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "grenade_throw", map[string]interface{}{
 		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
@@ -508,10 +508,10 @@ func TestWS_C4Plant(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "c4_plant", map[string]interface{}{
 		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
@@ -536,10 +536,10 @@ func TestWS_C4Defuse(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// A 放置 C4
 	Send(t, connA, "c4_plant", map[string]interface{}{
@@ -590,10 +590,10 @@ func TestWS_SkillUse(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "skill_use", map[string]interface{}{
 		"skill_id": "heal",
@@ -686,10 +686,10 @@ func TestWS_Emote(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "emote", map[string]string{"emote_id": "wave"})
 
@@ -712,10 +712,10 @@ func TestWS_Ping(t *testing.T) {
 	ts := NewTestServer(t)
 
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connA, "ping", map[string]float64{"x": 10.0, "y": 5.0, "z": 0.0})
 

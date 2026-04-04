@@ -58,6 +58,7 @@ function createThreeMock() {
       this.setSize = vi.fn()
       this.setPixelRatio = vi.fn()
       this.render = vi.fn()
+      this.dispose = vi.fn()
     }
   }
 
@@ -138,6 +139,7 @@ async function loadRenderer() {
     innerHeight: 720,
     devicePixelRatio: 1,
     addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     __FPS_RENDERER_TEST_MODE__: true
   }
 
@@ -181,5 +183,24 @@ describe('Renderer', () => {
 
     renderer.removePlayer('p1')
     expect(renderer.players.has('p1')).toBe(false)
+  })
+
+  it('renders without invoking a second update pass', () => {
+    const renderer = new Renderer('game-container')
+    const updateSpy = vi.spyOn(renderer, 'update')
+
+    renderer.render()
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(renderer.renderer.render).toHaveBeenCalledWith(renderer.scene, renderer.camera)
+  })
+
+  it('removes the resize listener when disposed', () => {
+    const renderer = new Renderer('game-container')
+
+    renderer.dispose()
+
+    expect(window.removeEventListener).toHaveBeenCalledWith('resize', expect.any(Function))
+    expect(renderer.renderer.dispose).toHaveBeenCalled()
   })
 })

@@ -92,12 +92,12 @@ type Client struct {
 	hub          *Hub
 	msgRateLimit *RateLimiter // 消息频率限制器
 	// C4 progress tracking
-	c4Planting     bool
-	c4Defusing     bool
-	c4Progress     float64
-	c4StartPos     player.Position
-	c4CancelChan   chan struct{}
-	c4ProgressMu   sync.Mutex
+	c4Planting   bool
+	c4Defusing   bool
+	c4Progress   float64
+	c4StartPos   player.Position
+	c4CancelChan chan struct{}
+	c4ProgressMu sync.Mutex
 }
 
 // RateLimiter 简单的令牌桶频率限制器
@@ -147,6 +147,15 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
+}
+
+func tryEnqueueMessage(client *Client, payload []byte) bool {
+	select {
+	case client.Send <- payload:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewHub 创建 Hub
@@ -249,16 +258,12 @@ func (h *Hub) InterruptC4Action(playerID string, reason string) {
 
 // Broadcast 广播消息给所有客户端
 func (h *Hub) Broadcast(msgType string, data interface{}) {
-	msg := NewMessage(msgType, data)
+	payload := NewMessage(msgType, data).ToJSON()
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	for client := range h.clients {
-		select {
-		case client.Send <- msg.ToJSON():
-		default:
-			// 缓冲区满，跳过
-		}
+		_ = tryEnqueueMessage(client, payload)
 	}
 }
 
@@ -267,7 +272,7 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	if r == nil {
 		return
 	}
-	msg := NewMessage(msgType, data)
+	payload := NewMessage(msgType, data).ToJSON()
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -284,10 +289,7 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 			continue
 		}
 		if client, ok := h.clientMap[playerID]; ok {
-			select {
-			case client.Send <- msg.ToJSON():
-				// 成功发送
-			default:
+			if !tryEnqueueMessage(client, payload) {
 				log.Printf("[WARN] BroadcastToRoom: buffer full for %s, dropping message", playerID)
 			}
 		}
@@ -690,7 +692,7 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 			c.c4CancelChan = nil
 		}
 		c.c4ProgressMu.Unlock()
-		
+
 		if planting {
 			c.hub.BroadcastToRoom(c.Room, "c4_plant_cancel", map[string]interface{}{
 				"player_id": c.Player.ID,
@@ -1577,9 +1579,9 @@ func (c *Client) handleGrenadeExplode(data json.RawMessage, roomManager *room.Ma
 
 	// 高爆手雷参数
 	const (
-		maxDamage   = 98
+		maxDamage    = 98
 		damageRadius = 8.0
-		minDamage   = 1
+		minDamage    = 1
 	)
 
 	// 获取所有玩家和机器人
@@ -1657,12 +1659,12 @@ func (c *Client) handleGrenadeExplode(data json.RawMessage, roomManager *room.Ma
 		// 检查击杀
 		if remainingHealth <= 0 {
 			c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
-				"victim_id":    target.id,
-				"killer_id":    c.Player.ID,
-				"weapon":       "he_grenade",
-				"is_headshot":  false,
-				"killer_pos":   c.Player.Snapshot().Position,
-				"victim_pos":   target.pos,
+				"victim_id":   target.id,
+				"killer_id":   c.Player.ID,
+				"weapon":      "he_grenade",
+				"is_headshot": false,
+				"killer_pos":  c.Player.Snapshot().Position,
+				"victim_pos":  target.pos,
 			}, "")
 
 			// 更新击杀统计
@@ -1698,10 +1700,10 @@ func (c *Client) handleMolotovExplode(data json.RawMessage, roomManager *room.Ma
 			"y": req.Position.Y,
 			"z": req.Position.Z,
 		},
-		"radius":    4.0,
-		"duration":  req.Duration,
-		"dps":       40, // 每秒40伤害
-		"team":      c.Player.GetTeam(),
+		"radius":   4.0,
+		"duration": req.Duration,
+		"dps":      40, // 每秒40伤害
+		"team":     c.Player.GetTeam(),
 	}, "")
 
 	// 创建火焰伤害区域
@@ -1872,6 +1874,7 @@ func (c *Client) handleC4PlantStart(data json.RawMessage, roomManager *room.Mana
 	c.c4Defusing = false
 	c.c4Progress = 0
 	c.c4CancelChan = make(chan struct{})
+	cancelChan := c.c4CancelChan
 	c.c4ProgressMu.Unlock()
 
 	// 广播开始安装
@@ -1889,11 +1892,11 @@ func (c *Client) handleC4PlantStart(data json.RawMessage, roomManager *room.Mana
 		X: req.Position.X,
 		Y: req.Position.Y,
 		Z: req.Position.Z,
-	})
+	}, cancelChan)
 }
 
 // runC4PlantProgress 运行 C4 安装进度
-func (c *Client) runC4PlantProgress(targetPos player.Position) {
+func (c *Client) runC4PlantProgress(targetPos player.Position, cancelChan <-chan struct{}) {
 	ticker := time.NewTicker(C4ProgressInterval)
 	defer ticker.Stop()
 
@@ -1902,7 +1905,7 @@ func (c *Client) runC4PlantProgress(targetPos player.Position) {
 
 	for {
 		select {
-		case <-c.c4CancelChan:
+		case <-cancelChan:
 			// 被取消
 			return
 		case <-ticker.C:
@@ -2055,22 +2058,23 @@ func (c *Client) handleC4DefuseStart(roomManager *room.Manager) {
 	c.c4Planting = false
 	c.c4Progress = 0
 	c.c4CancelChan = make(chan struct{})
+	cancelChan := c.c4CancelChan
 	hasKit := c.Player.GetDefuseKit()
 	c.c4ProgressMu.Unlock()
 
 	// 广播开始拆除
 	c.hub.BroadcastToRoom(c.Room, "c4_defuse_start", map[string]interface{}{
-		"player_id":  c.Player.ID,
-		"has_kit":    hasKit,
-		"position":   c.Room.GetC4Position(),
+		"player_id": c.Player.ID,
+		"has_kit":   hasKit,
+		"position":  c.Room.GetC4Position(),
 	}, "")
 
 	// 开始拆除进度
-	go c.runC4DefuseProgress()
+	go c.runC4DefuseProgress(cancelChan)
 }
 
 // runC4DefuseProgress 运行 C4 拆除进度
-func (c *Client) runC4DefuseProgress() {
+func (c *Client) runC4DefuseProgress(cancelChan <-chan struct{}) {
 	ticker := time.NewTicker(C4ProgressInterval)
 	defer ticker.Stop()
 
@@ -2082,7 +2086,7 @@ func (c *Client) runC4DefuseProgress() {
 
 	for {
 		select {
-		case <-c.c4CancelChan:
+		case <-cancelChan:
 			// 被取消
 			return
 		case <-ticker.C:

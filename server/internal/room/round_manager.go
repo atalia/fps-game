@@ -115,22 +115,22 @@ type RoundManager struct {
 
 	config RoundConfig
 
-	mu              sync.RWMutex
-	phase           RoundPhase
-	currentRound    int
-	roundsCompleted int
-	overtime        bool
-	teamsSwapped    bool
-	matchWinner     string
-	phaseEndsAt     time.Time
-	buyEndsAt       time.Time
-	roundStats      map[string]*roundPlayerStats
-	phaseTimer      *time.Timer
-	nextRoundTimer  *time.Timer
+	mu               sync.RWMutex
+	phase            RoundPhase
+	currentRound     int
+	roundsCompleted  int
+	overtime         bool
+	teamsSwapped     bool
+	matchWinner      string
+	phaseEndsAt      time.Time
+	buyEndsAt        time.Time
+	roundStats       map[string]*roundPlayerStats
+	phaseTimer       *time.Timer
+	nextRoundTimer   *time.Timer
 	c4ExplosionTimer *time.Timer
-	c4ExplosionAt   time.Time
-	stateTickerStop chan struct{}
-	closed          bool
+	c4ExplosionAt    time.Time
+	stateTickerStop  chan struct{}
+	closed           bool
 }
 
 func NewRoundManager(r *Room, cfg RoundConfig) *RoundManager {
@@ -239,9 +239,9 @@ func (rm *RoundManager) HandleC4Planted(planterID string) {
 	rm.mu.Unlock()
 
 	rm.room.Broadcast("c4_planted", map[string]interface{}{
-		"planter_id":    planterID,
-		"explosion_in":  int(C4ExplosionTime.Seconds()),
-		"position":      rm.room.GetC4Position(),
+		"planter_id":   planterID,
+		"explosion_in": int(C4ExplosionTime.Seconds()),
+		"position":     rm.room.GetC4Position(),
 	}, "")
 	rm.broadcastRoundState()
 }
@@ -254,12 +254,7 @@ func (rm *RoundManager) HandleC4Defused(defuserID string) {
 		return
 	}
 
-	// Stop the explosion timer
-	if rm.c4ExplosionTimer != nil {
-		rm.c4ExplosionTimer.Stop()
-		rm.c4ExplosionTimer = nil
-	}
-	rm.c4ExplosionAt = time.Time{}
+	rm.clearC4ExplosionStateLocked()
 	rm.mu.Unlock()
 
 	rm.endRound(team.TeamCounterTerrorists, RoundEndReasonDefused)
@@ -701,13 +696,9 @@ func (rm *RoundManager) applyHalftimeSideSwitch() {
 }
 
 func (rm *RoundManager) resetParticipantsForRound() {
-	// Clear C4 state
-	rm.room.SetC4Planted(false, "", player.Position{})
-	rm.c4ExplosionAt = time.Time{}
-	if rm.c4ExplosionTimer != nil {
-		rm.c4ExplosionTimer.Stop()
-		rm.c4ExplosionTimer = nil
-	}
+	rm.mu.Lock()
+	rm.clearC4ExplosionStateLocked()
+	rm.mu.Unlock()
 
 	for _, participant := range rm.room.roundParticipants() {
 		teamID := team.NormalizeTeamID(participant.GetTeam())
@@ -731,6 +722,15 @@ func (rm *RoundManager) resetParticipantsForRound() {
 			"weapon":    state.Weapon,
 			"reason":    "round_reset",
 		}, "")
+	}
+}
+
+func (rm *RoundManager) clearC4ExplosionStateLocked() {
+	rm.room.SetC4Planted(false, "", player.Position{})
+	rm.c4ExplosionAt = time.Time{}
+	if rm.c4ExplosionTimer != nil {
+		rm.c4ExplosionTimer.Stop()
+		rm.c4ExplosionTimer = nil
 	}
 }
 

@@ -23,6 +23,7 @@ class Renderer {
     this.projectiles = [];
     this.clock = new THREE.Clock();
     this.time = 0;
+    this.onResizeHandler = () => this.onResize();
 
     // 动态天空参数
     this.dayNightCycle = true;
@@ -92,7 +93,7 @@ class Renderer {
     this.scene.fog = new THREE.FogExp2(0x1a1a2e, 0.015);
 
     // 窗口大小调整
-    window.addEventListener("resize", () => this.onResize());
+    window.addEventListener("resize", this.onResizeHandler);
 
     console.log("[RENDERER] Initialization complete");
   }
@@ -758,7 +759,6 @@ class Renderer {
   }
 
   render() {
-    this.update();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -769,8 +769,13 @@ class Renderer {
   }
 
   dispose() {
-    this.renderer.dispose();
-    this.container.removeChild(this.renderer.domElement);
+    window.removeEventListener("resize", this.onResizeHandler);
+    if (typeof this.renderer.dispose === "function") {
+      this.renderer.dispose();
+    }
+    if (this.container?.contains(this.renderer.domElement)) {
+      this.container.removeChild(this.renderer.domElement);
+    }
   }
 }
 

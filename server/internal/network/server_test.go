@@ -981,7 +981,7 @@ func TestWS_Disconnect_InRoom(t *testing.T) {
 
 	// B 加入房间
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// A 断开连接
 	connA.Close()
@@ -1033,11 +1033,11 @@ func TestWS_JoinRoom_ExistingRoom(t *testing.T) {
 
 	// A 创建房间
 	connA, playerIDA, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	// B 加入房间
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// A 应收到 player_joined
 	msg := RecvType(t, connA, "player_joined")
@@ -1058,7 +1058,7 @@ func TestWS_JoinRoom_Full(t *testing.T) {
 
 	// A 创建房间
 	connA, _, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	// 填满房间（容量 10，A 已占 1，再填 9 人）
 	for i := 0; i < 9; i++ {
@@ -1068,7 +1068,7 @@ func TestWS_JoinRoom_Full(t *testing.T) {
 
 	// 第 11 人尝试加入
 	connB, _ := Connect(t, ts)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	Send(t, connB, "join_room", map[string]string{"room_id": roomID, "name": "player11"})
 
@@ -1091,11 +1091,11 @@ func TestWS_LeaveRoom(t *testing.T) {
 
 	// A 创建房间
 	connA, playerIDA, roomID := CreateRoom(t, ts)
-	defer connA.Close()
+	defer func() { _ = connA.Close() }()
 
 	// B 加入房间
 	connB, _ := JoinRoom(t, ts, roomID)
-	defer connB.Close()
+	defer func() { _ = connB.Close() }()
 
 	// A 离开房间
 	Send(t, connA, "leave_room", map[string]string{})

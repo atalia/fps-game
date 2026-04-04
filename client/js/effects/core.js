@@ -14,6 +14,9 @@ class EffectsCore {
         // 对象池优化
         this.particlePool = []
         this.meshPool = []
+        this.activeMeshes = []
+        this.tempLights = new Set()
+        this.tempLightTimers = new Set()
     }
 
     setConfig(config) {
@@ -73,12 +76,15 @@ class EffectsCore {
         const light = new THREE.PointLight(color, intensity, distance)
         light.position.set(position.x, position.y + 1.5, position.z)
         this.scene.add(light)
+        this.tempLights.add(light)
         
         // 自动移除
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
+            this.tempLightTimers.delete(timeoutId)
+            this.tempLights.delete(light)
             this.scene.remove(light)
-            light.dispose()
         }, duration * 1000)
+        this.tempLightTimers.add(timeoutId)
     }
 
     // ==================== 爆炸特效 ====================
@@ -176,32 +182,26 @@ class EffectsCore {
     }
 
     render(scene) {
-        // 清理上一帧的临时mesh
-        const toRemove = []
+        this.clearRenderedMeshes(scene)
+        const currentScene = scene || this.scene
+        const renderedMeshes = []
         
         this.effects.forEach(effect => {
             const alpha = effect.life / effect.maxLife
             
             if (effect.type === 'muzzle_flash') {
                 const mesh = this.renderMuzzleFlash(effect, alpha)
-                if (mesh) toRemove.push(mesh)
+                if (mesh) renderedMeshes.push(mesh)
             } else if (effect.type === 'bullet_trail') {
                 const mesh = this.renderBulletTrail(effect, alpha)
-                if (mesh) toRemove.push(mesh)
+                if (mesh) renderedMeshes.push(mesh)
             } else if (effect.velocity) {
                 const mesh = this.renderParticle(effect, alpha)
-                if (mesh) toRemove.push(mesh)
+                if (mesh) renderedMeshes.push(mesh)
             }
         })
-        
-        // 延迟移除（让渲染完成）
-        setTimeout(() => {
-            toRemove.forEach(mesh => {
-                scene.remove(mesh)
-                if (mesh.geometry) mesh.geometry.dispose()
-                if (mesh.material) mesh.material.dispose()
-            })
-        }, 50)
+
+        this.activeMeshes = renderedMeshes
     }
 
     renderMuzzleFlash(effect, alpha) {
@@ -257,6 +257,28 @@ class EffectsCore {
 
     clear() {
         this.effects = []
+        this.clearRenderedMeshes()
+        this.tempLightTimers.forEach(timeoutId => clearTimeout(timeoutId))
+        this.tempLightTimers.clear()
+        this.tempLights.forEach(light => {
+            this.scene.remove(light)
+        })
+        this.tempLights.clear()
+    }
+
+    clearRenderedMeshes(scene = this.scene) {
+        this.activeMeshes.forEach(mesh => {
+            scene.remove(mesh)
+            if (mesh.geometry) {
+                mesh.geometry.dispose()
+            }
+            if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(material => material?.dispose?.())
+            } else if (mesh.material) {
+                mesh.material.dispose()
+            }
+        })
+        this.activeMeshes = []
     }
 }
 

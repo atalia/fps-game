@@ -100,8 +100,8 @@ class Game {
     }
 
     // 更新特效
-    this.effects.update(deltaTime);
-    this.effects.render(this.renderer.scene);
+    this.effects?.update(deltaTime);
+    this.effects?.render(this.renderer.scene);
 
     // 更新投掷物
     if (window.grenadeSystem) {
