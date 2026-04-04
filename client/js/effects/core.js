@@ -10,10 +10,6 @@ class EffectsCore {
         this.effects = []
         this.maxEffects = 100
         this.config = { max: 100, hitBurst: 10 }
-        
-        // 对象池优化
-        this.particlePool = []
-        this.meshPool = []
         this.activeMeshes = []
         this.tempLights = new Set()
         this.tempLightTimers = new Set()

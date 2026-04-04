@@ -9,7 +9,6 @@ class PerformanceMonitor {
         this.lastTime = performance.now()
         this.fps = 60
         this.level = 'high' // high, balanced, low, minimal
-        this.checkInterval = 1000
         this.listeners = []
         
         // 降级配置
