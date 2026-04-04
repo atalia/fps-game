@@ -31,10 +31,12 @@ class Network {
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-            console.log('✅ WebSocket connected');
+            console.log('✅ WebSocket connected to:', this.url);
             this.connected = true;
             this.reconnectAttempts = 0;
             this.startHeartbeat();
+            // 发送测试消息
+            this.send('ping', { time: Date.now() });
             if (this.onConnect) this.onConnect();
         };
 

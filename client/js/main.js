@@ -730,6 +730,12 @@ async function startGame(playerId) {
     window.aiLabels = new AILabels();
   }
 
+  // 初始化手机控制
+  if (typeof MobileControls !== "undefined") {
+    window.mobileControls = new MobileControls();
+    window.mobileControls.show();
+  }
+
   // 初始化语音系统
   if (typeof VoiceSystem !== "undefined") {
     window.voiceSystem = new VoiceSystem();
