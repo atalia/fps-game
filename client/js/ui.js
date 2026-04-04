@@ -9,6 +9,9 @@ class UIManager {
     this.elements = {
       healthFill: document.getElementById("health-fill"),
       healthText: document.getElementById("health-text"),
+      armorBar: document.getElementById("armor-bar"),
+      armorFill: document.getElementById("armor-fill"),
+      armorText: document.getElementById("armor-text"),
       money: document.getElementById("money-amount"),
       ammo: document.getElementById("ammo-count"),
       ammoReserve: document.getElementById("ammo-reserve"),
@@ -95,6 +98,27 @@ class UIManager {
     if (this.elements.healthText) {
       this.elements.healthText.textContent = `${Math.round(health)} HP`;
     }
+  }
+
+  // 更新护甲
+  updateArmor(armor, hasHelmet = false) {
+    if (!this.elements.armorBar || !this.elements.armorFill || !this.elements.armorText) {
+      return;
+    }
+
+    // 如果没有护甲，隐藏护甲条
+    if (armor <= 0) {
+      this.elements.armorBar.style.display = "none";
+      return;
+    }
+
+    this.elements.armorBar.style.display = "block";
+    const percentage = Math.max(0, Math.min(100, armor));
+    this.elements.armorFill.style.width = `${percentage}%`;
+
+    // 显示护甲值和头盔图标
+    const helmetIcon = hasHelmet ? "🪖" : "🛡️";
+    this.elements.armorText.textContent = `${helmetIcon} ${Math.round(armor)}`;
   }
 
   // 更新弹药

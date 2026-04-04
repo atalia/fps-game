@@ -949,10 +949,12 @@ func (c *Client) respawnPlayer(p *player.Player, respawnRoom *room.Room) {
 	state := p.Snapshot()
 
 	c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
-		"player_id": p.ID,
-		"position":  state.Position,
-		"health":    state.Health,
-		"ammo":      state.Ammo,
+		"player_id":  p.ID,
+		"position":   state.Position,
+		"health":     state.Health,
+		"armor":      state.Armor,
+		"has_helmet": state.HasHelmet,
+		"ammo":       state.Ammo,
 	}, "")
 	c.hub.BroadcastToRoom(respawnRoom, "weapon_changed", map[string]interface{}{
 		"player_id": p.ID,
@@ -975,10 +977,12 @@ func (c *Client) resetRoomForNextRound(respawnRoom *room.Room) {
 		state := p.Snapshot()
 
 		c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
-			"player_id": p.ID,
-			"position":  state.Position,
-			"health":    state.Health,
-			"ammo":      state.Ammo,
+			"player_id":  p.ID,
+			"position":   state.Position,
+			"health":     state.Health,
+			"armor":      state.Armor,
+			"has_helmet": state.HasHelmet,
+			"ammo":       state.Ammo,
 		}, "")
 		c.hub.BroadcastToRoom(respawnRoom, "weapon_changed", map[string]interface{}{
 			"player_id": p.ID,
@@ -1067,9 +1071,11 @@ func (c *Client) handleRespawn(data json.RawMessage, roomManager *room.Manager) 
 
 	// 广播重生
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
-		"player_id": c.Player.ID,
-		"position":  state.Position,
-		"health":    state.Health,
+		"player_id":  c.Player.ID,
+		"position":   state.Position,
+		"health":     state.Health,
+		"armor":      state.Armor,
+		"has_helmet": state.HasHelmet,
 	}, c.Player.ID)
 }
 
@@ -1332,10 +1338,12 @@ func (c *Client) handleTeamJoin(data json.RawMessage, roomManager *room.Manager)
 	}, "")
 
 	c.hub.BroadcastToRoom(c.Room, "player_respawned", map[string]interface{}{
-		"player_id": c.Player.ID,
-		"position":  state.Position,
-		"health":    state.Health,
-		"ammo":      state.Ammo,
+		"player_id":  c.Player.ID,
+		"position":   state.Position,
+		"health":     state.Health,
+		"armor":      state.Armor,
+		"has_helmet": state.HasHelmet,
+		"ammo":       state.Ammo,
 	}, "")
 	if c.Room.RoundManager != nil {
 		c.Room.RoundManager.HandleRosterChanged()

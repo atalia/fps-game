@@ -60,6 +60,30 @@
         text-shadow: 1px 1px 2px #000;
       }
 
+      /* 护甲条 */
+      #armor-bar {
+        width: 200px;
+        height: 16px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-top: 4px;
+      }
+
+      #armor-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4a90d9, #6bb3ff);
+        transition: width 0.3s;
+      }
+
+      #armor-text {
+        position: absolute;
+        left: 10px;
+        top: 3px;
+        font-size: 11px;
+        text-shadow: 1px 1px 2px #000;
+      }
+
       /* 弹药 */
       #ammo-display {
         background: rgba(0, 0, 0, 0.5);
@@ -525,8 +549,12 @@
       <div style="position: relative">
         <div id="health-bar">
           <div id="health-fill" style="width: 100%"></div>
+          <span id="health-text">100 HP</span>
         </div>
-        <span id="health-text">100 HP</span>
+        <div id="armor-bar" style="display: none">
+          <div id="armor-fill" style="width: 100%"></div>
+          <span id="armor-text">🛡️ 100</span>
+        </div>
       </div>
 
       <div id="room-info">

@@ -447,6 +447,13 @@ function setupNetworkHandlers() {
     }
   });
 
+  // 护甲更新
+  window.network.on("armor_updated", (data) => {
+    if (window.messageHandlers) {
+      window.messageHandlers.handleArmorUpdated(data);
+    }
+  });
+
   // 武器切换
   window.network.on("weapon_changed", (data) => {
     console.log(`Player ${data.player_id} switched to ${data.weapon}`);

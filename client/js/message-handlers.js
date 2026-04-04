@@ -284,6 +284,12 @@ function createMessageHandlers(deps) {
         game.player.health = data.health;
         game.player.position = data.position;
         uiManager.updateHealth(data.health);
+        // 重生时更新护甲
+        if (typeof data.armor === "number") {
+          game.player.armor = data.armor;
+          game.player.hasHelmet = data.has_helmet || false;
+          uiManager.updateArmor(data.armor, data.has_helmet);
+        }
         if (typeof data.ammo === "number") {
           game.player.ammo = data.ammo;
           uiManager.updateAmmo(game.player.ammo, game.player.ammoReserve);
@@ -302,6 +308,17 @@ function createMessageHandlers(deps) {
       }
 
       renderer.updatePlayer(data.player_id, data.position, 0);
+    },
+
+    /**
+     * 处理 armor_updated 消息
+     */
+    handleArmorUpdated(data) {
+      if (data.player_id === game?.player?.id) {
+        game.player.armor = data.armor;
+        game.player.hasHelmet = data.has_helmet;
+        uiManager.updateArmor(data.armor, data.has_helmet);
+      }
     },
   };
 }
