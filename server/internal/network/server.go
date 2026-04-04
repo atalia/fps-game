@@ -39,6 +39,14 @@ const (
 	respawnCoordinateLimit     = 50.0
 )
 
+// C4 progress constants (in milliseconds)
+const (
+	C4PlantTime         = 3200 * time.Millisecond
+	C4DefuseTime        = 5000 * time.Millisecond
+	C4DefuseTimeWithKit = 2500 * time.Millisecond
+	C4ProgressInterval  = 50 * time.Millisecond
+)
+
 var respawnDelay = 3 * time.Second
 
 var ctSpawnPoints = []player.Position{
@@ -83,6 +91,13 @@ type Client struct {
 	Send         chan []byte
 	hub          *Hub
 	msgRateLimit *RateLimiter // 消息频率限制器
+	// C4 progress tracking
+	c4Planting     bool
+	c4Defusing     bool
+	c4Progress     float64
+	c4StartPos     player.Position
+	c4CancelChan   chan struct{}
+	c4ProgressMu   sync.Mutex
 }
 
 // RateLimiter 简单的令牌桶频率限制器
@@ -180,6 +195,56 @@ func (h *Hub) GetClient(playerID string) *Client {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.clientMap[playerID]
+}
+
+// InterruptC4Action 中断玩家的 C4 操作（用于受伤时）
+func (h *Hub) InterruptC4Action(playerID string, reason string) {
+	h.mu.RLock()
+	client, ok := h.clientMap[playerID]
+	h.mu.RUnlock()
+
+	if ok && client != nil {
+		client.c4ProgressMu.Lock()
+		planting := client.c4Planting
+		defusing := client.c4Defusing
+		cancelChan := client.c4CancelChan
+		if planting {
+			client.c4Planting = false
+		}
+		if defusing {
+			client.c4Defusing = false
+		}
+		client.c4Progress = 0
+		if cancelChan != nil {
+			select {
+			case <-cancelChan:
+				// already closed
+			default:
+				close(cancelChan)
+			}
+			if planting {
+				client.c4CancelChan = nil
+			}
+			if defusing {
+				client.c4CancelChan = nil
+			}
+		}
+		client.c4ProgressMu.Unlock()
+
+		// 广播取消
+		if planting {
+			client.hub.BroadcastToRoom(client.Room, "c4_plant_cancel", map[string]interface{}{
+				"player_id": playerID,
+				"reason":    reason,
+			}, "")
+		}
+		if defusing {
+			client.hub.BroadcastToRoom(client.Room, "c4_defuse_cancel", map[string]interface{}{
+				"player_id": playerID,
+				"reason":    reason,
+			}, "")
+		}
+	}
 }
 
 // Broadcast 广播消息给所有客户端
@@ -457,8 +522,16 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 	// C4 爆破模式
 	case "c4_plant":
 		c.handleC4Plant(msg.Data, roomManager)
+	case "c4_plant_start":
+		c.handleC4PlantStart(msg.Data, roomManager)
+	case "c4_plant_cancel":
+		c.handleC4PlantCancel()
 	case "c4_defuse":
 		c.handleC4Defuse(roomManager)
+	case "c4_defuse_start":
+		c.handleC4DefuseStart(roomManager)
+	case "c4_defuse_cancel":
+		c.handleC4DefuseCancel()
 	// 技能系统
 	case "skill_use":
 		c.handleSkillUse(msg.Data, roomManager)
@@ -596,6 +669,36 @@ func (c *Client) handleMove(data json.RawMessage, roomManager *room.Manager) {
 		return
 	}
 
+	// 移动会中断 C4 操作
+	c.c4ProgressMu.Lock()
+	if c.c4Planting || c.c4Defusing {
+		planting := c.c4Planting
+		defusing := c.c4Defusing
+		c.c4Planting = false
+		c.c4Defusing = false
+		c.c4Progress = 0
+		if c.c4CancelChan != nil {
+			close(c.c4CancelChan)
+			c.c4CancelChan = nil
+		}
+		c.c4ProgressMu.Unlock()
+		
+		if planting {
+			c.hub.BroadcastToRoom(c.Room, "c4_plant_cancel", map[string]interface{}{
+				"player_id": c.Player.ID,
+				"reason":    "moved",
+			}, "")
+		}
+		if defusing {
+			c.hub.BroadcastToRoom(c.Room, "c4_defuse_cancel", map[string]interface{}{
+				"player_id": c.Player.ID,
+				"reason":    "moved",
+			}, "")
+		}
+	} else {
+		c.c4ProgressMu.Unlock()
+	}
+
 	current := c.Player.Snapshot()
 	x, z := current.Position.X, current.Position.Z
 	if c.Room.RoundManager == nil || c.Room.RoundManager.CanMove() {
@@ -699,6 +802,9 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			if c.Room.RoundManager != nil {
 				c.Room.RoundManager.RecordDamage(c.Player.ID, damage)
 			}
+
+			// 中断目标的 C4 操作
+			c.hub.InterruptC4Action(hit.PlayerID, "damaged")
 
 			// 广播受伤消息（包含 attacker_position 用于显示受击方向指示）
 			c.hub.BroadcastToRoom(c.Room, "player_damaged", map[string]interface{}{
@@ -1316,7 +1422,7 @@ func (c *Client) handleGrenadeThrow(data json.RawMessage, roomManager *room.Mana
 	}, "")
 }
 
-// handleC4Plant 处理 C4 放置
+// handleC4Plant 处理 C4 放置 (旧版即时放置，保留兼容)
 func (c *Client) handleC4Plant(data json.RawMessage, roomManager *room.Manager) {
 	if c.Room == nil {
 		return
@@ -1350,7 +1456,397 @@ func (c *Client) handleC4Plant(data json.RawMessage, roomManager *room.Manager) 
 	}, "")
 }
 
-// handleC4Defuse 处理 C4 拆除
+// handleC4PlantStart 开始 C4 安装进度
+func (c *Client) handleC4PlantStart(data json.RawMessage, roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	// 检查是否已经在安装或拆除
+	c.c4ProgressMu.Lock()
+	if c.c4Planting || c.c4Defusing {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+
+	// 检查回合状态
+	if c.Room.RoundManager != nil && !c.Room.RoundManager.CanShoot() {
+		c.c4ProgressMu.Unlock()
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Cannot plant during freeze time",
+		}).ToJSON()
+		return
+	}
+
+	// 检查 C4 是否已经安装
+	if c.Room.IsC4Planted() {
+		c.c4ProgressMu.Unlock()
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "C4 already planted",
+		}).ToJSON()
+		return
+	}
+
+	// 只有 T 可以安装 C4
+	if team.NormalizeTeamID(c.Player.GetTeam()) != team.TeamTerrorists {
+		c.c4ProgressMu.Unlock()
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Only terrorists can plant C4",
+		}).ToJSON()
+		return
+	}
+
+	// 玩家必须存活
+	if !c.Player.IsAlive() {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+
+	var req struct {
+		Position struct {
+			X float64 `json:"x"`
+			Y float64 `json:"y"`
+			Z float64 `json:"z"`
+		} `json:"position"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+
+	// 记录开始位置用于检测移动
+	snapshot := c.Player.Snapshot()
+	c.c4StartPos = snapshot.Position
+	c.c4Planting = true
+	c.c4Defusing = false
+	c.c4Progress = 0
+	c.c4CancelChan = make(chan struct{})
+	c.c4ProgressMu.Unlock()
+
+	// 广播开始安装
+	c.hub.BroadcastToRoom(c.Room, "c4_plant_start", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position": map[string]float64{
+			"x": req.Position.X,
+			"y": req.Position.Y,
+			"z": req.Position.Z,
+		},
+	}, "")
+
+	// 开始安装进度
+	go c.runC4PlantProgress(player.Position{
+		X: req.Position.X,
+		Y: req.Position.Y,
+		Z: req.Position.Z,
+	})
+}
+
+// runC4PlantProgress 运行 C4 安装进度
+func (c *Client) runC4PlantProgress(targetPos player.Position) {
+	ticker := time.NewTicker(C4ProgressInterval)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+	plantDuration := C4PlantTime
+
+	for {
+		select {
+		case <-c.c4CancelChan:
+			// 被取消
+			return
+		case <-ticker.C:
+			// 检查玩家是否还活着
+			if !c.Player.IsAlive() {
+				c.cancelC4Plant("killed")
+				return
+			}
+
+			// 检查是否移动了（允许小范围移动）
+			snapshot := c.Player.Snapshot()
+			dx := snapshot.Position.X - c.c4StartPos.X
+			dz := snapshot.Position.Z - c.c4StartPos.Z
+			if dx*dx+dz*dz > 0.25 { // 0.5m 移动限制
+				c.cancelC4Plant("moved")
+				return
+			}
+
+			// 更新进度
+			elapsed := time.Since(startTime).Seconds()
+			progress := (elapsed / plantDuration.Seconds()) * 100
+			c.c4ProgressMu.Lock()
+			c.c4Progress = progress
+			c.c4ProgressMu.Unlock()
+
+			// 广播进度
+			c.hub.BroadcastToRoom(c.Room, "c4_plant_progress", map[string]interface{}{
+				"player_id": c.Player.ID,
+				"progress":  progress,
+			}, "")
+
+			// 检查是否完成
+			if progress >= 100 {
+				c.completeC4Plant(targetPos)
+				return
+			}
+		}
+	}
+}
+
+// cancelC4Plant 取消 C4 安装
+func (c *Client) cancelC4Plant(reason string) {
+	c.c4ProgressMu.Lock()
+	if !c.c4Planting {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+	c.c4Planting = false
+	c.c4Progress = 0
+	if c.c4CancelChan != nil {
+		close(c.c4CancelChan)
+		c.c4CancelChan = nil
+	}
+	c.c4ProgressMu.Unlock()
+
+	// 广播取消
+	c.hub.BroadcastToRoom(c.Room, "c4_plant_cancel", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"reason":    reason,
+	}, "")
+}
+
+// completeC4Plant 完成 C4 安装
+func (c *Client) completeC4Plant(pos player.Position) {
+	c.c4ProgressMu.Lock()
+	c.c4Planting = false
+	c.c4Progress = 100
+	if c.c4CancelChan != nil {
+		close(c.c4CancelChan)
+		c.c4CancelChan = nil
+	}
+	c.c4ProgressMu.Unlock()
+
+	// 设置房间 C4 状态
+	c.Room.SetC4Planted(true, c.Player.ID, pos)
+
+	// 广播完成
+	c.hub.BroadcastToRoom(c.Room, "c4_planted", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"position":  pos,
+		"team":      c.Player.Team,
+	}, "")
+
+	// 触发 C4 爆炸计时
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.HandleC4Planted(c.Player.ID)
+	}
+}
+
+// handleC4PlantCancel 取消 C4 安装（客户端主动取消）
+func (c *Client) handleC4PlantCancel() {
+	c.c4ProgressMu.Lock()
+	if c.c4Planting {
+		c.c4Planting = false
+		c.c4Progress = 0
+		if c.c4CancelChan != nil {
+			close(c.c4CancelChan)
+			c.c4CancelChan = nil
+		}
+	}
+	c.c4ProgressMu.Unlock()
+
+	c.hub.BroadcastToRoom(c.Room, "c4_plant_cancel", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"reason":    "cancelled",
+	}, "")
+}
+
+// handleC4DefuseStart 开始 C4 拆除进度
+func (c *Client) handleC4DefuseStart(roomManager *room.Manager) {
+	if c.Room == nil {
+		return
+	}
+
+	// 检查是否已经在安装或拆除
+	c.c4ProgressMu.Lock()
+	if c.c4Planting || c.c4Defusing {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+
+	// 检查 C4 是否已安装
+	if !c.Room.IsC4Planted() {
+		c.c4ProgressMu.Unlock()
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "No C4 to defuse",
+		}).ToJSON()
+		return
+	}
+
+	// 只有 CT 可以拆除 C4
+	if team.NormalizeTeamID(c.Player.GetTeam()) != team.TeamCounterTerrorists {
+		c.c4ProgressMu.Unlock()
+		c.Send <- NewMessage("error", map[string]string{
+			"message": "Only counter-terrorists can defuse C4",
+		}).ToJSON()
+		return
+	}
+
+	// 玩家必须存活
+	if !c.Player.IsAlive() {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+
+	// 记录开始位置用于检测移动
+	snapshot := c.Player.Snapshot()
+	c.c4StartPos = snapshot.Position
+	c.c4Defusing = true
+	c.c4Planting = false
+	c.c4Progress = 0
+	c.c4CancelChan = make(chan struct{})
+	hasKit := c.Player.GetDefuseKit()
+	c.c4ProgressMu.Unlock()
+
+	// 广播开始拆除
+	c.hub.BroadcastToRoom(c.Room, "c4_defuse_start", map[string]interface{}{
+		"player_id":  c.Player.ID,
+		"has_kit":    hasKit,
+		"position":   c.Room.GetC4Position(),
+	}, "")
+
+	// 开始拆除进度
+	go c.runC4DefuseProgress()
+}
+
+// runC4DefuseProgress 运行 C4 拆除进度
+func (c *Client) runC4DefuseProgress() {
+	ticker := time.NewTicker(C4ProgressInterval)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+	defuseDuration := C4DefuseTime
+	if c.Player.GetDefuseKit() {
+		defuseDuration = C4DefuseTimeWithKit
+	}
+
+	for {
+		select {
+		case <-c.c4CancelChan:
+			// 被取消
+			return
+		case <-ticker.C:
+			// 检查玩家是否还活着
+			if !c.Player.IsAlive() {
+				c.cancelC4Defuse("killed")
+				return
+			}
+
+			// 检查是否移动了
+			snapshot := c.Player.Snapshot()
+			dx := snapshot.Position.X - c.c4StartPos.X
+			dz := snapshot.Position.Z - c.c4StartPos.Z
+			if dx*dx+dz*dz > 0.25 {
+				c.cancelC4Defuse("moved")
+				return
+			}
+
+			// 检查 C4 是否还存在
+			if !c.Room.IsC4Planted() {
+				c.cancelC4Defuse("exploded")
+				return
+			}
+
+			// 更新进度
+			elapsed := time.Since(startTime).Seconds()
+			progress := (elapsed / defuseDuration.Seconds()) * 100
+			c.c4ProgressMu.Lock()
+			c.c4Progress = progress
+			c.c4ProgressMu.Unlock()
+
+			// 广播进度
+			c.hub.BroadcastToRoom(c.Room, "c4_defuse_progress", map[string]interface{}{
+				"player_id": c.Player.ID,
+				"progress":  progress,
+				"has_kit":   c.Player.GetDefuseKit(),
+			}, "")
+
+			// 检查是否完成
+			if progress >= 100 {
+				c.completeC4Defuse()
+				return
+			}
+		}
+	}
+}
+
+// cancelC4Defuse 取消 C4 拆除
+func (c *Client) cancelC4Defuse(reason string) {
+	c.c4ProgressMu.Lock()
+	if !c.c4Defusing {
+		c.c4ProgressMu.Unlock()
+		return
+	}
+	c.c4Defusing = false
+	c.c4Progress = 0
+	if c.c4CancelChan != nil {
+		close(c.c4CancelChan)
+		c.c4CancelChan = nil
+	}
+	c.c4ProgressMu.Unlock()
+
+	// 广播取消
+	c.hub.BroadcastToRoom(c.Room, "c4_defuse_cancel", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"reason":    reason,
+	}, "")
+}
+
+// completeC4Defuse 完成 C4 拆除
+func (c *Client) completeC4Defuse() {
+	c.c4ProgressMu.Lock()
+	c.c4Defusing = false
+	c.c4Progress = 100
+	if c.c4CancelChan != nil {
+		close(c.c4CancelChan)
+		c.c4CancelChan = nil
+	}
+	c.c4ProgressMu.Unlock()
+
+	// 设置房间 C4 状态
+	c.Room.SetC4Planted(false, "", player.Position{})
+
+	// 广播完成
+	c.hub.BroadcastToRoom(c.Room, "c4_defused", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"team":      c.Player.Team,
+	}, "")
+
+	// 触发回合结束
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.HandleC4Defused(c.Player.ID)
+	}
+}
+
+// handleC4DefuseCancel 取消 C4 拆除（客户端主动取消）
+func (c *Client) handleC4DefuseCancel() {
+	c.c4ProgressMu.Lock()
+	if c.c4Defusing {
+		c.c4Defusing = false
+		c.c4Progress = 0
+		if c.c4CancelChan != nil {
+			close(c.c4CancelChan)
+			c.c4CancelChan = nil
+		}
+	}
+	c.c4ProgressMu.Unlock()
+
+	c.hub.BroadcastToRoom(c.Room, "c4_defuse_cancel", map[string]interface{}{
+		"player_id": c.Player.ID,
+		"reason":    "cancelled",
+	}, "")
+}
+
+// handleC4Defuse 处理 C4 拆除 (旧版即时拆除，保留兼容)
 func (c *Client) handleC4Defuse(roomManager *room.Manager) {
 	if c.Room == nil {
 		return

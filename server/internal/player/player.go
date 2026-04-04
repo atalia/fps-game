@@ -40,6 +40,7 @@ type Player struct {
 	Weapon         string               `json:"weapon"`
 	Armor          int                  `json:"armor"`
 	HasHelmet      bool                 `json:"has_helmet"`
+	HasDefuseKit   bool                 `json:"has_defuse_kit"`
 	Flashbangs     int                  `json:"flashbangs"`
 	HEGrenades     int                  `json:"he_grenades"`
 	SmokeGrenades  int                  `json:"smoke_grenades"`
@@ -421,6 +422,18 @@ func (p *Player) GetArmorState() (int, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.Armor, p.HasHelmet
+}
+
+func (p *Player) SetDefuseKit(hasKit bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.HasDefuseKit = hasKit
+}
+
+func (p *Player) GetDefuseKit() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.HasDefuseKit
 }
 
 func (p *Player) AddGrenade(grenadeType string, count int) {

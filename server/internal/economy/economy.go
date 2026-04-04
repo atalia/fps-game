@@ -173,6 +173,14 @@ var catalog = map[string]Item{
 		Price:         300,
 		SmokeGrenades: 1,
 	},
+	"defuse_kit": {
+		ID:          "defuse_kit",
+		Name:        "Defuse Kit",
+		Category:    CategoryEquipment,
+		Group:       "equipment",
+		Price:       400,
+		AllowedTeam: team.TeamCounterTerrorists,
+	},
 }
 
 func normalizeItemID(itemID string) string {
@@ -266,6 +274,11 @@ func ApplyPurchase(p *player.Player, itemID string) (Item, error) {
 	}
 	if item.SmokeGrenades > 0 {
 		p.AddGrenade("smoke", item.SmokeGrenades)
+	}
+
+	// Handle defuse kit
+	if item.ID == "defuse_kit" {
+		p.SetDefuseKit(true)
 	}
 
 	return item, nil
