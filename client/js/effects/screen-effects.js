@@ -144,6 +144,125 @@ class ScreenEffectsEnhanced {
         }
     }
 
+    // ==================== 夜视仪 ====================
+
+    toggleNightVision() {
+        this.nightVisionActive = !this.nightVisionActive
+        
+        if (this.nightVisionActive) {
+            this.enableNightVision()
+        } else {
+            this.disableNightVision()
+        }
+        
+        return this.nightVisionActive
+    }
+
+    enableNightVision() {
+        if (!this.enabled) return
+        
+        // 创建夜视仪覆盖层
+        let nvOverlay = document.getElementById('nightvision-overlay')
+        if (!nvOverlay) {
+            nvOverlay = document.createElement('div')
+            nvOverlay.id = 'nightvision-overlay'
+            nvOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 999;
+                mix-blend-mode: screen;
+                background: radial-gradient(ellipse at center, 
+                    rgba(0, 255, 0, 0.1) 0%, 
+                    rgba(0, 128, 0, 0.2) 50%,
+                    rgba(0, 64, 0, 0.3) 100%);
+            `
+            document.body.appendChild(nvOverlay)
+        }
+        
+        nvOverlay.style.display = 'block'
+        
+        // 增加游戏场景亮度
+        if (window.renderer?.scene) {
+            window.renderer.scene.background = new THREE.Color(0x001100)
+        }
+        
+        // 添加扫描线效果
+        this.addScanLines()
+        
+        // 播放夜视仪开启音效
+        if (window.audioManager?.playSound) {
+            window.audioManager.playSound('nightvision_on')
+        }
+    }
+
+    disableNightVision() {
+        const nvOverlay = document.getElementById('nightvision-overlay')
+        if (nvOverlay) {
+            nvOverlay.style.display = 'none'
+        }
+        
+        // 恢复场景亮度
+        if (window.renderer?.scene) {
+            window.renderer.scene.background = new THREE.Color(0x87CEEB)
+        }
+        
+        // 移除扫描线
+        this.removeScanLines()
+        
+        // 播放夜视仪关闭音效
+        if (window.audioManager?.playSound) {
+            window.audioManager.playSound('nightvision_off')
+        }
+    }
+
+    addScanLines() {
+        let scanlines = document.getElementById('nv-scanlines')
+        if (!scanlines) {
+            scanlines = document.createElement('div')
+            scanlines.id = 'nv-scanlines'
+            scanlines.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 1001;
+                background: repeating-linear-gradient(
+                    0deg,
+                    rgba(0, 0, 0, 0.1) 0px,
+                    rgba(0, 0, 0, 0.1) 1px,
+                    transparent 1px,
+                    transparent 2px
+                );
+                animation: scanline-move 0.1s linear infinite;
+            `
+            document.body.appendChild(scanlines)
+            
+            // 添加动画样式
+            const style = document.createElement('style')
+            style.textContent = `
+                @keyframes scanline-move {
+                    0% { transform: translateY(0); }
+                    100% { transform: translateY(2px); }
+                }
+            `
+            document.head.appendChild(style)
+        }
+        scanlines.style.display = 'block'
+    }
+
+    removeScanLines() {
+        const scanlines = document.getElementById('nv-scanlines')
+        if (scanlines) {
+            scanlines.style.display = 'none'
+        }
+    }
+
     // ==================== 死亡效果 ====================
     
     showDeath() {

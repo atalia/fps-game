@@ -12,6 +12,7 @@ class PlayerController {
     this.money = 800;
     this.armor = 0;
     this.hasHelmet = false;
+    this.hasNightVision = false; // 夜视仪
     this.ammo = 30;
     this.ammoReserve = 90;
     this.maxAmmo = 30;
@@ -61,6 +62,16 @@ class PlayerController {
         const newType = this.cycleGrenade();
         if (window.uiManager?.showMessage) {
           window.uiManager.showMessage(`切换到 ${newType}`, "info");
+        }
+      }
+      
+      // N 键切换夜视仪
+      if (e.code === "KeyN" && !e.repeat && this.hasNightVision) {
+        if (window.screenEffects?.toggleNightVision) {
+          const active = window.screenEffects.toggleNightVision();
+          if (window.uiManager?.showMessage) {
+            window.uiManager.showMessage(active ? "夜视仪已开启" : "夜视仪已关闭", "info");
+          }
         }
       }
     };
