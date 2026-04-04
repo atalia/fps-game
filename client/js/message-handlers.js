@@ -110,13 +110,34 @@ function createMessageHandlers(deps) {
      * 对应 main.js line 331-358
      */
     handlePlayerKilled(data) {
+      const resolvePlayerName = (playerId) => {
+        if (!playerId) return "Unknown";
+        if (playerId === game?.player?.id) {
+          return game?.player?.name || "YOU";
+        }
+        return game?.players?.get(playerId)?.name || playerId;
+      };
+
+      if (data.weapon_id) {
+        uiManager.addKillFeed({
+          killer: resolvePlayerName(data.killer_id),
+          victim: resolvePlayerName(data.victim_id),
+          killer_id: data.killer_id,
+          victim_id: data.victim_id,
+          weapon: data.weapon_id,
+          isHeadshot: data.is_headshot,
+        });
+      }
+
       // 更新击杀计数
       if (data.killer_id === game?.player?.id) {
         game.player.kills++;
         uiManager.updateKills(game.player.kills);
-        uiManager.addKillFeed(
-          `击杀 ${data.victim_id}${data.is_headshot ? " (爆头!)" : ""}`,
-        );
+        if (!data.weapon_id) {
+          uiManager.addKillFeed(
+            `击杀 ${data.victim_id}${data.is_headshot ? " (爆头!)" : ""}`,
+          );
+        }
 
         // 击杀音效
         if (audioManager) {
@@ -125,7 +146,10 @@ function createMessageHandlers(deps) {
 
         // 新特效系统
         if (killNotice) {
-          killNotice.show(data.victim_id, { isHeadshot: data.is_headshot });
+          killNotice.show(resolvePlayerName(data.victim_id), {
+            isHeadshot: data.is_headshot,
+            weapon: data.weapon_id,
+          });
         }
         if (killstreakEnhanced) {
           killstreakEnhanced.addKill();

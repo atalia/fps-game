@@ -95,7 +95,7 @@ describe("UIManager", () => {
       ],
     });
 
-    expect(ui.elements.roundNumber.textContent).toBe("Round 12/30");
+    expect(ui.elements.roundNumber.textContent).toBe("ROUND 12/30");
     expect(ui.elements.roundScore.textContent).toBe("CT 7 - 4 T");
     expect(ui.elements.roundTimer.textContent).toBe("01:24");
     expect(ui.elements.roundPhase.textContent).toBe("BUY 5s");

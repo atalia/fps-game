@@ -1,0 +1,322 @@
+/* hud-improvements.css - CS 1.6 风格UI改进 */
+
+/* ===== 动态准星 ===== */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+}
+
+.crosshair-line {
+  position: absolute;
+  background: #00ff00;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  transition: all 0.1s ease-out;
+}
+
+.crosshair-line.top {
+  width: 2px;
+  height: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0;
+}
+
+.crosshair-line.bottom {
+  width: 2px;
+  height: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+}
+
+.crosshair-line.left {
+  width: 10px;
+  height: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 0;
+}
+
+.crosshair-line.right {
+  width: 10px;
+  height: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 0;
+}
+
+.crosshair-dot {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #00ff00;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* 准星扩散状态 */
+#crosshair.expanded .crosshair-line.top { top: -8px; }
+#crosshair.expanded .crosshair-line.bottom { bottom: -8px; }
+#crosshair.expanded .crosshair-line.left { left: -8px; }
+#crosshair.expanded .crosshair-line.right { right: -8px; }
+
+/* ===== 击中标记 ===== */
+#hit-marker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 101;
+}
+
+#hit-marker.visible {
+  opacity: 1;
+  animation: hitMarkerPop 0.15s ease-out;
+}
+
+.hit-marker-line {
+  position: absolute;
+  width: 10px;
+  height: 2px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+}
+
+.hit-marker-line:nth-child(1) { transform: rotate(45deg) translate(4px, 0); }
+.hit-marker-line:nth-child(2) { transform: rotate(-45deg) translate(4px, 0); }
+.hit-marker-line:nth-child(3) { transform: rotate(135deg) translate(4px, 0); }
+.hit-marker-line:nth-child(4) { transform: rotate(-135deg) translate(4px, 0); }
+
+#hit-marker.headshot .hit-marker-line {
+  background: #ff0000;
+  box-shadow: 0 0 6px rgba(255, 0, 0, 0.8);
+}
+
+@keyframes hitMarkerPop {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+/* ===== 低血量警告 ===== */
+#low-health-warning {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 98;
+  border: 8px solid transparent;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#low-health-warning.active {
+  opacity: 1;
+  border-color: rgba(255, 0, 0, 0.4);
+  box-shadow: inset 0 0 80px rgba(255, 0, 0, 0.25);
+  animation: pulseRed 1.5s infinite;
+}
+
+@keyframes pulseRed {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ===== 击杀确认 ===== */
+#kill-confirmation {
+  position: fixed;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.75);
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 102;
+}
+
+#kill-confirmation.visible {
+  animation: killConfirmShow 1.5s ease-out forwards;
+}
+
+@keyframes killConfirmShow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  30% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) translateY(-10px); }
+}
+
+/* ===== 伤害指示器 ===== */
+#damage-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 97;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+#damage-indicator.active {
+  opacity: 1;
+}
+
+/* ===== 武器HUD ===== */
+#weapon-display {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.6), transparent);
+  padding: 10px 20px;
+  border-radius: 4px 0 0 4px;
+}
+
+#ammo-display {
+  font-family: 'Courier New', monospace;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+#ammo-count {
+  font-size: 36px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+}
+
+#ammo-reserve {
+  font-size: 18px;
+  color: #aaa;
+}
+
+#ammo-count.low {
+  color: #ff4444;
+  animation: ammoPulse 0.5s infinite;
+}
+
+@keyframes ammoPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ===== 队伍得分 ===== */
+#team-info {
+  position: fixed;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  font-family: 'Courier New', monospace;
+  z-index: 100;
+}
+
+.team-score {
+  padding: 8px 25px;
+  font-size: 22px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+}
+
+.team-score.ct {
+  background: linear-gradient(180deg, rgba(76, 175, 80, 0.9), rgba(56, 142, 60, 0.9));
+  border-radius: 6px 0 0 6px;
+  border: 1px solid rgba(129, 199, 132, 0.5);
+}
+
+.team-score.t {
+  background: linear-gradient(180deg, rgba(255, 152, 0, 0.9), rgba(230, 126, 34, 0.9));
+  border-radius: 0 6px 6px 0;
+  border: 1px solid rgba(255, 183, 77, 0.5);
+}
+
+/* ===== 金钱显示 ===== */
+#money-display {
+  font-family: 'Courier New', monospace;
+  font-size: 22px;
+  font-weight: bold;
+  color: #4CAF50;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+}
+
+#money-display.negative {
+  color: #f44336;
+}
+
+#money-display.changed {
+  animation: moneyChange 0.5s ease-out;
+}
+
+@keyframes moneyChange {
+  0% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* ===== 击杀信息 ===== */
+#kill-feed {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 300px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  z-index: 100;
+}
+
+.kill-entry {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 6px 12px;
+  margin-bottom: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: killFeedIn 0.3s ease-out;
+  border-left: 3px solid transparent;
+}
+
+.kill-entry.ct { border-left-color: #4CAF50; }
+.kill-entry.t { border-left-color: #FF9800; }
+
+.kill-entry .killer {
+  font-weight: bold;
+}
+
+.kill-entry .killer.ct { color: #81C784; }
+.kill-entry .killer.t { color: #FFB74D; }
+
+.kill-entry .victim {
+  color: #ccc;
+}
+
+.kill-entry .weapon-icon {
+  opacity: 0.7;
+}
+
+@keyframes killFeedIn {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
