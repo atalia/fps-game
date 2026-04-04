@@ -183,7 +183,6 @@ class EffectsCore {
 
     render(scene) {
         this.clearRenderedMeshes(scene)
-        const currentScene = scene || this.scene
         const renderedMeshes = []
         
         this.effects.forEach(effect => {
