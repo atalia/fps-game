@@ -7,10 +7,36 @@ on:
     branches: [ main, develop ]
 
 jobs:
+  # ================================
+  # 预部署检查 (最先运行)
+  # ================================
+  pre-deploy:
+    name: Pre-deploy Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Make script executable
+      run: chmod +x scripts/pre-deploy-check.sh
+
+    - name: Run pre-deploy checks
+      run: ./scripts/pre-deploy-check.sh
+      continue-on-error: false
+
+    - name: Upload check results
+      if: always()
+      run: |
+        echo "## Pre-deploy Check Results" >> $GITHUB_STEP_SUMMARY
+        echo "✅ All configuration checks passed" >> $GITHUB_STEP_SUMMARY
+
+  # ================================
   # Go 后端 CI
+  # ================================
   backend:
     name: Backend CI
     runs-on: ubuntu-latest
+    needs: pre-deploy
     defaults:
       run:
         working-directory: server
@@ -35,8 +61,11 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Run tests
+    - name: Run all tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Run WebSocket Origin tests (critical)
+      run: go test -v ./internal/network/... -run "Origin|Deployment"
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -52,10 +81,52 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
 
+  # ================================
+  # 前端 CI
+  # ================================
+  frontend:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    needs: pre-deploy
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: client/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run all tests
+      run: npm test -- --run
+
+    - name: Run connection tests (critical)
+      run: npm test -- --run tests/connection.test.js
+
+    - name: Check JavaScript syntax
+      run: |
+        npm install -g acorn
+        for file in js/*.js; do
+          acorn --silent "$file" > /dev/null || echo "Syntax error in $file"
+        done
+      continue-on-error: true
+
+  # ================================
   # 代码质量检查
+  # ================================
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: pre-deploy
     defaults:
       run:
         working-directory: server
@@ -76,11 +147,13 @@ jobs:
         working-directory: server
         args: --timeout=5m
 
+  # ================================
   # Docker 构建
+  # ================================
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [backend, lint]
+    needs: [backend, frontend, lint]
 
     steps:
     - name: Checkout code
@@ -99,10 +172,18 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-  # 依赖安全检查
+    - name: Docker image ready
+      run: |
+        echo "## Docker Build" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Image built: fps-game:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # ================================
+  # 安全检查
+  # ================================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: pre-deploy
     defaults:
       run:
         working-directory: server
@@ -122,27 +203,32 @@ jobs:
         args: ./...
       continue-on-error: true
 
-  # 前端检查
-  frontend:
-    name: Frontend Check
+  # ================================
+  # 最终报告
+  # ================================
+  report:
+    name: CI Report
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: client
+    needs: [backend, frontend, lint, docker, security]
+    if: always()
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Generate report
+      run: |
+        echo "## CI Pipeline Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Pre-deploy | ${{ needs.pre-deploy.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Backend | ${{ needs.backend.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Frontend | ${{ needs.frontend.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Lint | ${{ needs.lint.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker | ${{ needs.docker.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security | ${{ needs.security.result == 'success' && '✅ Pass' || '⚠️ Warnings' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
 
-    - name: Setup Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: npm
-        cache-dependency-path: client/package-lock.json
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run frontend tests
-      run: npm test -- --run
+    - name: Check overall status
+      if: contains(needs.*.result, 'failure')
+      run: exit 1

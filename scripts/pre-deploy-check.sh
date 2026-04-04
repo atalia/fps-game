@@ -89,7 +89,11 @@ fi
 # 6. 运行关键测试
 echo ""
 echo "6️⃣  Running critical tests..."
-if go test -v ./server/internal/network/... -run "TestWebSocketOriginCheck" 2>&1 | grep -q "PASS"; then
+GO_CMD="go"
+if [ -f "$HOME/.local/go/bin/go" ]; then
+    GO_CMD="$HOME/.local/go/bin/go"
+fi
+if $GO_CMD test -v ./server/internal/network/... -run "TestWebSocketOriginCheck" 2>&1 | grep -q "PASS"; then
     pass "WebSocket Origin tests pass"
 else
     warn "WebSocket Origin tests failed or not found"
@@ -107,8 +111,14 @@ fi
 # 8. 检查 Nginx WebSocket 代理
 echo ""
 echo "8️⃣  Checking Nginx WebSocket proxy..."
-if [ -f "nginx.conf" ] && grep -q "location /ws" nginx.conf; then
-    pass "Nginx WebSocket proxy configured"
+NGINX_CONF=""
+if [ -f "nginx.conf" ]; then
+    NGINX_CONF="nginx.conf"
+elif [ -f "docker/nginx/nginx.conf" ]; then
+    NGINX_CONF="docker/nginx/nginx.conf"
+fi
+if [ -n "$NGINX_CONF" ] && grep -q "location /ws" "$NGINX_CONF"; then
+    pass "Nginx WebSocket proxy configured ($NGINX_CONF)"
 else
     warn "Nginx WebSocket proxy might be missing"
 fi
