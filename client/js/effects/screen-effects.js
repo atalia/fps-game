@@ -93,6 +93,57 @@ class ScreenEffectsEnhanced {
         }, 150)
     }
 
+    // ==================== 闪光弹致盲 ====================
+
+    flashblind(duration = 3000, intensity = 1.0) {
+        if (!this.enabled) return
+
+        // 创建致盲覆盖层
+        let flashOverlay = document.getElementById('flashbang-overlay')
+        if (!flashOverlay) {
+            flashOverlay = document.createElement('div')
+            flashOverlay.id = 'flashbang-overlay'
+            flashOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: white;
+                pointer-events: none;
+                z-index: 1000;
+            `
+            document.body.appendChild(flashOverlay)
+        }
+
+        // 设置初始亮度
+        flashOverlay.style.opacity = intensity
+        flashOverlay.style.display = 'block'
+
+        // 渐变恢复
+        const startTime = Date.now()
+        const fadeStep = () => {
+            const elapsed = Date.now() - startTime
+            const progress = Math.min(1, elapsed / duration)
+            
+            // 非线性恢复（开始慢，后来快）
+            const opacity = intensity * Math.pow(1 - progress, 2)
+            flashOverlay.style.opacity = opacity
+
+            if (progress < 1) {
+                requestAnimationFrame(fadeStep)
+            } else {
+                flashOverlay.style.display = 'none'
+            }
+        }
+        requestAnimationFrame(fadeStep)
+
+        // 播放耳鸣音效
+        if (window.audioManager?.playFlashbangRing) {
+            window.audioManager.playFlashbangRing()
+        }
+    }
+
     // ==================== 死亡效果 ====================
     
     showDeath() {

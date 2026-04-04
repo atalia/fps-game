@@ -16,6 +16,12 @@ class PlayerController {
     this.ammoReserve = 90;
     this.maxAmmo = 30;
 
+    // 投掷物
+    this.flashbangs = 0;
+    this.heGrenades = 0;
+    this.smokeGrenades = 0;
+    this.selectedGrenade = "flashbang"; // flashbang, he, smoke
+
     this.kills = 0;
     this.deaths = 0;
     this.score = 0;
@@ -44,6 +50,19 @@ class PlayerController {
     // 键盘事件
     this._eventHandlers.keydown = (e) => {
       this.keys[e.code] = true;
+      
+      // G 键投掷投掷物
+      if (e.code === "KeyG" && !e.repeat) {
+        this.throwGrenade();
+      }
+      
+      // 4 键切换投掷物类型
+      if (e.code === "Digit4" && !e.repeat) {
+        const newType = this.cycleGrenade();
+        if (window.uiManager?.showMessage) {
+          window.uiManager.showMessage(`切换到 ${newType}`, "info");
+        }
+      }
     };
     this._eventHandlers.keyup = (e) => {
       this.keys[e.code] = false;
@@ -336,6 +355,95 @@ class PlayerController {
     const roundState = window.roundState || null;
     if (!roundState) return true;
     return roundState.can_shoot !== false;
+  }
+
+  // 投掷投掷物
+  throwGrenade() {
+    let type = this.selectedGrenade;
+    
+    // 检查是否有该类型的投掷物
+    let available = false;
+    switch (type) {
+      case "flashbang":
+        available = this.flashbangs > 0;
+        break;
+      case "he":
+        available = this.heGrenades > 0;
+        break;
+      case "smoke":
+        available = this.smokeGrenades > 0;
+        break;
+    }
+
+    if (!available) {
+      // 尝试切换到其他可用类型
+      if (this.flashbangs > 0) {
+        type = "flashbang";
+        available = true;
+      } else if (this.heGrenades > 0) {
+        type = "he";
+        available = true;
+      } else if (this.smokeGrenades > 0) {
+        type = "smoke";
+        available = true;
+      }
+    }
+
+    if (!available) return null;
+
+    // 扣除投掷物
+    switch (type) {
+      case "flashbang":
+        this.flashbangs--;
+        break;
+      case "he":
+        this.heGrenades--;
+        break;
+      case "smoke":
+        this.smokeGrenades--;
+        break;
+    }
+
+    // 计算投掷方向和速度
+    const forward = {
+      x: Math.sin(this.rotation),
+      y: -Math.sin(this.pitch) * 0.3 + 0.5, // 稍微向上
+      z: Math.cos(this.rotation)
+    };
+
+    const speed = 15;
+    const velocity = {
+      x: forward.x * speed,
+      y: forward.y * speed,
+      z: forward.z * speed
+    };
+
+    // 从玩家位置投掷（稍微向前）
+    const position = {
+      x: this.position.x + forward.x * 0.5,
+      y: this.position.y + 1.5,
+      z: this.position.z + forward.z * 0.5
+    };
+
+    // 发送到服务器
+    if (window.network?.connected) {
+      window.network.send("grenade_throw", {
+        type: type,
+        position: position,
+        velocity: velocity
+      });
+    }
+
+    return { type, position, velocity };
+  }
+
+  // 切换投掷物类型
+  cycleGrenade() {
+    const types = ["flashbang", "he", "smoke"];
+    const currentIndex = types.indexOf(this.selectedGrenade);
+    const nextIndex = (currentIndex + 1) % types.length;
+    this.selectedGrenade = types[nextIndex];
+    return this.selectedGrenade;
   }
 }
 

@@ -563,6 +563,34 @@ function setupNetworkHandlers() {
     console.error("Server error:", data.message);
     window.uiManager.showMessage(data.message, "error");
   });
+
+  // 投掷物
+  window.network.on("grenade_thrown", (data) => {
+    if (window.grenadeSystem) {
+      const grenade = {
+        id: Date.now().toString(),
+        type: data.type,
+        position: data.position,
+        velocity: data.velocity,
+        playerId: data.player_id,
+        detonateTime: Date.now() + getGrenadeDetonationTime(data.type),
+        active: true
+      };
+      window.grenadeSystem.activeGrenades.push(grenade);
+    }
+  });
+}
+
+// 获取投掷物引爆时间
+function getGrenadeDetonationTime(type) {
+  switch (type) {
+    case 'flashbang': return 1500;
+    case 'smoke': return 2000;
+    case 'he': return 2500;
+    case 'molotov': return 1000;
+    case 'decoy': return 500;
+    default: return 2000;
+  }
 }
 
 async function startGame(playerId) {
@@ -628,6 +656,52 @@ async function startGame(playerId) {
       window.renderer.scene,
       window.renderer.camera,
     );
+  }
+
+  // 初始化投掷物系统
+  if (typeof GrenadeSystem !== "undefined") {
+    window.grenadeSystem = new GrenadeSystem(window.renderer.scene);
+    
+    // 设置闪光弹效果回调
+    window.grenadeSystem.onFlashEffect = (effect) => {
+      // 检查玩家是否在范围内且面向闪光弹
+      const playerPos = window.game?.player?.position;
+      if (!playerPos) return;
+
+      const dx = effect.position.x - playerPos.x;
+      const dy = effect.position.y - playerPos.y;
+      const dz = effect.position.z - playerPos.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      if (distance <= effect.radius) {
+        // 根据距离和是否面向计算致盲时间
+        const intensity = Math.max(0.3, 1 - distance / effect.radius);
+        const blindDuration = effect.duration * intensity;
+        
+        if (window.screenEffects?.flashblind) {
+          window.screenEffects.flashblind(blindDuration, intensity);
+        }
+      }
+    };
+
+    // 设置烟雾效果回调
+    window.grenadeSystem.onSmokeEffect = (smoke) => {
+      if (window.effectsSystem?.addSmokeEffect) {
+        window.effectsSystem.addSmokeEffect(smoke.position, smoke.radius);
+      }
+    };
+
+    // 设置爆炸效果回调
+    window.grenadeSystem.onExplosion = (explosion) => {
+      if (window.effectsSystem?.addExplosion) {
+        window.effectsSystem.addExplosion(explosion.position, explosion.radius);
+      }
+      if (window.audioManager?.playExplosion) {
+        window.audioManager.playExplosion();
+      }
+    };
+
+    console.log("[MAIN] GrenadeSystem initialized with effect callbacks");
   }
 
   // 初始化 AI 标签系统

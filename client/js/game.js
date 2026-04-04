@@ -103,6 +103,11 @@ class Game {
     this.effects.update(deltaTime);
     this.effects.render(this.renderer.scene);
 
+    // 更新投掷物
+    if (window.grenadeSystem) {
+      window.grenadeSystem.update(deltaTime);
+    }
+
     // 更新准星扩散（从 PlayerController 获取真实移动状态）
     if (window.dynamicCrosshair && this.player) {
       const keys = this.player.keys;
