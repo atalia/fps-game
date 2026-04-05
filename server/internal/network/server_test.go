@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"fps-game/internal/team"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
+	"fps-game/internal/team"
 
 	"github.com/gorilla/websocket"
 )
@@ -913,11 +913,51 @@ func TestClient_handleC4Plant(t *testing.T) {
 		Send:   make(chan []byte, 10),
 		hub:    hub,
 	}
+	client.Player.SetName("Planter")
 
 	// 创建房间
 	r := roomManager.CreateRoom()
-	r.AddPlayer(client.Player)
+	r.RoundManager.Close()
+	r.RoundManager = room.NewRoundManager(r, room.RoundConfig{
+		FreezeTime:       10 * time.Millisecond,
+		RoundTime:        100 * time.Millisecond,
+		BuyTime:          50 * time.Millisecond,
+		RoundEndDelay:    10 * time.Millisecond,
+		RegulationRounds: 30,
+		FirstToWin:       16,
+		HalftimeAfter:    15,
+	})
+	if !r.AddPlayer(client.Player) {
+		t.Fatal("failed to add planter")
+	}
 	client.Room = r
+	if _, err := r.JoinTeam(client.Player, team.TeamTerrorists); err != nil {
+		t.Fatalf("failed to join T side: %v", err)
+	}
+
+	opponent := player.NewPlayer()
+	opponent.SetName("Defender")
+	if !r.AddPlayer(opponent) {
+		t.Fatal("failed to add defender")
+	}
+	if _, err := r.JoinTeam(opponent, team.TeamCounterTerrorists); err != nil {
+		t.Fatalf("failed to join CT side: %v", err)
+	}
+
+	if !r.RoundManager.MaybeStart() {
+		t.Fatal("expected round to start")
+	}
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if r.RoundManager.Snapshot().Phase == room.RoundPhaseLive {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if r.RoundManager.Snapshot().Phase != room.RoundPhaseLive {
+		t.Fatalf("round phase = %s, want live", r.RoundManager.Snapshot().Phase)
+	}
 
 	data := mustMarshal(map[string]interface{}{
 		"position": map[string]float64{
@@ -932,6 +972,9 @@ func TestClient_handleC4Plant(t *testing.T) {
 	if !r.IsC4Planted() {
 		t.Error("C4 should be planted")
 	}
+	if got := r.RoundManager.GetC4ExplosionTime(); got <= 0 {
+		t.Fatalf("c4 explosion timer = %d, want > 0", got)
+	}
 }
 
 func TestClient_handleC4Defuse(t *testing.T) {
@@ -943,19 +986,68 @@ func TestClient_handleC4Defuse(t *testing.T) {
 		Send:   make(chan []byte, 10),
 		hub:    hub,
 	}
+	client.Player.SetName("Defuser")
 
 	// 创建房间
 	r := roomManager.CreateRoom()
-	r.AddPlayer(client.Player)
+	r.RoundManager.Close()
+	r.RoundManager = room.NewRoundManager(r, room.RoundConfig{
+		FreezeTime:       10 * time.Millisecond,
+		RoundTime:        100 * time.Millisecond,
+		BuyTime:          50 * time.Millisecond,
+		RoundEndDelay:    10 * time.Millisecond,
+		RegulationRounds: 30,
+		FirstToWin:       16,
+		HalftimeAfter:    15,
+	})
+	if !r.AddPlayer(client.Player) {
+		t.Fatal("failed to add defuser")
+	}
 	client.Room = r
+	if _, err := r.JoinTeam(client.Player, team.TeamCounterTerrorists); err != nil {
+		t.Fatalf("failed to join CT side: %v", err)
+	}
 
-	// 先放置 C4
-	r.SetC4Planted(true, client.Player.ID, player.Position{X: 10, Y: 5, Z: 20})
+	planter := player.NewPlayer()
+	planter.SetName("Planter")
+	if !r.AddPlayer(planter) {
+		t.Fatal("failed to add planter")
+	}
+	if _, err := r.JoinTeam(planter, team.TeamTerrorists); err != nil {
+		t.Fatalf("failed to join T side: %v", err)
+	}
+
+	if !r.RoundManager.MaybeStart() {
+		t.Fatal("expected round to start")
+	}
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if r.RoundManager.Snapshot().Phase == room.RoundPhaseLive {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if r.RoundManager.Snapshot().Phase != room.RoundPhaseLive {
+		t.Fatalf("round phase = %s, want live", r.RoundManager.Snapshot().Phase)
+	}
+
+	// 先放置 C4 并启动倒计时
+	r.SetC4Planted(true, planter.ID, player.Position{X: 10, Y: 5, Z: 20})
+	if !r.RoundManager.StartC4Countdown() {
+		t.Fatal("expected c4 countdown to start")
+	}
 
 	client.handleC4Defuse(roomManager)
 
 	if r.IsC4Planted() {
 		t.Error("C4 should be defused")
+	}
+	if got := r.RoundManager.GetC4ExplosionTime(); got != 0 {
+		t.Fatalf("c4 explosion timer = %d, want 0", got)
+	}
+	if got := r.TeamManager.GetScore(team.TeamCounterTerrorists); got != 1 {
+		t.Fatalf("ct score = %d, want 1", got)
 	}
 }
 

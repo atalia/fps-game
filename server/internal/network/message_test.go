@@ -517,17 +517,17 @@ func TestWS_C4Plant(t *testing.T) {
 		"position": map[string]float64{"x": 1.0, "y": 2.0, "z": 3.0},
 	})
 
-	// A 和 B 都应收到 c4_planted (excludeID="")
+	// A 和 B 都应各收到且只收到一次 c4_planted
 	msgsA := RecvAll(t, connA)
 	c4CountA := CountType(msgsA, "c4_planted")
-	if c4CountA == 0 {
-		t.Error("A should receive c4_planted")
+	if c4CountA != 1 {
+		t.Fatalf("A should receive exactly one c4_planted, got %d", c4CountA)
 	}
 
 	msgsB := RecvAll(t, connB)
 	c4CountB := CountType(msgsB, "c4_planted")
-	if c4CountB == 0 {
-		t.Error("B should receive c4_planted")
+	if c4CountB != 1 {
+		t.Fatalf("B should receive exactly one c4_planted, got %d", c4CountB)
 	}
 }
 

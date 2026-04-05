@@ -341,7 +341,7 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
 			log.Printf("[WS] CheckOrigin: origin=%s, host=%s, remote=%s", origin, r.Host, r.RemoteAddr)
-			
+
 			// 如果没有配置允许的域名，则允许所有连接（开发/生产通用）
 			if len(allowedOrigins) == 0 {
 				// 获取服务器地址（从环境变量或 Host 头）
@@ -350,7 +350,7 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 				if serverHost == "" || serverHost == "0.0.0.0" {
 					serverHost = r.Host
 				}
-				
+
 				// 允许所有来源
 				result := origin == "" ||
 					strings.HasPrefix(origin, "http://localhost") ||
@@ -1063,7 +1063,6 @@ func (c *Client) respawnPlayer(p *player.Player, respawnRoom *room.Room) {
 		"weapon":    state.Weapon,
 	}, "")
 }
-
 
 func (c *Client) handleReload() {
 	c.Player.Reload()
@@ -1793,6 +1792,9 @@ func (c *Client) handleC4Plant(data json.RawMessage, roomManager *room.Manager) 
 
 	// 设置房间 C4 状态
 	c.Room.SetC4Planted(true, c.Player.ID, pos)
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.StartC4Countdown()
+	}
 
 	c.hub.BroadcastToRoom(c.Room, "c4_planted", map[string]interface{}{
 		"player_id": c.Player.ID,
@@ -2203,7 +2205,11 @@ func (c *Client) handleC4Defuse(roomManager *room.Manager) {
 		return
 	}
 
-	c.Room.SetC4Planted(false, "", player.Position{})
+	if c.Room.RoundManager != nil {
+		c.Room.RoundManager.ResolveC4Defused()
+	} else {
+		c.Room.SetC4Planted(false, "", player.Position{})
+	}
 
 	c.hub.BroadcastToRoom(c.Room, "c4_defused", map[string]string{
 		"player_id": c.Player.ID,

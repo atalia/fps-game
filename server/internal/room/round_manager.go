@@ -225,39 +225,63 @@ func (rm *RoundManager) HandleRosterChanged() {
 	}
 }
 
-// HandleC4Planted starts the C4 explosion timer when C4 is planted.
-// Should be called when a terrorist successfully plants the bomb.
-func (rm *RoundManager) HandleC4Planted(planterID string) {
+// StartC4Countdown arms the C4 explosion timer without broadcasting c4_planted.
+// This is used by network paths that already emitted their own c4_planted event.
+func (rm *RoundManager) StartC4Countdown() bool {
 	rm.mu.Lock()
 	if rm.closed || rm.phase != RoundPhaseLive {
 		rm.mu.Unlock()
-		return
+		return false
+	}
+	if rm.c4ExplosionTimer != nil {
+		rm.c4ExplosionTimer.Stop()
 	}
 
 	rm.c4ExplosionAt = time.Now().Add(C4ExplosionTime)
 	rm.c4ExplosionTimer = time.AfterFunc(C4ExplosionTime, rm.handleC4Explosion)
 	rm.mu.Unlock()
 
+	rm.broadcastRoundState()
+	return true
+}
+
+// HandleC4Planted starts the C4 explosion timer when C4 is planted.
+// Should be called when a terrorist successfully plants the bomb.
+func (rm *RoundManager) HandleC4Planted(planterID string) {
+	if !rm.StartC4Countdown() {
+		return
+	}
+
 	rm.room.Broadcast("c4_planted", map[string]interface{}{
 		"planter_id":   planterID,
 		"explosion_in": int(C4ExplosionTime.Seconds()),
 		"position":     rm.room.GetC4Position(),
 	}, "")
-	rm.broadcastRoundState()
 }
 
-// HandleC4Defused handles successful C4 defusal by a counter-terrorist.
-func (rm *RoundManager) HandleC4Defused(defuserID string) {
+// ResolveC4Defused clears the active C4 countdown and ends the round for CTs
+// without broadcasting c4_defused. Network paths that already send their own
+// c4_defused payload can call this to avoid duplicate events.
+func (rm *RoundManager) ResolveC4Defused() bool {
 	rm.mu.Lock()
 	if rm.closed || rm.phase != RoundPhaseLive || !rm.room.IsC4Planted() {
 		rm.mu.Unlock()
-		return
+		return false
 	}
 
 	rm.clearC4ExplosionStateLocked()
 	rm.mu.Unlock()
 
 	rm.endRound(team.TeamCounterTerrorists, RoundEndReasonDefused)
+	return true
+}
+
+// HandleC4Defused handles successful C4 defusal by a counter-terrorist.
+func (rm *RoundManager) HandleC4Defused(defuserID string) {
+	if !rm.ResolveC4Defused() {
+		return
+	}
+
 	rm.room.Broadcast("c4_defused", map[string]interface{}{
 		"defuser_id": defuserID,
 	}, "")
@@ -624,7 +648,6 @@ func (rm *RoundManager) awardRoundMoney(winner string) {
 		}, "")
 	}
 }
-
 
 func (rm *RoundManager) determineMVPLocked(winner string) *RoundMVP {
 	var bestID string
