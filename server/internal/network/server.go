@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -345,11 +346,17 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 			
 			// 如果没有配置允许的域名，则允许所有连接（开发/生产通用）
 			if len(allowedOrigins) == 0 {
-				// 允许所有来源（包括服务器 IP 和文件协议）
+				// 获取服务器地址（从环境变量或 Host 头）
+				serverHost := os.Getenv("SERVER_HOST")
+				if serverHost == "" {
+					serverHost = r.Host
+				}
+				
+				// 允许所有来源
 				result := origin == "" ||
 					strings.HasPrefix(origin, "http://localhost") ||
 					strings.HasPrefix(origin, "http://127.0.0.1") ||
-					strings.HasPrefix(origin, "http://101.33.117.73") ||
+					strings.HasPrefix(origin, "http://"+serverHost) ||
 					strings.HasPrefix(origin, "https://") ||
 					strings.HasPrefix(origin, "file:")
 				log.Printf("[WS] CheckOrigin result (dev mode): %v", result)
