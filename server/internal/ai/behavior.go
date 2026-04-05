@@ -11,6 +11,7 @@ import (
 // Room 房间接口 (避免循环依赖)
 type Room interface {
 	GetPlayers() map[string]*player.Player
+	GetBots() []*Bot
 }
 
 // Update 更新 AI 状态
@@ -163,16 +164,30 @@ func (b *Bot) findNearestEnemy(room Room, maxDistance float64) *player.Player {
 	var nearest *player.Player
 	minDist := maxDistance
 
-	for id, p := range room.GetPlayers() {
-		if id == b.ID {
-			continue
+	consider := func(id string, candidate *player.Player) {
+		if candidate == nil || id == b.ID || !candidate.IsAlive() {
+			return
+		}
+		if b.Team != "" && candidate.GetTeam() != "" && candidate.GetTeam() == b.Team {
+			return
 		}
 
-		dist := b.distanceTo(p.Position)
+		dist := b.distanceTo(candidate.Position)
 		if dist < minDist {
 			minDist = dist
-			nearest = p
+			nearest = candidate
 		}
+	}
+
+	for id, p := range room.GetPlayers() {
+		consider(id, p)
+	}
+
+	for _, bot := range room.GetBots() {
+		if bot == nil || bot.Player == nil {
+			continue
+		}
+		consider(bot.Player.ID, bot.Player)
 	}
 
 	return nearest

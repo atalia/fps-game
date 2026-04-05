@@ -10,11 +10,13 @@ import (
 // MockRoom 模拟房间
 type MockRoom struct {
 	players map[string]*player.Player
+	bots    []*Bot
 }
 
 func NewMockRoom() *MockRoom {
 	return &MockRoom{
 		players: make(map[string]*player.Player),
+		bots:    make([]*Bot, 0),
 	}
 }
 
@@ -22,8 +24,16 @@ func (m *MockRoom) GetPlayers() map[string]*player.Player {
 	return m.players
 }
 
+func (m *MockRoom) GetBots() []*Bot {
+	return m.bots
+}
+
 func (m *MockRoom) AddPlayer(id string, p *player.Player) {
 	m.players[id] = p
+}
+
+func (m *MockRoom) AddBot(bot *Bot) {
+	m.bots = append(m.bots, bot)
 }
 
 func TestBot_Patrol(t *testing.T) {
@@ -240,6 +250,34 @@ func TestBot_FindNearestEnemy_NoEnemy(t *testing.T) {
 
 	if nearest != nil {
 		t.Error("expected nil when no enemies")
+	}
+}
+
+func TestBot_FindNearestEnemy_IncludesEnemyBots(t *testing.T) {
+	bot := NewBot("hunter", DifficultyNormal)
+	bot.Team = "red"
+	bot.Position = player.Position{X: 0, Y: 0, Z: 0}
+
+	room := NewMockRoom()
+
+	friendlyBot := NewBot("friendly", DifficultyNormal)
+	friendlyBot.Team = "red"
+	friendlyBot.Position = player.Position{X: 5, Y: 0, Z: 0}
+	room.AddBot(friendlyBot)
+
+	enemyBot := NewBot("enemy-bot", DifficultyNormal)
+	enemyBot.Team = "blue"
+	enemyBot.Position = player.Position{X: 8, Y: 0, Z: 0}
+	room.AddBot(enemyBot)
+
+	nearest := bot.findNearestEnemy(room, 100.0)
+
+	if nearest == nil {
+		t.Fatal("expected enemy bot to be found")
+	}
+
+	if nearest.ID != enemyBot.ID {
+		t.Fatalf("expected nearest enemy bot %s, got %s", enemyBot.ID, nearest.ID)
 	}
 }
 
