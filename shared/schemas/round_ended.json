@@ -8,7 +8,7 @@
   "properties": {
     "round_number": { "type": "integer", "minimum": 1 },
     "winner": { "type": "string", "enum": ["ct", "t"] },
-    "reason": { "type": "string", "enum": ["elimination", "time"] },
+    "reason": { "type": "string", "enum": ["elimination", "time", "explosion", "defused"] },
     "announcement": { "type": "string" },
     "is_halftime": { "type": "boolean" },
     "is_overtime": { "type": "boolean" },
