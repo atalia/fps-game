@@ -218,6 +218,8 @@ class TeamSelectUI {
   }
 
   show() {
+    document.exitPointerLock?.();
+
     if (this.element) {
       this.render();
       this.element.style.display = "flex";
