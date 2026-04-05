@@ -167,7 +167,7 @@ jobs:
         go-version: '1.22'
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v7
       with:
         version: v2.11.3
         working-directory: server
