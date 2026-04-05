@@ -16,7 +16,9 @@ func TestStatsHandler_UsesRoomManagerState(t *testing.T) {
 	roomManager := room.NewManager(10, 4)
 	r := roomManager.CreateRoom()
 
-	if !r.AddPlayer(player.NewPlayer()) || !r.AddPlayer(player.NewPlayer()) {
+	p1 := player.NewPlayer()
+	p2 := player.NewPlayer()
+	if !r.AddPlayer(p1) || !r.AddPlayer(p2) {
 		t.Fatal("failed to seed room")
 	}
 

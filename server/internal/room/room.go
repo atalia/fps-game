@@ -260,7 +260,7 @@ func (r *Room) JoinTeam(p *player.Player, requestedTeam string) (string, error) 
 	}
 
 	currentTeam := p.GetTeam()
-	targetTeam := requestedTeam
+	var targetTeam string
 	if team.NormalizeTeamID(requestedTeam) == "" && requestedTeam != team.AutoAssignTeam {
 		return "", fmt.Errorf("unknown team %q", requestedTeam)
 	}

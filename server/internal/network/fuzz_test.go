@@ -456,10 +456,6 @@ func BenchmarkHandleShoot(b *testing.B) {
 }
 
 // WebSocket 测试辅助
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
 
 // TestWebSocketWithRealServer 测试真实 WebSocket 路径（通过 httptest）
 // 注意：此测试验证真实的 ServeWS 路径，包括 origin 检查

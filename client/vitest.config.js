@@ -11,7 +11,8 @@ export default defineConfig({
       target: 75
     },
     globals: true,
-    // 暂时排除需要 Node.js fs 模块的测试
-    exclude: ['js/__tests__/handlers.test.js']
+    // 只运行项目测试，排除 node_modules 和需要 Node.js fs 模块的测试
+    include: ['tests/**/*.test.js', 'js/__tests__/**/*.test.js'],
+    exclude: ['node_modules/**', 'js/__tests__/handlers.test.js']
   }
 })

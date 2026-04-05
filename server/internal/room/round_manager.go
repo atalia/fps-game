@@ -625,11 +625,6 @@ func (rm *RoundManager) awardRoundMoney(winner string) {
 	}
 }
 
-func (rm *RoundManager) determineMVP(winner string) *RoundMVP {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.determineMVPLocked(winner)
-}
 
 func (rm *RoundManager) determineMVPLocked(winner string) *RoundMVP {
 	var bestID string

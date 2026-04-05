@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -25,7 +24,6 @@ import (
 
 func init() {
 	// 初始化随机数种子
-	rand.Seed(time.Now().UnixNano())
 }
 
 const (
@@ -50,7 +48,7 @@ const (
 
 var respawnDelay = 3 * time.Second
 
-var ctSpawnPoints = []player.Position{
+var _ = []player.Position{
 	{X: -40, Y: 0, Z: 0},
 	{X: -40, Y: 0, Z: 10},
 	{X: -40, Y: 0, Z: -10},
@@ -58,7 +56,7 @@ var ctSpawnPoints = []player.Position{
 	{X: -35, Y: 0, Z: -5},
 }
 
-var tSpawnPoints = []player.Position{
+var _ = []player.Position{
 	{X: 40, Y: 0, Z: 0},
 	{X: 40, Y: 0, Z: 10},
 	{X: 40, Y: 0, Z: -10},
@@ -1062,36 +1060,6 @@ func (c *Client) respawnPlayer(p *player.Player, respawnRoom *room.Room) {
 	}, "")
 }
 
-func (c *Client) resetRoomForNextRound(respawnRoom *room.Room) {
-	time.Sleep(respawnDelay)
-
-	for _, p := range respawnRoom.GetPlayers() {
-		teamID := team.NormalizeTeamID(p.GetTeam())
-		if teamID == "" {
-			continue
-		}
-
-		spawn := spawnPositionForTeam(teamID)
-		p.Respawn(spawn.X, spawn.Y, spawn.Z)
-		applyRespawnLoadout(p)
-		state := p.Snapshot()
-
-		c.hub.BroadcastToRoom(respawnRoom, "player_respawned", map[string]interface{}{
-			"player_id":  p.ID,
-			"position":   state.Position,
-			"health":     state.Health,
-			"armor":      state.Armor,
-			"has_helmet": state.HasHelmet,
-			"ammo":       state.Ammo,
-		}, "")
-		c.hub.BroadcastToRoom(respawnRoom, "weapon_changed", map[string]interface{}{
-			"player_id": p.ID,
-			"weapon":    state.Weapon,
-		}, "")
-	}
-
-	respawnRoom.ResetRoundState()
-}
 
 func (c *Client) handleReload() {
 	c.Player.Reload()
