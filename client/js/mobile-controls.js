@@ -51,6 +51,47 @@ class MobileControls {
                 display: block;
             }
             
+            /* 移动端隐藏不必要的HUD元素 */
+            @media (max-width: 768px) {
+                #player-list,
+                #chat-container,
+                #kill-feed,
+                #round-panel,
+                #weapon-hint,
+                #room-info {
+                    display: none !important;
+                }
+                
+                /* 简化HUD，只保留核心信息 */
+                .vitals-stack {
+                    bottom: 220px !important;
+                    left: 12px !important;
+                    right: auto !important;
+                    width: 150px !important;
+                }
+                
+                #ammo-display {
+                    bottom: 220px !important;
+                    right: 12px !important;
+                    left: auto !important;
+                    width: 100px !important;
+                }
+                
+                #minimap-shell {
+                    display: none !important;
+                }
+                
+                /* 标题居中显示 */
+                #game-title {
+                    position: fixed;
+                    top: 12px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    font-size: 16px;
+                    z-index: 100;
+                }
+            }
+            
             .mobile-joystick {
                 position: absolute;
                 bottom: 30px;
@@ -235,11 +276,15 @@ class MobileControls {
         this.setupButtons();
         
         // 游戏开始后显示控制
-        setTimeout(() => {
+        const checkGame = () => {
             if (window.game && window.game.started) {
                 controls.classList.add('active');
+                console.log('📱 Mobile controls activated');
+            } else {
+                setTimeout(checkGame, 500);
             }
-        }, 2000);
+        };
+        setTimeout(checkGame, 1000);
     }
     
     setupJoystick() {
