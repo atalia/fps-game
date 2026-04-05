@@ -34,12 +34,12 @@ func (m *Manager) AddBot(difficulty Difficulty, team string) *Bot {
 		log.Printf("[ERROR] AddBot: Manager is nil!")
 		return nil
 	}
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	log.Printf("[DEBUG] AddBot: current bots=%d, maxBots=%d", len(m.bots), m.maxBots)
-	
+
 	if len(m.bots) >= m.maxBots {
 		log.Printf("[DEBUG] AddBot: max bots reached")
 		return nil

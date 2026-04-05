@@ -401,7 +401,7 @@ func TestClient_handleShoot_DoesNotFireDuringFreezeTime(t *testing.T) {
 	// 立即射击，不等待（freeze 阶段很短）
 	ammoBefore := shooter.Player.GetAmmo()
 	t.Logf("Ammo before: %d", ammoBefore)
-	
+
 	shooter.handleShoot(mustMarshal(map[string]interface{}{
 		"pitch": 0.0,
 		"direction": map[string]float64{

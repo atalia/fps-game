@@ -630,7 +630,7 @@ class Renderer {
       bodyGroup.add(antennaBall);
     }
 
-    bodyGroup.position.set(position.x || 0, 0, position.z || 0);
+    bodyGroup.position.set(position.x || 0, position.y ?? 0, position.z || 0);
     bodyGroup.userData = {
       isBot,
       team: normalizedTeam,
@@ -657,7 +657,7 @@ class Renderer {
   updatePlayer(id, position, rotation) {
     const player = this.players.get(id);
     if (player) {
-      player.position.set(position.x, 0, position.z);
+      player.position.set(position.x, position.y ?? 0, position.z);
       player.rotation.y = rotation;
     }
   }

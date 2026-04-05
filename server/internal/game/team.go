@@ -18,11 +18,11 @@ type WeaponLoadout = team.WeaponLoadout
 
 // Re-export functions
 var (
-	NormalizeTeamID        = team.NormalizeTeamID
-	NewTeamManager        = team.NewTeamManager
-	NewTeamManagerForRoom = team.NewTeamManagerForRoom
-	GetWeaponLoadout      = team.GetWeaponLoadout
-	CanTeamUseWeapon      = team.CanTeamUseWeapon
-	DefaultWeaponForTeam  = team.DefaultWeaponForTeam
+	NormalizeTeamID         = team.NormalizeTeamID
+	NewTeamManager          = team.NewTeamManager
+	NewTeamManagerForRoom   = team.NewTeamManagerForRoom
+	GetWeaponLoadout        = team.GetWeaponLoadout
+	CanTeamUseWeapon        = team.CanTeamUseWeapon
+	DefaultWeaponForTeam    = team.DefaultWeaponForTeam
 	AvailableWeaponsForTeam = team.AvailableWeaponsForTeam
 )
