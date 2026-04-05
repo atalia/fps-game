@@ -133,6 +133,8 @@ jobs:
         else
           echo "Coverage report generated" >> $GITHUB_STEP_SUMMARY
         fi
+
+    - name: Check JavaScript syntax
       run: |
         npm install -g acorn
         for file in js/*.js; do

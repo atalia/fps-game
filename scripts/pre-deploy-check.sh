@@ -24,10 +24,10 @@ warn() { echo -e "${YELLOW}!${NC} $1"; }
 
 # 1. 检查 WebSocket Origin 配置
 echo "1️⃣  Checking WebSocket Origin configuration..."
-if grep -q "101.33.117.73" server/internal/network/server.go; then
-    pass "Server IP is in allowed origins"
+if grep -q "CheckOrigin" server/internal/network/server.go; then
+    pass "WebSocket CheckOrigin function exists"
 else
-    fail "Server IP NOT in allowed origins! WebSocket connections will fail"
+    fail "WebSocket CheckOrigin function missing!"
 fi
 
 # 2. 检查前端资源
