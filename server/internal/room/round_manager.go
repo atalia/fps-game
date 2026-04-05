@@ -795,7 +795,7 @@ func (rm *RoundManager) stopTimersLocked() {
 }
 
 func (r *Room) roundParticipants() []*player.Player {
-	players := make([]*player.Player, 0, len(r.Players)+len(r.GetBots()))
+	players := make([]*player.Player, 0, r.GetPlayerCount()+len(r.GetBots()))
 
 	for _, current := range r.GetPlayers() {
 		if team.NormalizeTeamID(current.GetTeam()) == "" {

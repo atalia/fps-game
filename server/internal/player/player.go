@@ -259,6 +259,13 @@ func (p *Player) Shoot() bool {
 	return true
 }
 
+// GetAmmo 线程安全地获取当前弹药
+func (p *Player) GetAmmo() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Ammo
+}
+
 // Reload 换弹
 func (p *Player) Reload() {
 	p.mu.Lock()

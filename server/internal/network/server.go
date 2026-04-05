@@ -828,7 +828,11 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 		return
 	}
 	if c.Room.RoundManager != nil && !c.Room.RoundManager.CanShoot() {
+		log.Printf("[DEBUG] handleShoot: blocked by freeze, phase=%s", c.Room.RoundManager.Snapshot().Phase)
 		return
+	}
+	if c.Room.RoundManager != nil {
+		log.Printf("[DEBUG] handleShoot: allowed, phase=%s", c.Room.RoundManager.Snapshot().Phase)
 	}
 
 	var req shootRequest

@@ -395,9 +395,13 @@ func TestClient_handleShoot_DoesNotFireDuringFreezeTime(t *testing.T) {
 	registerClient(hub, shooter)
 	registerClient(hub, observer)
 	r.RoundManager.MaybeStart()
-	waitForRoundPhase(t, r.RoundManager, room.RoundPhaseFreeze, 200*time.Millisecond)
+	state := waitForRoundPhase(t, r.RoundManager, room.RoundPhaseFreeze, 200*time.Millisecond)
+	t.Logf("Round phase: %s, canShoot: %v", state.Phase, r.RoundManager.CanShoot())
 
-	ammoBefore := shooter.Player.Ammo
+	// 立即射击，不等待（freeze 阶段很短）
+	ammoBefore := shooter.Player.GetAmmo()
+	t.Logf("Ammo before: %d", ammoBefore)
+	
 	shooter.handleShoot(mustMarshal(map[string]interface{}{
 		"pitch": 0.0,
 		"direction": map[string]float64{
@@ -407,8 +411,11 @@ func TestClient_handleShoot_DoesNotFireDuringFreezeTime(t *testing.T) {
 		},
 	}), roomManager)
 
-	if shooter.Player.Ammo != ammoBefore {
-		t.Fatalf("ammo changed during freeze: %d -> %d", ammoBefore, shooter.Player.Ammo)
+	ammoAfter := shooter.Player.GetAmmo()
+	t.Logf("Ammo after: %d", ammoAfter)
+
+	if ammoAfter != ammoBefore {
+		t.Fatalf("ammo changed during freeze: %d -> %d", ammoBefore, ammoAfter)
 	}
 	assertNoClientMessage(t, observer.Send, 50*time.Millisecond)
 }
