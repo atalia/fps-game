@@ -281,6 +281,61 @@ func TestBot_FindNearestEnemy_IncludesEnemyBots(t *testing.T) {
 	}
 }
 
+func TestBot_FindNearestEnemy_ExcludesSameTeam(t *testing.T) {
+	bot := NewBot("hunter", DifficultyNormal)
+	bot.Team = "red"
+	bot.Position = player.Position{X: 0, Y: 0, Z: 0}
+
+	room := NewMockRoom()
+
+	sameTeamPlayer := &player.Player{ID: "ally-player", Health: 100, MaxHealth: 100, Team: "red", Position: player.Position{X: 3, Y: 0, Z: 0}}
+	room.AddPlayer(sameTeamPlayer.ID, sameTeamPlayer)
+
+	sameTeamBot := NewBot("ally-bot", DifficultyNormal)
+	sameTeamBot.Team = "red"
+	sameTeamBot.Position = player.Position{X: 4, Y: 0, Z: 0}
+	room.AddBot(sameTeamBot)
+
+	enemyPlayer := &player.Player{ID: "enemy-player", Health: 100, MaxHealth: 100, Team: "blue", Position: player.Position{X: 12, Y: 0, Z: 0}}
+	room.AddPlayer(enemyPlayer.ID, enemyPlayer)
+
+	nearest := bot.findNearestEnemy(room, 100.0)
+
+	if nearest == nil {
+		t.Fatal("expected enemy player to be found")
+	}
+
+	if nearest.ID != enemyPlayer.ID {
+		t.Fatalf("expected enemy player %s, got %s", enemyPlayer.ID, nearest.ID)
+	}
+}
+
+func TestBot_FindNearestEnemy_IgnoresDeadEntities(t *testing.T) {
+	bot := NewBot("hunter", DifficultyNormal)
+	bot.Team = "red"
+	bot.Position = player.Position{X: 0, Y: 0, Z: 0}
+
+	room := NewMockRoom()
+
+	deadEnemy := &player.Player{ID: "dead-enemy", Health: 0, MaxHealth: 100, Team: "blue", Position: player.Position{X: 2, Y: 0, Z: 0}}
+	room.AddPlayer(deadEnemy.ID, deadEnemy)
+
+	liveEnemy := NewBot("live-enemy", DifficultyNormal)
+	liveEnemy.Team = "blue"
+	liveEnemy.Position = player.Position{X: 8, Y: 0, Z: 0}
+	room.AddBot(liveEnemy)
+
+	nearest := bot.findNearestEnemy(room, 100.0)
+
+	if nearest == nil {
+		t.Fatal("expected live enemy to be found")
+	}
+
+	if nearest.ID != liveEnemy.ID {
+		t.Fatalf("expected live enemy %s, got %s", liveEnemy.ID, nearest.ID)
+	}
+}
+
 func TestBot_ShootAtTarget(t *testing.T) {
 	bot := NewBot("shooter", DifficultyNightmare)
 	bot.Config.Accuracy = 1.0 // 100% 准度

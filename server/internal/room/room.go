@@ -34,7 +34,7 @@ type Room struct {
 	broadcastFn       func(string, interface{}, string)
 	// 火焰区域
 	FireZones []*FireZone
-	mu                sync.RWMutex
+	mu        sync.RWMutex
 }
 
 // FireZone 火焰区域

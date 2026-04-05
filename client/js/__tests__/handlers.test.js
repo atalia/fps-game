@@ -422,7 +422,7 @@ describe("消息处理链测试", () => {
       const data = {
         player_id: "new-player-789",
         name: "NewPlayer",
-        position: { x: 15, y: 0, z: 25 },
+        position: { x: 15, y: 1.25, z: 25 },
         health: 100,
         is_bot: false,
       };
@@ -431,7 +431,7 @@ describe("消息处理链测试", () => {
 
       expect(mockRenderer.addPlayer).toHaveBeenCalledWith(
         "new-player-789",
-        { x: 15, y: 0, z: 25 },
+        { x: 15, y: 1.25, z: 25 },
         { isBot: false, team: "" },
       );
       expect(mockUIManager.addKillFeed).toHaveBeenCalledWith(
@@ -444,7 +444,7 @@ describe("消息处理链测试", () => {
       const data = {
         player_id: "bot-123",
         name: "Bot",
-        position: { x: 0, y: 0, z: 0 },
+        position: { x: 0, y: 1.25, z: 0 },
         is_bot: true,
         difficulty: "hard",
       };
@@ -453,7 +453,7 @@ describe("消息处理链测试", () => {
 
       expect(mockRenderer.addPlayer).toHaveBeenCalledWith(
         "bot-123",
-        { x: 0, y: 0, z: 0 },
+        { x: 0, y: 1.25, z: 0 },
         { isBot: true, team: "" },
       );
       expect(mockAILabels.createLabel).toHaveBeenCalledWith(
@@ -470,13 +470,13 @@ describe("消息处理链测试", () => {
       const data = {
         player_id: "test-player-123",
         health: 100,
-        position: { x: 50, y: 0, z: 50 },
+        position: { x: 50, y: 1.25, z: 50 },
       };
 
       handlers.handlePlayerRespawned(data);
 
       expect(gameState.player.health).toBe(100);
-      expect(gameState.player.position).toEqual({ x: 50, y: 0, z: 50 });
+      expect(gameState.player.position).toEqual({ x: 50, y: 1.25, z: 50 });
       expect(mockUIManager.updateHealth).toHaveBeenCalledWith(100);
       expect(mockUIManager.hideDeathScreen).toHaveBeenCalled();
       expect(mockRenderer.updatePlayer).toHaveBeenCalled();
@@ -486,7 +486,7 @@ describe("消息处理链测试", () => {
       const data = {
         player_id: "other-player",
         health: 100,
-        position: { x: 20, y: 0, z: 30 },
+        position: { x: 20, y: 1.25, z: 30 },
       };
 
       handlers.handlePlayerRespawned(data);
@@ -495,7 +495,7 @@ describe("消息处理链测试", () => {
       expect(mockUIManager.hideDeathScreen).not.toHaveBeenCalled();
       expect(mockRenderer.updatePlayer).toHaveBeenCalledWith(
         "other-player",
-        { x: 20, y: 0, z: 30 },
+        { x: 20, y: 1.25, z: 30 },
         0,
       );
     });

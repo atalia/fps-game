@@ -1,32 +1,40 @@
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 linters:
-  enable:
-    - errcheck
-    - ineffassign
-    - staticcheck
-    - unused
-    - govet
-    - gosimple
-    - typecheck
-
-issues:
-  exclude-rules:
-    # 测试文件中忽略 errcheck
-    - path: _test\.go
-      linters:
-        - errcheck
-    # 忽略 defer os.Unsetenv 等错误检查
-    - linters:
-        - errcheck
-      text: "os\\.(Unsetenv|Remove|RemoveAll|Setenv)"
-    # 忽略 defer conn.Close() 错误检查
-    - linters:
-        - errcheck
-      text: "Close\\(\\)"
-
-linters-settings:
-  staticcheck:
-    checks: ["-SA1019", "-SA4000", "-SA5011", "-SA9003", "-QF1008"]
+  settings:
+    staticcheck:
+      checks:
+        - -QF1008
+        - -SA1019
+        - -SA4000
+        - -SA5011
+        - -SA9003
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
+      - linters:
+          - errcheck
+        text: os\.(Unsetenv|Remove|RemoveAll|Setenv)
+      - linters:
+          - errcheck
+        text: Close\(\)
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
