@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,10 +30,18 @@ func NewManager() *Manager {
 
 // AddBot 添加机器人
 func (m *Manager) AddBot(difficulty Difficulty, team string) *Bot {
+	if m == nil {
+		log.Printf("[ERROR] AddBot: Manager is nil!")
+		return nil
+	}
+	
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	log.Printf("[DEBUG] AddBot: current bots=%d, maxBots=%d", len(m.bots), m.maxBots)
+	
 	if len(m.bots) >= m.maxBots {
+		log.Printf("[DEBUG] AddBot: max bots reached")
 		return nil
 	}
 
@@ -45,6 +54,7 @@ func (m *Manager) AddBot(difficulty Difficulty, team string) *Bot {
 	}
 
 	m.bots[id] = bot
+	log.Printf("[DEBUG] AddBot: created bot %s, total bots=%d", id, len(m.bots))
 	return bot
 }
 

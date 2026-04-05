@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -115,6 +116,15 @@ func (r *Room) GetPlayerIDs() []string {
 
 // AddBot 添加机器人
 func (r *Room) AddBot(difficulty ai.Difficulty, team string) *ai.Bot {
+	if r == nil {
+		log.Printf("[ERROR] Room.AddBot: Room is nil!")
+		return nil
+	}
+	if r.BotManager == nil {
+		log.Printf("[ERROR] Room.AddBot: BotManager is nil!")
+		return nil
+	}
+	log.Printf("[DEBUG] Room.AddBot: calling BotManager.AddBot")
 	return r.BotManager.AddBot(difficulty, team)
 }
 
