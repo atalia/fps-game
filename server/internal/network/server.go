@@ -348,7 +348,8 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 			if len(allowedOrigins) == 0 {
 				// 获取服务器地址（从环境变量或 Host 头）
 				serverHost := os.Getenv("SERVER_HOST")
-				if serverHost == "" {
+				// 如果是通配地址或空，使用请求的 Host
+				if serverHost == "" || serverHost == "0.0.0.0" {
 					serverHost = r.Host
 				}
 				
@@ -359,7 +360,7 @@ func ServeWS(hub *Hub, roomManager *room.Manager, matcher interface{}, allowedOr
 					strings.HasPrefix(origin, "http://"+serverHost) ||
 					strings.HasPrefix(origin, "https://") ||
 					strings.HasPrefix(origin, "file:")
-				log.Printf("[WS] CheckOrigin result (dev mode): %v", result)
+				log.Printf("[WS] CheckOrigin result (dev mode): %v (serverHost=%s)", result, serverHost)
 				return result
 			}
 			// 生产环境：检查白名单
