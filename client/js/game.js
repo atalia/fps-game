@@ -5,6 +5,7 @@ class Game {
     this.player = null;
     this.players = new Map();
     this.running = false;
+    this.selfPlayerId = null;
     this.roomId = null;
     this.lastUpdate = Date.now();
     this.tickRate = 60;
@@ -39,6 +40,9 @@ class Game {
     );
     if (typeof PlayerController !== "undefined") {
       this.player = new PlayerController();
+      if (this.selfPlayerId) {
+        this.player.id = this.selfPlayerId;
+      }
     } else {
       console.error("PlayerController not defined");
       this.player = {
