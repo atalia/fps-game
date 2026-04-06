@@ -53,4 +53,31 @@ describe("Team selection interaction", () => {
 
     player.destroy();
   });
+
+  it("hides the team selection UI immediately after choosing a side", () => {
+    const dom = new JSDOM(`<!doctype html><body><div id="root"></div></body>`);
+    const { window } = dom;
+    const { document } = window;
+
+    document.exitPointerLock = vi.fn();
+
+    loadTeamClasses(window, document);
+
+    const teamSystem = {
+      getAllTeams: () => [
+        { id: "ct", name: "Counter-Terrorists", short_name: "CT", color: "#4aa3ff", player_count: 0, max_players: 5, score: 0 },
+        { id: "t", name: "Terrorists", short_name: "T", color: "#ff7a45", player_count: 0, max_players: 5, score: 0 },
+      ],
+      getAvailableWeapons: () => ["usp", "m4a1"],
+    };
+
+    const ui = new window.TeamSelectUI(document.getElementById("root"), teamSystem);
+    ui.onSelect = vi.fn();
+    ui.show();
+
+    const teamCard = ui.element.querySelector('.team-card[data-id="ct"]');
+    teamCard.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+    expect(ui.element.style.display).toBe("none");
+  });
 });
