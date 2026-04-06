@@ -239,6 +239,9 @@ class TeamSelectUI {
             z-index: 400;
             padding: 24px;
         `;
+    this.element.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
 
     this.render();
     this.container.appendChild(this.element);
