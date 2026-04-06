@@ -1,5 +1,9 @@
 .PHONY: all build run test cover lint fmt clean docker-build docker-up docker-down dev prod pre-deploy ci
 
+VERSION ?= $(shell git describe --tags --always --dirty)
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD)
+LDFLAGS = -X 'main.buildVersion=$(VERSION)' -X 'main.buildCommit=$(GIT_COMMIT)'
+
 # ================================
 # 本地开发
 # ================================
@@ -7,10 +11,10 @@
 all: build
 
 build:
-	cd server && go build -o bin/fps-server ./cmd/server
+	cd server && go build -ldflags "$(LDFLAGS)" -o bin/fps-server ./cmd/server
 
 run:
-	cd server && CLIENT_PATH=../client go run ./cmd/server
+	cd server && CLIENT_PATH=../client go run -ldflags "$(LDFLAGS)" ./cmd/server
 
 test:
 	cd server && go test -v ./...
