@@ -623,9 +623,9 @@ async function startGame(playerId) {
 
   // 初始化游戏
   window.game = new Game();
+  window.game.selfPlayerId = playerId;
 
-  // 【重要】先设置玩家 ID，防止消息处理时找不到自己
-  // Game 构造函数会创建默认 player 对象
+  // 【重要】尽早记录玩家 ID，防止消息处理时找不到自己
   if (window.game.player) {
     window.game.player.id = playerId;
     console.log("[MAIN] Player ID set early:", playerId);
@@ -652,6 +652,10 @@ async function startGame(playerId) {
   }
 
   await window.game.init();
+
+  if (window.game?.player) {
+    window.game.player.id = playerId;
+  }
 
   if (window.__pendingSelfState && window.game?.player) {
     window.game.player.team = window.__pendingSelfState.team || "";

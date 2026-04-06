@@ -1074,6 +1074,45 @@ func TestEdge_InvalidRoomID(t *testing.T) {
 	}
 }
 
+func TestMultiplayer_JoinRoom_IncludesExistingPlayersInRoomJoined(t *testing.T) {
+	ts := NewTestServer(t)
+
+	connA, playerA, roomID := CreateRoom(t, ts)
+	defer connA.Close()
+
+	connB, playerB := Connect(t, ts)
+	defer connB.Close()
+	Send(t, connB, "join_room", map[string]string{"room_id": roomID, "name": "player"})
+
+	msg := RecvType(t, connB, "room_joined")
+	var roomData struct {
+		RoomID  string `json:"room_id"`
+		Players []struct {
+			ID string `json:"id"`
+		} `json:"players"`
+	}
+	if err := json.Unmarshal(msg.Data, &roomData); err != nil {
+		t.Fatalf("Failed to parse room_joined: %v", err)
+	}
+
+	if roomData.RoomID != roomID {
+		t.Fatalf("room_id = %s, want %s", roomData.RoomID, roomID)
+	}
+	if len(roomData.Players) != 2 {
+		t.Fatalf("players count = %d, want 2", len(roomData.Players))
+	}
+
+	seen := map[string]bool{}
+	for _, p := range roomData.Players {
+		seen[p.ID] = true
+	}
+	if !seen[playerA] || !seen[playerB] {
+		t.Fatalf("room_joined players = %#v, want both %s and %s", seen, playerA, playerB)
+	}
+
+	_ = RecvType(t, connA, "player_joined")
+}
+
 // TestEdge_EmptyChatMessage 空聊天消息测试
 func TestEdge_EmptyChatMessage(t *testing.T) {
 	ts := NewTestServer(t)
