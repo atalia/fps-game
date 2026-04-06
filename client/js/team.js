@@ -310,6 +310,7 @@ class TeamSelectUI {
     this.element.querySelectorAll(".team-card").forEach((card) => {
       card.addEventListener("click", () => {
         const teamId = card.dataset.id;
+        this.hide();
         if (this.onSelect) {
           this.onSelect(teamId);
         }
@@ -327,6 +328,7 @@ class TeamSelectUI {
     });
 
     this.element.querySelector("#autoAssign")?.addEventListener("click", () => {
+      this.hide();
       if (this.onSelect) {
         this.onSelect("auto");
       }
