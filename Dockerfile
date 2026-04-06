@@ -13,8 +13,13 @@ RUN go mod download
 # 复制源代码
 COPY server/ ./
 
+ARG BUILD_VERSION=dev
+ARG BUILD_COMMIT=unknown
+
 # 构建
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o fps-server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-X main.buildVersion=${BUILD_VERSION} -X main.buildCommit=${BUILD_COMMIT}" \
+    -o fps-server ./cmd/server
 
 # 运行阶段
 FROM alpine:latest

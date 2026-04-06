@@ -17,6 +17,18 @@ import (
 	"github.com/gorilla/mux"
 )
 
+var (
+	buildVersion = "dev"
+	buildCommit  = "unknown"
+)
+
+func formattedBuildVersion() string {
+	if buildCommit == "" || buildCommit == "unknown" {
+		return buildVersion
+	}
+	return fmt.Sprintf("%s+%s", buildVersion, buildCommit)
+}
+
 func main() {
 	// 加载配置
 	cfg := config.Load()
@@ -71,7 +83,8 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().Unix(),
-		"version":   "1.0.0",
+		"version":   formattedBuildVersion(),
+		"commit":    buildCommit,
 	}); err != nil {
 		log.Printf("Error encoding health response: %v", err)
 	}

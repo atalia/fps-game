@@ -22,10 +22,13 @@ jobs:
     - name: Build Binary
       run: |
         cd server
-        GOOS=linux GOARCH=amd64 go build -o bin/fps-game-linux-amd64 ./cmd/server
-        GOOS=darwin GOARCH=amd64 go build -o bin/fps-game-darwin-amd64 ./cmd/server
-        GOOS=darwin GOARCH=arm64 go build -o bin/fps-game-darwin-arm64 ./cmd/server
-        GOOS=windows GOARCH=amd64 go build -o bin/fps-game-windows-amd64.exe ./cmd/server
+        VERSION="${GITHUB_REF_NAME}"
+        COMMIT="${GITHUB_SHA::7}"
+        LDFLAGS="-X main.buildVersion=${VERSION} -X main.buildCommit=${COMMIT}"
+        GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o bin/fps-game-linux-amd64 ./cmd/server
+        GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o bin/fps-game-darwin-amd64 ./cmd/server
+        GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o bin/fps-game-darwin-arm64 ./cmd/server
+        GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o bin/fps-game-windows-amd64.exe ./cmd/server
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
