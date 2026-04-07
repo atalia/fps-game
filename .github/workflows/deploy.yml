@@ -70,16 +70,7 @@ jobs:
           git reset --hard origin/main
           export BUILD_VERSION="$(git describe --tags --always --dirty)"
           export BUILD_COMMIT="$(git rev-parse --short HEAD)"
-          python3 - <<'PY2'
-from pathlib import Path
-import os
-import re
-build_commit = os.environ['BUILD_COMMIT']
-path = Path('client/index.html')
-text = path.read_text()
-text = re.sub(r'((?:src|href)="/(?:js|css)/[^"?]+)(?:\?v=[^"]*)?"', rf'\1?v={build_commit}"', text)
-path.write_text(text)
-PY2
+          python3 -c "from pathlib import Path; import os, re; path = Path('client/index.html'); text = path.read_text(); text = re.sub(r'((?:src|href)=\"/(?:js|css)/[^\"?]+)(?:\\?v=[^\"]*)?\"', rf'\\1?v={os.environ[\"BUILD_COMMIT\"]}\"', text); path.write_text(text)"
           docker compose --profile production build --no-cache game-server
           docker compose --profile production up -d
           sleep 5
