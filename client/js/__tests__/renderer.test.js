@@ -93,8 +93,12 @@ function createThreeMock() {
   };
 }
 
-function loadRenderer() {
-  const context = { window: {}, console, THREE: createThreeMock() };
+function loadRenderer(threeOverride) {
+  const context = {
+    window: {},
+    console,
+    THREE: threeOverride || createThreeMock(),
+  };
   const fn = new Function("window", "THREE", "console", rendererCode);
   fn(context.window, context.THREE, context.console);
   return context.window.Renderer;
@@ -129,5 +133,20 @@ describe("Renderer remote player positioning", () => {
     expect(remote.position.y).toBe(1.25);
     expect(remote.position.z).toBe(30);
     expect(remote.rotation.y).toBe(Math.PI / 2);
+  });
+
+  it("falls back when CapsuleGeometry is unavailable", () => {
+    const three = createThreeMock();
+    delete three.CapsuleGeometry;
+    const FallbackRenderer = loadRenderer(three);
+    const renderer = Object.create(FallbackRenderer.prototype);
+    renderer.scene = { add() {} };
+    renderer.players = new Map();
+
+    renderer.addPlayer("remote-3", { x: 5, y: 1.25, z: 6 }, false);
+
+    const remote = renderer.players.get("remote-3");
+    expect(remote).toBeTruthy();
+    expect(remote.position.y).toBe(1.25);
   });
 });

@@ -21,8 +21,21 @@ class VoiceSystem {
     }
 
     async init() {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        const getUserMedia = navigator?.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+
+        if (!AudioContextCtor) {
+            console.warn('[VOICE] AudioContext unavailable, voice disabled');
+            return false;
+        }
+
+        if (!getUserMedia) {
+            console.warn('[VOICE] getUserMedia unavailable (likely insecure context or unsupported browser), voice disabled');
+            return false;
+        }
+
         try {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioContext = new AudioContextCtor();
             
             const constraints = {
                 audio: {
@@ -32,7 +45,7 @@ class VoiceSystem {
                 }
             };
 
-            this.inputStream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.inputStream = await getUserMedia(constraints);
             
             const source = this.audioContext.createMediaStreamSource(this.inputStream);
             this.analyser = this.audioContext.createAnalyser();
