@@ -162,8 +162,8 @@ class PlayerController {
     const sin = Math.sin(this.rotation);
     const cos = Math.cos(this.rotation);
 
-    this.position.x += (moveX * cos - moveZ * sin) * this.speed * dt;
-    this.position.z += (moveX * sin + moveZ * cos) * this.speed * dt;
+    this.position.x += (moveX * cos + moveZ * sin) * this.speed * dt;
+    this.position.z += (-moveX * sin + moveZ * cos) * this.speed * dt;
 
     // 重力
     if (!this.isGrounded) {
