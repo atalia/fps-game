@@ -137,9 +137,9 @@ func (c *Collision) CheckBoundary(x, z float64) (float64, float64) {
 
 // CheckHit 命中检测 (射线检测)
 func (c *Collision) CheckHit(shooterPos, targetPos [3]float64, shooterRot float64, maxDistance float64) bool {
-	// 射线方向
-	dirX := math.Sin(shooterRot)
-	dirZ := math.Cos(shooterRot)
+	// 射线方向（与客户端视角/射击方向保持一致）
+	dirX := -math.Sin(shooterRot)
+	dirZ := -math.Cos(shooterRot)
 
 	// 目标相对位置
 	dx := targetPos[0] - shooterPos[0]
