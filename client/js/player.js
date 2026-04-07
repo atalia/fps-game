@@ -84,7 +84,12 @@ class PlayerController {
     // 鼠标锁定
     this._eventHandlers.click = () => {
       if (!this.isLocked) {
-        document.body.requestPointerLock();
+        const lockResult = document.body.requestPointerLock?.();
+        if (lockResult && typeof lockResult.catch === "function") {
+          lockResult.catch((err) => {
+            console.warn("[PLAYER] requestPointerLock failed:", err);
+          });
+        }
       } else {
         this.shoot();
       }
