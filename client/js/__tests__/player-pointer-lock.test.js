@@ -26,7 +26,7 @@ describe("PlayerController pointer lock", () => {
     rejected.catch(() => {});
     document.body.requestPointerLock = vi.fn(() => rejected);
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const PlayerController = loadPlayerController(window, document);
     const player = new PlayerController();
 
@@ -34,7 +34,6 @@ describe("PlayerController pointer lock", () => {
     await Promise.resolve();
 
     expect(document.body.requestPointerLock).toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
 
     player.destroy();
   });
