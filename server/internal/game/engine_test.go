@@ -47,7 +47,7 @@ func TestCollision_CheckHit(t *testing.T) {
 			name:        "direct hit",
 			shooterPos:  [3]float64{0, 0, 0},
 			shooterRot:  0,
-			targetPos:   [3]float64{0, 0, 10},
+			targetPos:   [3]float64{0, 0, -10},
 			maxDistance: 100,
 			want:        true,
 		},
@@ -55,7 +55,7 @@ func TestCollision_CheckHit(t *testing.T) {
 			name:        "miss - too far",
 			shooterPos:  [3]float64{0, 0, 0},
 			shooterRot:  0,
-			targetPos:   [3]float64{0, 0, 150},
+			targetPos:   [3]float64{0, 0, -150},
 			maxDistance: 100,
 			want:        false,
 		},
@@ -71,7 +71,7 @@ func TestCollision_CheckHit(t *testing.T) {
 			name:        "hit - slight angle",
 			shooterPos:  [3]float64{0, 0, 0},
 			shooterRot:  0,
-			targetPos:   [3]float64{1, 0, 10},
+			targetPos:   [3]float64{1, 0, -10},
 			maxDistance: 100,
 			want:        true,
 		},
@@ -174,5 +174,22 @@ func TestEngine_GetActiveRoomCount(t *testing.T) {
 	// 初始应该为 0
 	if count := engine.GetActiveRoomCount(); count != 0 {
 		t.Errorf("Expected 0 active rooms, got %d", count)
+	}
+}
+func TestCollision_CheckHit_UsesCurrentForwardBasis(t *testing.T) {
+	c := NewCollision(100)
+	shooter := [3]float64{0, 0, 0}
+
+	if !c.CheckHit(shooter, [3]float64{0, 0, -5}, 0, 10) {
+		t.Fatal("expected target in front at rotation 0 to be hit")
+	}
+	if c.CheckHit(shooter, [3]float64{0, 0, 5}, 0, 10) {
+		t.Fatal("expected target behind at rotation 0 to miss")
+	}
+	if !c.CheckHit(shooter, [3]float64{-5, 0, 0}, 1.57079632679, 10) {
+		t.Fatal("expected target on -X at rotation PI/2 to be hit")
+	}
+	if c.CheckHit(shooter, [3]float64{5, 0, 0}, 1.57079632679, 10) {
+		t.Fatal("expected target on +X at rotation PI/2 to miss")
 	}
 }
