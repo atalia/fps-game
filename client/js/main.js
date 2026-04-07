@@ -782,9 +782,11 @@ async function startGame(playerId) {
     );
   }
 
+  const needsTeamSelection = !window.game?.player?.team;
+
   // 隐藏大厅
   if (window.lobby) {
-    window.lobby.hide();
+    window.lobby.hide(!needsTeamSelection);
   }
 
   // 显示退出按钮

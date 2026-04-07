@@ -309,12 +309,19 @@ class Lobby {
         this.quickJoin();
     }
 
-    hide() {
+    hide(lockPointer = true) {
         this.container.classList.add('hidden');
         this.visible = false;
 
         // 锁定鼠标
-        document.body.requestPointerLock();
+        if (lockPointer) {
+            const lockResult = document.body.requestPointerLock?.();
+            if (lockResult && typeof lockResult.catch === 'function') {
+                lockResult.catch((err) => {
+                    console.warn('[LOBBY] requestPointerLock failed:', err);
+                });
+            }
+        }
     }
 
     show() {
