@@ -562,8 +562,11 @@ class Renderer {
 
     // 大头小身比例（卡通风格）
     // 躯干
-    const torsoGeometry = new THREE.CapsuleGeometry(0.35, 0.6, 8, 16);
-    const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+    const TorsoGeometry =
+      typeof THREE.CapsuleGeometry === "function"
+        ? new THREE.CapsuleGeometry(0.35, 0.6, 8, 16)
+        : new THREE.CylinderGeometry(0.35, 0.38, 1.1, 12);
+    const torso = new THREE.Mesh(TorsoGeometry, bodyMaterial);
     torso.position.y = 0.7;
     torso.castShadow = true;
     bodyGroup.add(torso);
