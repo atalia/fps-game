@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +28,31 @@ func formattedBuildVersion() string {
 		return buildVersion
 	}
 	return fmt.Sprintf("%s+%s", buildVersion, buildCommit)
+}
+
+func shouldDisableStaticCache(path string) bool {
+	if path == "/" || path == "/index.html" {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".css", ".html":
+		return true
+	default:
+		return false
+	}
+}
+
+func withStaticAssetHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if shouldDisableStaticCache(r.URL.Path) {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			w.Header().Set("X-Build-Commit", buildCommit)
+			w.Header().Set("X-Build-Version", formattedBuildVersion())
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -61,7 +87,7 @@ func main() {
 	})
 
 	// 静态文件服务
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir(cfg.ClientPath)))
+	r.PathPrefix("/").Handler(withStaticAssetHeaders(http.FileServer(http.Dir(cfg.ClientPath))))
 
 	// 中间件
 	handler := withCORS(cfg.CORS.AllowedOrigins, r)
