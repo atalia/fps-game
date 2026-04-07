@@ -85,18 +85,37 @@ class UIManager {
 
     this.elements.playersContainer.innerHTML = "";
 
+    if (typeof window !== "undefined") {
+      window.__playerListDebug = window.__playerListDebug || [];
+      window.__playerListDebug.push({
+        at: Date.now(),
+        selfPlayerId: this.selfPlayerId,
+        players: (players || []).map((player) => ({
+          id: player.id,
+          name: player.name,
+          team: player.team,
+          is_bot: !!player.is_bot,
+        })),
+      });
+      if (window.__playerListDebug.length > 50) {
+        window.__playerListDebug.shift();
+      }
+    }
+
     players.forEach((player) => {
       const div = document.createElement("div");
       div.className = "player-item";
 
-      if (player.id === this.selfPlayerId) {
+      const isSelf = player.id === this.selfPlayerId;
+      if (isSelf) {
         div.classList.add("self");
       }
       if (player.is_bot) {
         div.classList.add("bot");
       }
 
-      const name = player.name || this.shortId(player.id);
+      const shortId = this.shortId(player.id);
+      const name = isSelf ? `${shortId} (you)` : player.name || shortId;
       const kills = player.kills || 0;
       const health = player.health || 100;
       const team = this.formatTeam(player.team);
