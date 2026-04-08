@@ -55,6 +55,16 @@ describe('PlayerController', () => {
     expect(result.position.z).toBeLessThan(0)
   })
 
+  it('moves forward in the camera facing direction after turning right', () => {
+    player.rotation = -Math.PI / 2
+    player.keys['KeyW'] = true
+
+    const result = player.update()
+
+    expect(result.position.x).toBeGreaterThan(0)
+    expect(Math.abs(result.position.z)).toBeLessThan(0.001)
+  })
+
   it('jumps and becomes airborne when space is pressed on ground', () => {
     player.keys['Space'] = true
     player.update()
