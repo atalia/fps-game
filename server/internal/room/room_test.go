@@ -513,3 +513,44 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+func TestRoom_GetPlayerList_WithBots(t *testing.T) {
+	r := NewRoom(10)
+	p1 := player.NewPlayer()
+	p1.Name = "Player1"
+
+	r.AddPlayer(p1)
+
+	// 添加机器人
+	bot := r.AddBot(ai.DifficultyNormal, "red")
+	if bot == nil {
+		t.Fatal("Should be able to add bot")
+	}
+
+	list := r.GetPlayerList()
+	if len(list) != 2 {
+		t.Errorf("PlayerList length = %d, want 2 (1 player + 1 bot)", len(list))
+	}
+
+	// 检查列表包含玩家和 bot
+	var foundPlayer, foundBot bool
+	for _, item := range list {
+		isBot, _ := item["is_bot"].(bool)
+		name, _ := item["name"].(string)
+		t.Logf("Item: is_bot=%v, name=%s", isBot, name)
+
+		if !isBot && name == "Player1" {
+			foundPlayer = true
+		}
+		if isBot && name != "" {
+			foundBot = true
+		}
+	}
+
+	if !foundPlayer {
+		t.Error("PlayerList should contain real player")
+	}
+	if !foundBot {
+		t.Error("PlayerList should contain bot with is_bot=true")
+	}
+}

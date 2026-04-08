@@ -246,15 +246,29 @@ func (r *Room) UpdateBots(delta time.Duration) {
 	}
 }
 
-// GetPlayerList 获取玩家列表
+// GetPlayerList 获取玩家列表（包含真实玩家和机器人）
 func (r *Room) GetPlayerList() []map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	list := make([]map[string]interface{}, 0, len(r.Players))
+	bots := r.GetBots()
+	list := make([]map[string]interface{}, 0, len(r.Players)+len(bots))
+
+	// 添加真实玩家
 	for _, p := range r.Players {
-		list = append(list, p.ToMap())
+		playerMap := p.ToMap()
+		playerMap["is_bot"] = false
+		list = append(list, playerMap)
 	}
+
+	// 添加机器人
+	for _, bot := range bots {
+		botMap := bot.Player.ToMap()
+		botMap["is_bot"] = true
+		botMap["name"] = bot.Name // 确保 bot 使用正确的名字
+		list = append(list, botMap)
+	}
+
 	return list
 }
 
