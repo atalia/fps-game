@@ -68,6 +68,22 @@ func main() {
 	gameEngine.Start()
 	defer gameEngine.Stop()
 
+	// 房间 tick：驱动 bot AI 和房间状态更新
+	go func() {
+		tickRate := cfg.Game.TickRate
+		if tickRate <= 0 {
+			tickRate = 20
+		}
+		ticker := time.NewTicker(time.Second / time.Duration(tickRate))
+		defer ticker.Stop()
+
+		for range ticker.C {
+			for _, room := range roomManager.GetAllRooms() {
+				room.Update()
+			}
+		}
+	}()
+
 	// 初始化 WebSocket Hub
 	hub := network.NewHub()
 	go hub.Run()

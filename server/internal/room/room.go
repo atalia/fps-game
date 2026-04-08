@@ -200,11 +200,49 @@ func (r *Room) IsActive() bool {
 // Update 更新房间状态
 func (r *Room) Update() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// 更新所有玩家状态
 	for _, p := range r.Players {
 		p.Update()
+	}
+	r.mu.Unlock()
+
+	r.UpdateBots(200 * time.Millisecond)
+}
+
+// UpdateBots 驱动 bot AI 并在 bot 位置变化时广播现有的 player_moved 事件。
+func (r *Room) UpdateBots(delta time.Duration) {
+	if r.BotManager == nil {
+		return
+	}
+
+	before := make(map[string]player.Position)
+	for _, bot := range r.GetBots() {
+		if bot == nil {
+			continue
+		}
+		before[bot.ID] = bot.Position
+	}
+
+	r.BotManager.UpdateAll(r, delta.Seconds())
+
+	for _, bot := range r.GetBots() {
+		if bot == nil {
+			continue
+		}
+		prev, ok := before[bot.ID]
+		if !ok {
+			continue
+		}
+		if prev == bot.Position {
+			continue
+		}
+
+		r.Broadcast("player_moved", map[string]interface{}{
+			"player_id": bot.ID,
+			"position":  bot.Position,
+			"rotation":  bot.Rotation,
+			"team":      bot.Team,
+			"is_bot":    true,
+		}, "")
 	}
 }
 
