@@ -577,6 +577,35 @@ function setupNetworkHandlers() {
     window.messageHandlers?.handleMatchEnded?.(data);
   });
 
+  // C4 进度消息
+  window.network.on("c4_plant_start", (data) => {
+    window.messageHandlers?.handleC4PlantStart?.(data);
+  });
+  window.network.on("c4_plant_progress", (data) => {
+    window.messageHandlers?.handleC4PlantProgress?.(data);
+  });
+  window.network.on("c4_plant_cancel", (data) => {
+    window.messageHandlers?.handleC4PlantCancel?.(data);
+  });
+  window.network.on("c4_planted", (data) => {
+    window.messageHandlers?.handleC4Planted?.(data);
+  });
+  window.network.on("c4_defuse_start", (data) => {
+    window.messageHandlers?.handleC4DefuseStart?.(data);
+  });
+  window.network.on("c4_defuse_progress", (data) => {
+    window.messageHandlers?.handleC4DefuseProgress?.(data);
+  });
+  window.network.on("c4_defuse_cancel", (data) => {
+    window.messageHandlers?.handleC4DefuseCancel?.(data);
+  });
+  window.network.on("c4_defused", (data) => {
+    window.messageHandlers?.handleC4Defused?.(data);
+  });
+  window.network.on("c4_exploded", (data) => {
+    window.messageHandlers?.handleC4Exploded?.(data);
+  });
+
   // 聊天消息
   window.network.on("chat", (data) => {
     console.log("[MAIN] Received chat message:", data);
