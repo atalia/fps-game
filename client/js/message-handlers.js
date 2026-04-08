@@ -344,6 +344,77 @@ function createMessageHandlers(deps) {
         uiManager.updateArmor(data.armor, data.has_helmet);
       }
     },
+
+    // C4 进度处理
+    handleC4PlantStart(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.showC4Progress?.('plant');
+      }
+      uiManager.showMessage?.(`${data.player_id} 正在安装 C4...`, 'warning');
+    },
+
+    handleC4PlantProgress(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.updateC4Progress?.(data.progress);
+      }
+    },
+
+    handleC4PlantCancel(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.hideC4Progress?.();
+      }
+      if (data.reason !== 'cancelled') {
+        uiManager.showMessage?.(`C4 安装被打断 (${data.reason})`, 'error');
+      }
+    },
+
+    handleC4Planted(data) {
+      uiManager.hideC4Progress?.();
+      uiManager.showMessage?.('C4 已安装! 40秒后爆炸!', 'danger');
+      uiManager.showC4Timer?.(40);
+      if (audioManager) {
+        audioManager.playC4Planted?.();
+      }
+    },
+
+    handleC4DefuseStart(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.showC4Progress?.('defuse', data.has_kit);
+      }
+      uiManager.showMessage?.(`${data.player_id} 正在拆除 C4...`, 'info');
+    },
+
+    handleC4DefuseProgress(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.updateC4Progress?.(data.progress);
+      }
+    },
+
+    handleC4DefuseCancel(data) {
+      if (data.player_id === game?.player?.id) {
+        uiManager.hideC4Progress?.();
+      }
+      if (data.reason !== 'cancelled') {
+        uiManager.showMessage?.(`C4 拆除被打断 (${data.reason})`, 'error');
+      }
+    },
+
+    handleC4Defused(data) {
+      uiManager.hideC4Progress?.();
+      uiManager.hideC4Timer?.();
+      uiManager.showMessage?.('C4 已被拆除!', 'success');
+      if (audioManager) {
+        audioManager.playC4Defused?.();
+      }
+    },
+
+    handleC4Exploded(data) {
+      uiManager.hideC4Timer?.();
+      uiManager.showMessage?.('C4 爆炸!', 'danger');
+      if (audioManager) {
+        audioManager.playExplosion?.();
+      }
+    },
   };
 }
 

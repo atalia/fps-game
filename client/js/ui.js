@@ -1336,6 +1336,149 @@ class UIManager {
         return "WARMUP";
     }
   }
+
+  // C4 Progress UI
+  showC4Progress(type, hasKit = false) {
+    let container = document.getElementById('c4-progress-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'c4-progress-container';
+      container.style.cssText = `
+        position: fixed;
+        bottom: 150px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 200;
+      `;
+      document.body.appendChild(container);
+    }
+
+    const action = type === 'plant' ? '安装' : '拆除';
+    const color = type === 'plant' ? '#f44336' : '#4CAF50';
+    const kitHint = type === 'defuse' && hasKit ? '<div style="color: #4CAF50; font-size: 12px; margin-top: 5px;">🔧 拆弹器加速 (2.5s)</div>' : '';
+
+    container.innerHTML = `
+      <div style="
+        background: rgba(0, 0, 0, 0.85);
+        padding: 15px 30px;
+        border-radius: 10px;
+        border: 2px solid ${color};
+        min-width: 250px;
+      ">
+        <div style="color: white; margin-bottom: 10px; font-size: 14px;">
+          ⏳ 正在${action}C4...
+        </div>
+        <div style="
+          width: 200px;
+          height: 12px;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 6px;
+          overflow: hidden;
+          margin: 0 auto;
+        ">
+          <div id="c4-progress-fill" style="
+            width: 0%;
+            height: 100%;
+            background: ${color};
+            transition: width 0.05s linear;
+          "></div>
+        </div>
+        ${kitHint}
+      </div>
+    `;
+    container.style.display = 'block';
+  }
+
+  updateC4Progress(progress) {
+    const fill = document.getElementById('c4-progress-fill');
+    if (fill) {
+      fill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+    }
+  }
+
+  hideC4Progress() {
+    const container = document.getElementById('c4-progress-container');
+    if (container) {
+      container.style.display = 'none';
+    }
+  }
+
+  showC4Timer(seconds) {
+    let timer = document.getElementById('c4-timer-display');
+    if (!timer) {
+      timer = document.createElement('div');
+      timer.id = 'c4-timer-display';
+      timer.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 150;
+        pointer-events: none;
+      `;
+      document.body.appendChild(timer);
+    }
+
+    this.c4TimerSeconds = seconds;
+    this.updateC4TimerDisplay();
+
+    if (!this.c4TimerInterval) {
+      this.c4TimerInterval = setInterval(() => {
+        if (this.c4TimerSeconds > 0) {
+          this.c4TimerSeconds--;
+          this.updateC4TimerDisplay();
+        } else {
+          this.hideC4Timer();
+        }
+      }, 1000);
+    }
+  }
+
+  updateC4TimerDisplay() {
+    const timer = document.getElementById('c4-timer-display');
+    if (!timer) return;
+
+    const isCritical = this.c4TimerSeconds <= 10;
+    const color = isCritical ? '#f44336' : '#ffc107';
+
+    timer.innerHTML = `
+      <div style="
+        background: rgba(0, 0, 0, 0.85);
+        padding: 20px 40px;
+        border-radius: 10px;
+        border: 3px solid ${color};
+        ${isCritical ? 'animation: c4Pulse 0.5s infinite;' : ''}
+      ">
+        <div style="font-size: 60px; font-weight: bold; color: ${color};">
+          💣 ${this.c4TimerSeconds}s
+        </div>
+      </div>
+    `;
+    timer.style.display = 'block';
+  }
+
+  hideC4Timer() {
+    const timer = document.getElementById('c4-timer-display');
+    if (timer) {
+      timer.style.display = 'none';
+    }
+    if (this.c4TimerInterval) {
+      clearInterval(this.c4TimerInterval);
+      this.c4TimerInterval = null;
+    }
+  }
+}
+
+// Add C4 pulse animation
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes c4Pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.05); }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 window.UIManager = UIManager;
