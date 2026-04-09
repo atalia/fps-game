@@ -130,6 +130,25 @@ const schemas = {
     is_bot: z.boolean().optional(),
   }),
 
+  armor_updated: z.object({
+    player_id: z.string(),
+    armor: z.number().int().min(0).max(100),
+    has_helmet: z.boolean().optional(),
+  }),
+
+  player_respawned: z.object({
+    player_id: z.string(),
+    position: z.object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+    health: z.number().int().min(0).max(100),
+    armor: z.number().int().min(0).max(100).optional(),
+    has_helmet: z.boolean().optional(),
+    ammo: z.number().int().min(0).optional(),
+  }),
+
   weapon_changed: z.object({
     player_id: z.string(),
     weapon: z.enum(weaponIds),
@@ -201,6 +220,45 @@ const schemas = {
     round_number: z.number().int().min(1),
     is_overtime: z.boolean().optional(),
     teams: z.array(z.object({ id: z.enum(["ct", "t"]) })).optional(),
+  }),
+
+  c4_planted: z.object({
+    player_id: z.string(),
+    position: z.object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+    team: z.enum(["ct", "t"]).optional(),
+    explosion_in: z.number().int().min(0).optional(),
+  }),
+
+  c4_exploded: z.object({
+    position: z.object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+  }),
+
+  c4_defused: z.object({
+    player_id: z.string(),
+    team: z.enum(["ct", "t"]).optional(),
+  }),
+
+  grenade_thrown: z.object({
+    player_id: z.string(),
+    type: z.enum(["flashbang", "smoke", "he", "molotov", "decoy"]),
+    position: z.object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+    velocity: z.object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
   }),
 
   voice_start: z.object({
@@ -320,6 +378,71 @@ describe("Protocol Schema Tests", () => {
     });
   });
 
+  describe("player_killed", () => {
+    it("validates a complete kill payload", () => {
+      const msg = {
+        victim_id: "victim-123",
+        killer_id: "killer-456",
+        weapon_id: "ak47",
+        hitbox: "head",
+        is_headshot: true,
+        kill_distance: 23.5,
+        is_bot: false,
+      };
+      expect(() => validateMessage("player_killed", msg)).not.toThrow();
+    });
+
+    it("rejects an invalid hitbox", () => {
+      const msg = {
+        victim_id: "victim-123",
+        killer_id: "killer-456",
+        hitbox: "torso",
+      };
+      expect(() => validateMessage("player_killed", msg)).toThrow();
+    });
+  });
+
+  describe("armor_updated", () => {
+    it("validates armor update", () => {
+      const msg = {
+        player_id: "player-123",
+        armor: 75,
+        has_helmet: true,
+      };
+      expect(() => validateMessage("armor_updated", msg)).not.toThrow();
+    });
+
+    it("rejects armor above maximum", () => {
+      const msg = {
+        player_id: "player-123",
+        armor: 120,
+      };
+      expect(() => validateMessage("armor_updated", msg)).toThrow();
+    });
+  });
+
+  describe("player_respawned", () => {
+    it("validates respawn payload", () => {
+      const msg = {
+        player_id: "player-123",
+        position: { x: 10, y: 0, z: -5 },
+        health: 100,
+        armor: 50,
+        has_helmet: true,
+        ammo: 30,
+      };
+      expect(() => validateMessage("player_respawned", msg)).not.toThrow();
+    });
+
+    it("rejects missing position", () => {
+      const msg = {
+        player_id: "player-123",
+        health: 100,
+      };
+      expect(() => validateMessage("player_respawned", msg)).toThrow();
+    });
+  });
+
   describe("weapon_changed", () => {
     it("validates weapon change", () => {
       const msg = {
@@ -394,6 +517,81 @@ describe("Protocol Schema Tests", () => {
         },
       };
       expect(() => validateMessage("round_ended", msg)).not.toThrow();
+    });
+  });
+
+  describe("match_ended", () => {
+    it("validates match result payload", () => {
+      const msg = {
+        winner: "ct",
+        round_number: 16,
+        is_overtime: false,
+      };
+      expect(() => validateMessage("match_ended", msg)).not.toThrow();
+    });
+
+    it("rejects invalid winners", () => {
+      const msg = {
+        winner: "draw",
+        round_number: 16,
+      };
+      expect(() => validateMessage("match_ended", msg)).toThrow();
+    });
+  });
+
+  describe("c4 events", () => {
+    it("validates c4_planted", () => {
+      const msg = {
+        player_id: "player-123",
+        position: { x: 12, y: 0, z: -8 },
+        team: "t",
+        explosion_in: 40,
+      };
+      expect(() => validateMessage("c4_planted", msg)).not.toThrow();
+    });
+
+    it("validates c4_exploded", () => {
+      const msg = {
+        position: { x: 12, y: 0, z: -8 },
+      };
+      expect(() => validateMessage("c4_exploded", msg)).not.toThrow();
+    });
+
+    it("validates c4_defused", () => {
+      const msg = {
+        player_id: "player-123",
+        team: "ct",
+      };
+      expect(() => validateMessage("c4_defused", msg)).not.toThrow();
+    });
+
+    it("rejects c4_planted without position", () => {
+      const msg = {
+        player_id: "player-123",
+      };
+      expect(() => validateMessage("c4_planted", msg)).toThrow();
+    });
+  });
+
+  describe("grenade_thrown", () => {
+    it("validates grenade throw payload", () => {
+      const msg = {
+        player_id: "player-123",
+        type: "flashbang",
+        position: { x: 1, y: 2, z: 3 },
+        velocity: { x: 4, y: 5, z: 6 },
+      };
+      expect(() => validateMessage("grenade_thrown", msg)).not.toThrow();
+    });
+
+    it("rejects invalid grenade type", () => {
+      const msg = {
+        player_id: "player-123",
+        type: "frag",
+        position: { x: 1, y: 2, z: 3 },
+        velocity: { x: 4, y: 5, z: 6 },
+      };
+      expect(() => validateMessage("grenade_thrown", msg)).toThrow();
     });
   });
 

@@ -1,9 +1,9 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
-const uiCode = readFileSync(join(__dirname, "../ui.js"), "utf8");
+const uiCode = readFileSync(new URL("../ui.js", import.meta.url), "utf8");
 
 function loadUI(window, document) {
   const fn = new Function("window", "document", uiCode);

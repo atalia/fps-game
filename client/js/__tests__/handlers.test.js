@@ -1,11 +1,10 @@
 // handlers.test.js - 消息处理链测试（测试真实的 message-handlers.js）
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 
 // 加载 message-handlers.js 内容
 const messageHandlersCode = readFileSync(
-  join(__dirname, "../message-handlers.js"),
+  new URL("../message-handlers.js", import.meta.url),
   "utf8",
 );
 

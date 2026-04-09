@@ -1,8 +1,8 @@
+// @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 
-const mainCode = readFileSync(join(__dirname, "../main.js"), "utf8");
+const mainCode = readFileSync(new URL("../main.js", import.meta.url), "utf8");
 
 function loadMain(window, document) {
   const wrapped = `${mainCode}\nreturn { setupNetworkHandlers };`;

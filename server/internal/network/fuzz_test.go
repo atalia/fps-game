@@ -251,6 +251,123 @@ func FuzzHandleVoiceDataReal(f *testing.F) {
 	})
 }
 
+func FuzzHandleC4PlantReal(f *testing.F) {
+	f.Add([]byte(`{"position":{"x":0,"y":0,"z":0}}`))
+	f.Add([]byte(`{"position":{"x":12.5,"y":0,"z":-8.25}}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`{"position":null}`))
+	f.Add([]byte(`invalid`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		client := createTestClient()
+		r := createTestRoom()
+		r.RoundManager = nil
+		r.AddPlayer(client.Player)
+		client.Room = r
+
+		client.handleC4Plant(data, room.NewManager(100, 16))
+
+		var req struct {
+			Position struct {
+				X float64 `json:"x"`
+				Y float64 `json:"y"`
+				Z float64 `json:"z"`
+			} `json:"position"`
+		}
+		if err := json.Unmarshal(data, &req); err == nil {
+			if !r.IsC4Planted() {
+				t.Fatalf("valid c4_plant payload should set planted state")
+			}
+			pos := r.GetC4Position()
+			if pos.X != req.Position.X || pos.Y != req.Position.Y || pos.Z != req.Position.Z {
+				t.Fatalf("c4 position mismatch: got %+v want %+v", pos, req.Position)
+			}
+		} else if r.IsC4Planted() {
+			t.Fatalf("invalid c4_plant payload should not set planted state")
+		}
+	})
+}
+
+func FuzzHandleC4DefuseReal(f *testing.F) {
+	f.Add(true, "ct")
+	f.Add(false, "ct")
+	f.Add(true, "t")
+	f.Add(true, "")
+
+	f.Fuzz(func(t *testing.T, planted bool, teamID string) {
+		client := createTestClient()
+		r := createTestRoom()
+		r.RoundManager = nil
+		r.AddPlayer(client.Player)
+		client.Room = r
+		client.Player.Team = teamID
+
+		if planted {
+			r.SetC4Planted(true, "planter-123", player.Position{X: 3, Y: 0, Z: 7})
+		}
+
+		client.handleC4Defuse(room.NewManager(100, 16))
+
+		if planted && r.IsC4Planted() {
+			t.Fatalf("defuse should clear planted c4 state")
+		}
+		if !planted && r.IsC4Planted() {
+			t.Fatalf("defuse should not create planted state")
+		}
+	})
+}
+
+func FuzzHandleGrenadeThrowReal(f *testing.F) {
+	f.Add([]byte(`{"type":"flashbang","position":{"x":0,"y":1.7,"z":0},"velocity":{"x":1,"y":2,"z":3}}`))
+	f.Add([]byte(`{"type":"he","position":{"x":10,"y":0,"z":-5},"velocity":{"x":4,"y":5,"z":6}}`))
+	f.Add([]byte(`{"type":"smoke","position":{"x":-2,"y":0,"z":8},"velocity":{"x":0,"y":8,"z":-1}}`))
+	f.Add([]byte(`{"type":"decoy","position":{"x":0,"y":0,"z":0},"velocity":{"x":0,"y":0,"z":0}}`))
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`{"type":123}`))
+	f.Add([]byte(`invalid`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		client := createTestClient()
+		r := createTestRoom()
+		r.AddPlayer(client.Player)
+		client.Room = r
+		client.Player.Flashbangs = 1
+		client.Player.HEGrenades = 1
+		client.Player.SmokeGrenades = 1
+
+		client.handleGrenadeThrow(data, room.NewManager(100, 16))
+
+		var req struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(data, &req); err != nil {
+			if client.Player.Flashbangs != 1 || client.Player.HEGrenades != 1 || client.Player.SmokeGrenades != 1 {
+				t.Fatalf("invalid grenade payload should not change inventory")
+			}
+			return
+		}
+
+		switch req.Type {
+		case "flashbang":
+			if client.Player.Flashbangs != 0 {
+				t.Fatalf("flashbang should decrement inventory, got %d", client.Player.Flashbangs)
+			}
+		case "he":
+			if client.Player.HEGrenades != 0 {
+				t.Fatalf("he grenade should decrement inventory, got %d", client.Player.HEGrenades)
+			}
+		case "smoke":
+			if client.Player.SmokeGrenades != 0 {
+				t.Fatalf("smoke grenade should decrement inventory, got %d", client.Player.SmokeGrenades)
+			}
+		default:
+			if client.Player.Flashbangs < 0 || client.Player.HEGrenades < 0 || client.Player.SmokeGrenades < 0 {
+				t.Fatalf("grenade inventory should never go negative")
+			}
+		}
+	})
+}
+
 // TestHandleShootWithHit 测试射击命中逻辑
 func TestHandleShootWithHit(t *testing.T) {
 	// 创建两个客户端

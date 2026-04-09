@@ -1,9 +1,9 @@
+// @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
-const teamCode = readFileSync(join(__dirname, "../team.js"), "utf8");
+const teamCode = readFileSync(new URL("../team.js", import.meta.url), "utf8");
 
 function loadTeamClasses(document) {
   const window = { document };

@@ -1,9 +1,9 @@
+// @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
-const playerCode = readFileSync(join(__dirname, "../player.js"), "utf8");
+const playerCode = readFileSync(new URL("../player.js", import.meta.url), "utf8");
 
 function loadPlayerController(window, document) {
   const fn = new Function("window", "document", playerCode);

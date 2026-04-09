@@ -199,6 +199,150 @@ func TestPlayerDamagedSchema(t *testing.T) {
 	}
 }
 
+func TestPlayerKilledSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid kill event",
+			msg: map[string]interface{}{
+				"victim_id":     "victim-123",
+				"killer_id":     "killer-456",
+				"weapon_id":     "ak47",
+				"hitbox":        "head",
+				"is_headshot":   true,
+				"kill_distance": 23.5,
+				"is_bot":        false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing killer_id",
+			msg: map[string]interface{}{
+				"victim_id": "victim-123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid hitbox",
+			msg: map[string]interface{}{
+				"victim_id": "victim-123",
+				"killer_id": "killer-456",
+				"hitbox":    "torso",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("player_killed", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArmorUpdatedSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid armor update",
+			msg: map[string]interface{}{
+				"player_id":  "player-123",
+				"armor":      75,
+				"has_helmet": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing armor",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "armor exceeds max",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"armor":     120,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("armor_updated", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestPlayerRespawnedSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid respawn payload",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"position": map[string]interface{}{
+					"x": 10.0,
+					"y": 0.0,
+					"z": -5.0,
+				},
+				"health":     100,
+				"armor":      50,
+				"has_helmet": true,
+				"ammo":       30,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing position",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"health":    100,
+			},
+			wantErr: true,
+		},
+		{
+			name: "health exceeds max",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"position": map[string]interface{}{
+					"x": 0.0,
+					"y": 0.0,
+					"z": 0.0,
+				},
+				"health": 101,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("player_respawned", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestWeaponChangedSchema 测试 weapon_changed 消息
 func TestWeaponChangedSchema(t *testing.T) {
 	tests := []struct {
@@ -321,6 +465,221 @@ func TestRoundEndedSchema(t *testing.T) {
 
 	if err := ValidateSchemaStrict("round_ended", msg); err != nil {
 		t.Fatalf("round_ended validation failed: %v", err)
+	}
+}
+
+func TestMatchEndedSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid match end",
+			msg: map[string]interface{}{
+				"winner":       "ct",
+				"round_number": 16,
+				"is_overtime":  false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing winner",
+			msg: map[string]interface{}{
+				"round_number": 16,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid winner",
+			msg: map[string]interface{}{
+				"winner":       "draw",
+				"round_number": 16,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("match_ended", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestC4Schemas(t *testing.T) {
+	t.Run("c4_planted", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			msg     map[string]interface{}
+			wantErr bool
+		}{
+			{
+				name: "valid planted payload",
+				msg: map[string]interface{}{
+					"player_id": "player-123",
+					"position": map[string]interface{}{
+						"x": 12.0,
+						"y": 0.0,
+						"z": -8.0,
+					},
+					"team":         "t",
+					"explosion_in": 40,
+				},
+				wantErr: false,
+			},
+			{
+				name: "missing position",
+				msg: map[string]interface{}{
+					"player_id": "player-123",
+				},
+				wantErr: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateSchemaStrict("c4_planted", tt.msg)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("c4_exploded", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			msg     map[string]interface{}
+			wantErr bool
+		}{
+			{
+				name: "valid exploded payload",
+				msg: map[string]interface{}{
+					"position": map[string]interface{}{
+						"x": 12.0,
+						"y": 0.0,
+						"z": -8.0,
+					},
+				},
+				wantErr: false,
+			},
+			{
+				name:    "missing position",
+				msg:     map[string]interface{}{},
+				wantErr: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateSchemaStrict("c4_exploded", tt.msg)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("c4_defused", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			msg     map[string]interface{}
+			wantErr bool
+		}{
+			{
+				name: "valid defused payload",
+				msg: map[string]interface{}{
+					"player_id": "player-123",
+					"team":      "ct",
+				},
+				wantErr: false,
+			},
+			{
+				name:    "missing player_id",
+				msg:     map[string]interface{}{},
+				wantErr: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateSchemaStrict("c4_defused", tt.msg)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
+}
+
+func TestGrenadeThrownSchema(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid grenade event",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"type":      "flashbang",
+				"position": map[string]interface{}{
+					"x": 1.0,
+					"y": 2.0,
+					"z": 3.0,
+				},
+				"velocity": map[string]interface{}{
+					"x": 4.0,
+					"y": 5.0,
+					"z": 6.0,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid grenade type",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"type":      "frag",
+				"position": map[string]interface{}{
+					"x": 1.0,
+					"y": 2.0,
+					"z": 3.0,
+				},
+				"velocity": map[string]interface{}{
+					"x": 4.0,
+					"y": 5.0,
+					"z": 6.0,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing velocity",
+			msg: map[string]interface{}{
+				"player_id": "player-123",
+				"type":      "flashbang",
+				"position": map[string]interface{}{
+					"x": 1.0,
+					"y": 2.0,
+					"z": 3.0,
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSchemaStrict("grenade_thrown", tt.msg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateSchemaStrict() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 
