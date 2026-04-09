@@ -284,6 +284,7 @@ class Lobby {
         if (window.network && window.network.connected) {
             console.log('[LOBBY] Joining room:', roomId || 'new room');
             window.network.send('join_room', {
+                platform: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop",
                 room_id: roomId,
                 name: name
             });

@@ -17,6 +17,7 @@ import (
 	"fps-game/internal/hitbox"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
+	"fps-game/pkg/metrics"
 	"fps-game/internal/team"
 
 	"github.com/gorilla/websocket"
@@ -182,6 +183,8 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.clientMap[client.Player.ID] = client
+			metrics.Get().RecordJoin(true)
+			metrics.Get().RecordConnection(true)
 			h.mu.Unlock()
 			log.Printf("Client connected: %s (total: %d)", client.Player.ID, len(h.clients))
 
@@ -190,6 +193,8 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				delete(h.clientMap, client.Player.ID)
+				metrics.Get().RecordConnection(false)
+				metrics.Get().RecordDisconnect()
 				close(client.Send)
 			}
 			h.mu.Unlock()
@@ -602,8 +607,9 @@ func (c *Client) handleMessage(msg Message, roomManager *room.Manager) {
 
 func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager) {
 	var req struct {
-		RoomID string `json:"room_id"`
-		Name   string `json:"name"`
+		RoomID   string `json:"room_id"`
+		Name     string `json:"name"`
+		Platform string `json:"platform"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
 		return
@@ -628,6 +634,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	c.Player.SetName(name)
+	metrics.Get().RecordPlatform(req.Platform)
 
 	var r *room.Room
 	if req.RoomID != "" {
@@ -874,6 +881,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 
 	shooter = c.Player.Snapshot()
 	weaponID := shooter.Weapon
+	metrics.Get().RecordWeaponUse(weaponID)
 	loadout, hasLoadout := team.GetWeaponLoadout(shooter.Team, weaponID)
 	origin := hitbox.Position{
 		X: shooter.Position.X,
@@ -971,6 +979,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 				target.Die()
 				if c.Room.RoundManager != nil {
 					c.Room.RoundManager.RecordKill(c.Player.ID)
+					metrics.Get().RecordKill(hit.HitBoxType == "head")
 				}
 
 				c.hub.BroadcastToRoom(c.Room, "player_killed", map[string]interface{}{
@@ -979,6 +988,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 					"weapon_id":     weaponID,
 					"hitbox":        hit.HitBoxType,
 					"is_headshot":   hit.HitBoxType == "head",
+					"headshot":      hit.HitBoxType == "head",
 					"kill_distance": hit.Distance,
 					"is_bot":        isBot,
 				}, "")

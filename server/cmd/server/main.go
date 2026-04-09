@@ -14,6 +14,7 @@ import (
 	"fps-game/internal/match"
 	"fps-game/internal/network"
 	"fps-game/internal/room"
+	"fps-game/pkg/metrics"
 
 	"github.com/gorilla/mux"
 )
@@ -96,6 +97,7 @@ func main() {
 	api.HandleFunc("/health", healthHandler).Methods("GET")
 	api.HandleFunc("/stats", statsHandler(gameEngine, roomManager)).Methods("GET")
 	api.HandleFunc("/rooms", listRoomsHandler(roomManager)).Methods("GET")
+	api.HandleFunc("/metrics", metricsHandler).Methods("GET")
 
 	// WebSocket 路由
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +120,11 @@ func main() {
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(metrics.Get().Snapshot())
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
