@@ -482,8 +482,8 @@ function setupNetworkHandlers() {
     if (window.grenadeSystem?.onDecoyEffect) {
       window.grenadeSystem.onDecoyEffect({
         position: data.position,
-        weapon: 'ak47',
-        duration: data.duration
+        weapon: "ak47",
+        duration: data.duration,
       });
     }
   });
@@ -517,8 +517,9 @@ function setupNetworkHandlers() {
 
     const item = window.findBuyMenuItem?.(data.item_id);
     const isEquipment = Boolean(
-      window.BUY_MENU_CATALOG?.find((category) => category.id === "equipment")
-        ?.items?.some((entry) => entry.id === data.item_id),
+      window.BUY_MENU_CATALOG?.find(
+        (category) => category.id === "equipment",
+      )?.items?.some((entry) => entry.id === data.item_id),
     );
 
     if (data.success && item && isEquipment) {
@@ -628,7 +629,7 @@ function setupNetworkHandlers() {
         velocity: data.velocity,
         playerId: data.player_id,
         detonateTime: Date.now() + getGrenadeDetonationTime(data.type),
-        active: true
+        active: true,
       };
       window.grenadeSystem.activeGrenades.push(grenade);
     }
@@ -638,12 +639,18 @@ function setupNetworkHandlers() {
 // 获取投掷物引爆时间
 function getGrenadeDetonationTime(type) {
   switch (type) {
-    case 'flashbang': return 1500;
-    case 'smoke': return 2000;
-    case 'he': return 2500;
-    case 'molotov': return 1000;
-    case 'decoy': return 500;
-    default: return 2000;
+    case "flashbang":
+      return 1500;
+    case "smoke":
+      return 2000;
+    case "he":
+      return 2500;
+    case "molotov":
+      return 1000;
+    case "decoy":
+      return 500;
+    default:
+      return 2000;
   }
 }
 
@@ -719,7 +726,7 @@ async function startGame(playerId) {
   // 初始化投掷物系统
   if (typeof GrenadeSystem !== "undefined") {
     window.grenadeSystem = new GrenadeSystem(window.renderer.scene);
-    
+
     // 设置闪光弹效果回调
     window.grenadeSystem.onFlashEffect = (effect) => {
       // 检查玩家是否在范围内且面向闪光弹
@@ -735,7 +742,7 @@ async function startGame(playerId) {
         // 根据距离和是否面向计算致盲时间
         const intensity = Math.max(0.3, 1 - distance / effect.radius);
         const blindDuration = effect.duration * intensity;
-        
+
         if (window.screenEffects?.flashblind) {
           window.screenEffects.flashblind(blindDuration, intensity);
         }
@@ -921,16 +928,16 @@ function setupVoiceHandlers() {
   // 语音开始
   window.network.on("voice_start", (data) => {
     console.log("[VOICE] Player started speaking:", data.playerId);
-    if (window.ui) {
-      window.ui.showSpeakingIndicator(data.playerId, true);
+    if (window.uiManager) {
+      window.uiManager.showSpeakingIndicator(data.playerId, true);
     }
   });
 
   // 语音停止
   window.network.on("voice_stop", (data) => {
     console.log("[VOICE] Player stopped speaking:", data.playerId);
-    if (window.ui) {
-      window.ui.showSpeakingIndicator(data.playerId, false);
+    if (window.uiManager) {
+      window.uiManager.showSpeakingIndicator(data.playerId, false);
     }
     if (window.voiceSystem) {
       window.voiceSystem.stopReceiving(data.playerId);
@@ -942,4 +949,3 @@ function setupVoiceHandlers() {
 if (typeof window !== "undefined" && !window.__FPS_DISABLE_AUTO_INIT__) {
   init();
 }
-

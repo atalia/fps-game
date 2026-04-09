@@ -2,6 +2,8 @@ package hitbox
 
 import (
 	"testing"
+
+	"fps-game/internal/balance"
 )
 
 func TestRaySphereIntersect_Hit(t *testing.T) {
@@ -216,5 +218,17 @@ func TestCalculateDamageSimple_BackwardCompatible(t *testing.T) {
 	expected := int(float64(baseDamage) * DamageMultipliers[HitBoxHead])
 	if damage != expected {
 		t.Errorf("expected %d, got %d", expected, damage)
+	}
+}
+
+func TestCalculateDamage_UsesBalanceHitboxMultiplier(t *testing.T) {
+	cfg := balance.Get()
+	cfg.Reset()
+	t.Cleanup(cfg.Reset)
+	cfg.Hitbox.HeadMultiplier = 3.0
+
+	damage, _ := CalculateDamage(40, HitBoxHead, 10, 100, 0, false)
+	if damage != 120 {
+		t.Fatalf("head damage = %d, want 120", damage)
 	}
 }

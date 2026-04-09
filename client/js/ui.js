@@ -124,7 +124,7 @@ class UIManager {
         : "";
 
       div.innerHTML = `
-        <span class="name" data-player-id="' + player.id + '">${teamPrefix}${this.escapeHtml(name)}${player.is_bot ? " BOT" : ""}</span>
+        <span class="name" data-player-id="${this.escapeHtml(player.id)}">${teamPrefix}${this.escapeHtml(name)}${player.is_bot ? " BOT" : ""}</span>
         <span class="kills">${kills}K</span>
         <span class="health">${health}HP</span>
       `;
@@ -252,8 +252,10 @@ class UIManager {
     const timerSeconds = Math.max(0, Number(state.timer_seconds) || 0);
     if (this.elements.roundTimer) {
       this.elements.roundTimer.textContent = this.formatClock(timerSeconds);
-      const inBuyWindow = state.phase === "live" && (state.buy_time_left || 0) > 0;
-      const critical = state.phase === "live" && !inBuyWindow && timerSeconds <= 10;
+      const inBuyWindow =
+        state.phase === "live" && (state.buy_time_left || 0) > 0;
+      const critical =
+        state.phase === "live" && !inBuyWindow && timerSeconds <= 10;
       this.elements.roundTimer.classList.toggle("buy-phase", inBuyWindow);
       this.elements.roundTimer.classList.toggle("is-critical", critical);
     }
@@ -326,7 +328,9 @@ class UIManager {
   updateConnectionStatus(connected) {
     if (!this.elements.connectionStatus) return;
 
-    this.elements.connectionStatus.textContent = connected ? "已连接" : "已断开";
+    this.elements.connectionStatus.textContent = connected
+      ? "已连接"
+      : "已断开";
     this.elements.connectionStatus.className = connected
       ? "connected"
       : "disconnected";
@@ -337,7 +341,7 @@ class UIManager {
 
     const div = document.createElement("div");
     div.className = "chat-message";
-    div.innerHTML = `<span class="name" data-player-id="' + player.id + '">${this.escapeHtml(name)}:</span> ${this.escapeHtml(message)}`;
+    div.innerHTML = `<span class="name">${this.escapeHtml(name)}:</span> ${this.escapeHtml(message)}`;
     this.elements.chatMessages.appendChild(div);
     this.elements.chatMessages.scrollTop =
       this.elements.chatMessages.scrollHeight;
@@ -402,10 +406,7 @@ class UIManager {
     const sortedPlayers = [...players].sort((a, b) =>
       this.comparePlayersForScoreboard(a, b),
     );
-    const scoreboardTeams = this.normalizeScoreboardTeams(
-      teams,
-      sortedPlayers,
-    );
+    const scoreboardTeams = this.normalizeScoreboardTeams(teams, sortedPlayers);
 
     this.elements.scoreboardBody.innerHTML = "";
     this.updateScoreboardTeamSummary(scoreboardTeams);
@@ -418,7 +419,8 @@ class UIManager {
       const deaths = player.deaths || 0;
       const score = player.score || 0;
       const money = Math.max(0, Math.floor(Number(player.money) || 0));
-      const kdRatio = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
+      const kdRatio =
+        deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
       const team = this.formatTeam(player.team);
       const teamLabel = team?.label || "FFA";
       const teamColor = team?.color || "#9aa8ba";
@@ -555,7 +557,11 @@ class UIManager {
       options?.isHeadshot === true ||
       options?.hitbox === "head";
     const damage = Number(options?.damage) || 0;
-    const label = headshot ? "HEADSHOT" : damage > 0 ? `+${Math.round(damage)}` : "HIT";
+    const label = headshot
+      ? "HEADSHOT"
+      : damage > 0
+        ? `+${Math.round(damage)}`
+        : "HIT";
 
     if (this.elements.hitMarkerLabel) {
       this.elements.hitMarkerLabel.textContent = label;
@@ -612,7 +618,10 @@ class UIManager {
 
   updateCrosshairSpread(spread) {
     const value = Math.max(0, Number(spread) || 0);
-    document.documentElement.style.setProperty("--crosshair-spread", `${value}`);
+    document.documentElement.style.setProperty(
+      "--crosshair-spread",
+      `${value}`,
+    );
     if (window.dynamicCrosshair?.__uiStyled) {
       window.dynamicCrosshair.currentSpread = value;
       window.dynamicCrosshair.render?.();
@@ -880,7 +889,8 @@ class UIManager {
       [
         "hitIndicator",
         "show",
-        (enemyPosition, damage) => this.showDamageIndicator(enemyPosition, damage),
+        (enemyPosition, damage) =>
+          this.showDamageIndicator(enemyPosition, damage),
       ],
       [
         "killNotice",
@@ -927,16 +937,24 @@ class UIManager {
 
   normalizeKillFeedEntry(entry) {
     if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-      const killer = this.resolvePlayerDisplayName(entry.killer || entry.actor || "YOU");
-      const victim = this.resolvePlayerDisplayName(entry.victim || entry.target || "TARGET");
+      const killer = this.resolvePlayerDisplayName(
+        entry.killer || entry.actor || "YOU",
+      );
+      const victim = this.resolvePlayerDisplayName(
+        entry.victim || entry.target || "TARGET",
+      );
       const headshot = entry.isHeadshot || entry.headshot;
       const weapon = entry.weapon || entry.weaponId || "rifle";
       return {
         type: headshot ? "headshot" : "kill",
         left: killer,
         right: victim,
-        leftClass: this.resolveTeamClass(entry.killerTeam || entry.killer_id || entry.killer),
-        rightClass: this.resolveTeamClass(entry.victimTeam || entry.victim_id || entry.victim),
+        leftClass: this.resolveTeamClass(
+          entry.killerTeam || entry.killer_id || entry.killer,
+        ),
+        rightClass: this.resolveTeamClass(
+          entry.victimTeam || entry.victim_id || entry.victim,
+        ),
         weapon,
         headshot: Boolean(headshot),
         meta: weapon ? `WEAPON ${this.getWeaponIcon(weapon)}` : "ELIMINATION",
@@ -1023,7 +1041,11 @@ class UIManager {
       return teams
         .map((team) => {
           const teamId =
-            team.id || team.team_id || team.name || team.label || team.short_name;
+            team.id ||
+            team.team_id ||
+            team.name ||
+            team.label ||
+            team.short_name;
           const formatted = this.formatTeam(teamId);
           return {
             ...team,
@@ -1099,7 +1121,9 @@ class UIManager {
       const dx = sourceOrAngle.x - playerPos.x;
       const dz = sourceOrAngle.z - playerPos.z;
       const worldAngle = Math.atan2(dx, dz);
-      return this.normalizeDegrees((worldAngle - playerRotation) * (180 / Math.PI));
+      return this.normalizeDegrees(
+        (worldAngle - playerRotation) * (180 / Math.PI),
+      );
     }
 
     return 0;
@@ -1187,7 +1211,9 @@ class UIManager {
           : "";
     }
 
-    const remoteTeam = this.formatTeam(window.game?.players?.get?.(playerId)?.team);
+    const remoteTeam = this.formatTeam(
+      window.game?.players?.get?.(playerId)?.team,
+    );
     return remoteTeam?.id === "ct"
       ? "team-ct"
       : remoteTeam?.id === "t"
@@ -1339,10 +1365,10 @@ class UIManager {
 
   // C4 Progress UI
   showC4Progress(type, hasKit = false) {
-    let container = document.getElementById('c4-progress-container');
+    let container = document.getElementById("c4-progress-container");
     if (!container) {
-      container = document.createElement('div');
-      container.id = 'c4-progress-container';
+      container = document.createElement("div");
+      container.id = "c4-progress-container";
       container.style.cssText = `
         position: fixed;
         bottom: 150px;
@@ -1353,9 +1379,12 @@ class UIManager {
       document.body.appendChild(container);
     }
 
-    const action = type === 'plant' ? '安装' : '拆除';
-    const color = type === 'plant' ? '#f44336' : '#4CAF50';
-    const kitHint = type === 'defuse' && hasKit ? '<div style="color: #4CAF50; font-size: 12px; margin-top: 5px;">🔧 拆弹器加速 (2.5s)</div>' : '';
+    const action = type === "plant" ? "安装" : "拆除";
+    const color = type === "plant" ? "#f44336" : "#4CAF50";
+    const kitHint =
+      type === "defuse" && hasKit
+        ? '<div style="color: #4CAF50; font-size: 12px; margin-top: 5px;">🔧 拆弹器加速 (2.5s)</div>'
+        : "";
 
     container.innerHTML = `
       <div style="
@@ -1386,28 +1415,28 @@ class UIManager {
         ${kitHint}
       </div>
     `;
-    container.style.display = 'block';
+    container.style.display = "block";
   }
 
   updateC4Progress(progress) {
-    const fill = document.getElementById('c4-progress-fill');
+    const fill = document.getElementById("c4-progress-fill");
     if (fill) {
       fill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
     }
   }
 
   hideC4Progress() {
-    const container = document.getElementById('c4-progress-container');
+    const container = document.getElementById("c4-progress-container");
     if (container) {
-      container.style.display = 'none';
+      container.style.display = "none";
     }
   }
 
   showC4Timer(seconds) {
-    let timer = document.getElementById('c4-timer-display');
+    let timer = document.getElementById("c4-timer-display");
     if (!timer) {
-      timer = document.createElement('div');
-      timer.id = 'c4-timer-display';
+      timer = document.createElement("div");
+      timer.id = "c4-timer-display";
       timer.style.cssText = `
         position: fixed;
         top: 50%;
@@ -1435,11 +1464,11 @@ class UIManager {
   }
 
   updateC4TimerDisplay() {
-    const timer = document.getElementById('c4-timer-display');
+    const timer = document.getElementById("c4-timer-display");
     if (!timer) return;
 
     const isCritical = this.c4TimerSeconds <= 10;
-    const color = isCritical ? '#f44336' : '#ffc107';
+    const color = isCritical ? "#f44336" : "#ffc107";
 
     timer.innerHTML = `
       <div style="
@@ -1447,20 +1476,20 @@ class UIManager {
         padding: 20px 40px;
         border-radius: 10px;
         border: 3px solid ${color};
-        ${isCritical ? 'animation: c4Pulse 0.5s infinite;' : ''}
+        ${isCritical ? "animation: c4Pulse 0.5s infinite;" : ""}
       ">
         <div style="font-size: 60px; font-weight: bold; color: ${color};">
           💣 ${this.c4TimerSeconds}s
         </div>
       </div>
     `;
-    timer.style.display = 'block';
+    timer.style.display = "block";
   }
 
   hideC4Timer() {
-    const timer = document.getElementById('c4-timer-display');
+    const timer = document.getElementById("c4-timer-display");
     if (timer) {
-      timer.style.display = 'none';
+      timer.style.display = "none";
     }
     if (this.c4TimerInterval) {
       clearInterval(this.c4TimerInterval);
@@ -1470,7 +1499,8 @@ class UIManager {
 
   // 显示/隐藏说话状态指示器
   showSpeakingIndicator(playerId, speaking) {
-    const playerItems = this.elements.playersContainer?.querySelectorAll(".player-item") || [];
+    const playerItems =
+      this.elements.playersContainer?.querySelectorAll(".player-item") || [];
     for (const item of playerItems) {
       const nameSpan = item.querySelector(".name");
       if (nameSpan && nameSpan.dataset.playerId === playerId) {
@@ -1491,7 +1521,8 @@ class UIManager {
 
   // 更新玩家列表中的说话状态
   updateSpeakingStates(speakingPlayers) {
-    const playerItems = this.elements.playersContainer?.querySelectorAll(".player-item") || [];
+    const playerItems =
+      this.elements.playersContainer?.querySelectorAll(".player-item") || [];
     playerItems.forEach((item) => {
       const nameSpan = item.querySelector(".name");
       if (!nameSpan) return;
@@ -1513,8 +1544,8 @@ class UIManager {
 }
 
 // Add C4 pulse animation
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
+if (typeof document !== "undefined") {
+  const style = document.createElement("style");
   style.textContent = `
     @keyframes c4Pulse {
       0%, 100% { transform: translate(-50%, -50%) scale(1); }
@@ -1525,4 +1556,3 @@ if (typeof document !== 'undefined') {
 }
 
 window.UIManager = UIManager;
-

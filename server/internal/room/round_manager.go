@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"fps-game/internal/economy"
+	"fps-game/internal/balance"
 	"fps-game/internal/player"
 	"fps-game/internal/team"
 
@@ -245,7 +245,6 @@ func (rm *RoundManager) StartC4Countdown() bool {
 	rm.mu.Unlock()
 
 	rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 	return true
 }
 
@@ -337,7 +336,6 @@ func (rm *RoundManager) MaybeStart() bool {
 		if changed {
 			rm.stopStateTicker()
 			rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 		}
 		return false
 	}
@@ -363,7 +361,9 @@ func (rm *RoundManager) MaybeStart() bool {
 
 	rm.resetParticipantsForRound()
 	rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
+	if rm.roundsCompleted == 0 {
+		metrics.Get().RecordMatchStart(rm.room.GameMode)
+	}
 	rm.room.Broadcast("round_started", RoundStartEvent{
 		RoundState:   rm.Snapshot(),
 		Announcement: rm.roundStartAnnouncement(),
@@ -421,7 +421,6 @@ func (rm *RoundManager) beginLivePhase() {
 	rm.mu.Unlock()
 
 	rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 }
 
 func (rm *RoundManager) handleRoundTimeout() {
@@ -507,7 +506,6 @@ func (rm *RoundManager) endRound(winner string, reason RoundEndReason) bool {
 
 	if matchOver {
 		rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 		rm.room.Broadcast("match_ended", MatchEndEvent{
 			Winner:      normalizedWinner,
 			RoundNumber: rm.completedRounds(),
@@ -519,7 +517,6 @@ func (rm *RoundManager) endRound(winner string, reason RoundEndReason) bool {
 	}
 
 	rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 	return true
 }
 
@@ -648,10 +645,10 @@ func (rm *RoundManager) awardRoundMoney(winner string) {
 			continue
 		}
 
-		reward := economy.RoundLossReward
+		reward := balance.Get().Economy.RoundLossReward
 		reason := "round_loss"
 		if playerTeam == winner {
-			reward = economy.RoundWinReward
+			reward = balance.Get().Economy.RoundWinReward
 			reason = "round_win"
 		}
 
@@ -727,7 +724,6 @@ func (rm *RoundManager) applyHalftimeSideSwitch() {
 	}
 
 	rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 }
 
 func (rm *RoundManager) resetParticipantsForRound() {
@@ -801,7 +797,6 @@ func (rm *RoundManager) startStateTicker() {
 			select {
 			case <-ticker.C:
 				rm.broadcastRoundState()
-	metrics.Get().RecordMatchStart(rm.room.GameMode)
 			case <-stop:
 				return
 			}

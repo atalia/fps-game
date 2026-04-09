@@ -59,11 +59,11 @@ type BotConfig struct {
 
 // HitboxConfig holds hitbox damage multipliers.
 type HitboxConfig struct {
-	HeadMultiplier   float64
-	BodyMultiplier   float64
-	ArmMultiplier    float64
-	LegMultiplier    float64
-	MinDamageFactor  float64 // 最小伤害比例 (距离衰减后)
+	HeadMultiplier  float64
+	BodyMultiplier  float64
+	ArmMultiplier   float64
+	LegMultiplier   float64
+	MinDamageFactor float64 // 最小伤害比例 (距离衰减后)
 }
 
 // DefaultConfig returns the default balance configuration.
@@ -129,10 +129,10 @@ func DefaultConfig() *Config {
 			},
 		},
 		Bot: BotConfig{
-			AimAccuracy:     0.7,
-			ReactionTime:    300 * time.Millisecond,
-			DecisionSpeed:   500 * time.Millisecond,
-			Aggressiveness:  0.5,
+			AimAccuracy:      0.7,
+			ReactionTime:     300 * time.Millisecond,
+			DecisionSpeed:    500 * time.Millisecond,
+			Aggressiveness:   0.5,
 			DifficultyPreset: "normal",
 		},
 		Hitbox: HitboxConfig{
@@ -246,17 +246,17 @@ func (c *Config) Snapshot() map[string]interface{} {
 		},
 		"weapons": weapons,
 		"bot": map[string]interface{}{
-			"aim_accuracy":     c.Bot.AimAccuracy,
-			"reaction_time_ms": c.Bot.ReactionTime.Milliseconds(),
+			"aim_accuracy":      c.Bot.AimAccuracy,
+			"reaction_time_ms":  c.Bot.ReactionTime.Milliseconds(),
 			"decision_speed_ms": c.Bot.DecisionSpeed.Milliseconds(),
-			"aggressiveness":   c.Bot.Aggressiveness,
-			"difficulty":       c.Bot.DifficultyPreset,
+			"aggressiveness":    c.Bot.Aggressiveness,
+			"difficulty":        c.Bot.DifficultyPreset,
 		},
 		"hitbox": map[string]interface{}{
-			"head_multiplier":  c.Hitbox.HeadMultiplier,
-			"body_multiplier":  c.Hitbox.BodyMultiplier,
-			"arm_multiplier":   c.Hitbox.ArmMultiplier,
-			"leg_multiplier":   c.Hitbox.LegMultiplier,
+			"head_multiplier":   c.Hitbox.HeadMultiplier,
+			"body_multiplier":   c.Hitbox.BodyMultiplier,
+			"arm_multiplier":    c.Hitbox.ArmMultiplier,
+			"leg_multiplier":    c.Hitbox.LegMultiplier,
 			"min_damage_factor": c.Hitbox.MinDamageFactor,
 		},
 	}

@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"fps-game/internal/balance"
 	"fps-game/internal/config"
 	"fps-game/internal/game"
 	"fps-game/internal/match"
 	"fps-game/internal/network"
 	"fps-game/internal/room"
 	"fps-game/pkg/metrics"
-	"fps-game/internal/balance"
 
 	"github.com/gorilla/mux"
 )
@@ -133,14 +133,14 @@ func balanceHandler(w http.ResponseWriter, r *http.Request) {
 func setDifficultyHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	difficulty := vars["difficulty"]
-	
+
 	valid := map[string]bool{"easy": true, "normal": true, "hard": true, "nightmare": true}
 	if !valid[difficulty] {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid difficulty"})
 		return
 	}
-	
+
 	balance.Get().SetDifficulty(difficulty)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "difficulty": difficulty})

@@ -13,12 +13,13 @@ import (
 	"unicode"
 
 	"fps-game/internal/ai"
+	"fps-game/internal/balance"
 	"fps-game/internal/economy"
 	"fps-game/internal/hitbox"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
-	"fps-game/pkg/metrics"
 	"fps-game/internal/team"
+	"fps-game/pkg/metrics"
 
 	"github.com/gorilla/websocket"
 )
@@ -183,7 +184,6 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.clientMap[client.Player.ID] = client
-			metrics.Get().RecordJoin(true)
 			metrics.Get().RecordConnection(true)
 			h.mu.Unlock()
 			log.Printf("Client connected: %s (total: %d)", client.Player.ID, len(h.clients))
@@ -612,12 +612,14 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 		Platform string `json:"platform"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
+		metrics.Get().RecordJoin(false)
 		return
 	}
 
 	// 验证玩家名称
 	name := strings.TrimSpace(req.Name)
 	if len(name) < minPlayerName || len(name) > maxPlayerName {
+		metrics.Get().RecordJoin(false)
 		c.Send <- NewMessage("error", map[string]string{
 			"message": fmt.Sprintf("Player name must be between %d and %d characters", minPlayerName, maxPlayerName),
 		}).ToJSON()
@@ -626,6 +628,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	// 验证名称字符（只允许字母、数字、中文和空格）
 	for _, r := range name {
 		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsSpace(r) && r != '_' && r != '-' {
+			metrics.Get().RecordJoin(false)
 			c.Send <- NewMessage("error", map[string]string{
 				"message": "Player name can only contain letters, numbers, spaces, underscores and hyphens",
 			}).ToJSON()
@@ -634,7 +637,6 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	c.Player.SetName(name)
-	metrics.Get().RecordPlatform(req.Platform)
 
 	var r *room.Room
 	if req.RoomID != "" {
@@ -646,6 +648,7 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 
 	// 检查房间是否创建成功（可能因达到上限而返回 nil）
 	if r == nil {
+		metrics.Get().RecordJoin(false)
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Server is full, cannot create new room",
 		}).ToJSON()
@@ -653,11 +656,15 @@ func (c *Client) handleJoinRoom(data json.RawMessage, roomManager *room.Manager)
 	}
 
 	if !roomManager.JoinPlayer(c.Player, r.ID) {
+		metrics.Get().RecordJoin(false)
 		c.Send <- NewMessage("error", map[string]string{
 			"message": "Room is full",
 		}).ToJSON()
 		return
 	}
+
+	metrics.Get().RecordJoin(true)
+	metrics.Get().RecordPlatform(req.Platform)
 
 	c.Room = r
 	r.SetBroadcaster(func(msgType string, data interface{}, excludeID string) {
@@ -975,7 +982,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 			if remainingHealth <= 0 {
 				// 更新击杀统计
 				c.Player.AddKill(1)
-				c.awardMoney(c.Player, economy.KillReward, "kill")
+				c.awardMoney(c.Player, balance.Get().Economy.KillReward, "kill")
 				target.Die()
 				if c.Room.RoundManager != nil {
 					c.Room.RoundManager.RecordKill(c.Player.ID)
@@ -1300,11 +1307,11 @@ func (c *Client) awardRoundMoney(r *room.Room, winner string) {
 		}
 
 		if playerTeam == normalizedWinner {
-			c.awardMoney(p, economy.RoundWinReward, "round_win")
+			c.awardMoney(p, balance.Get().Economy.RoundWinReward, "round_win")
 			continue
 		}
 
-		c.awardMoney(p, economy.RoundLossReward, "round_loss")
+		c.awardMoney(p, balance.Get().Economy.RoundLossReward, "round_loss")
 	}
 }
 
@@ -2357,7 +2364,10 @@ func (c *Client) handleAddBot(data json.RawMessage) {
 
 	difficulty := ai.Difficulty(req.Difficulty)
 	if difficulty == "" {
-		difficulty = ai.DifficultyNormal
+		difficulty = ai.Difficulty(balance.Get().Bot.DifficultyPreset)
+		if difficulty == "" {
+			difficulty = ai.DifficultyNormal
+		}
 	}
 
 	normalizedTeam := team.NormalizeTeamID(req.Team)

@@ -3,6 +3,7 @@ package network
 import (
 	"testing"
 
+	"fps-game/internal/balance"
 	"fps-game/internal/economy"
 	"fps-game/internal/player"
 	"fps-game/internal/room"
@@ -40,5 +41,34 @@ func TestClient_AwardRoundMoney(t *testing.T) {
 	}
 	if got := tPlayer.GetMoney(); got != economy.StartMoney+economy.RoundLossReward {
 		t.Fatalf("t money = %d, want %d", got, economy.StartMoney+economy.RoundLossReward)
+	}
+}
+
+func TestClient_AwardRoundMoney_UsesBalanceConfig(t *testing.T) {
+	cfg := balance.Get()
+	cfg.Reset()
+	t.Cleanup(cfg.Reset)
+	cfg.Economy.RoundWinReward = 4321
+	cfg.Economy.RoundLossReward = 1234
+
+	client := &Client{hub: NewHub()}
+	r := room.NewRoom(10)
+
+	ctPlayer := player.NewPlayer()
+	ctPlayer.SetTeam(team.TeamCounterTerrorists)
+	tPlayer := player.NewPlayer()
+	tPlayer.SetTeam(team.TeamTerrorists)
+
+	if !r.AddPlayer(ctPlayer) || !r.AddPlayer(tPlayer) {
+		t.Fatal("failed to add test players to room")
+	}
+
+	client.awardRoundMoney(r, team.TeamCounterTerrorists)
+
+	if got := ctPlayer.GetMoney(); got != economy.StartMoney+4321 {
+		t.Fatalf("ct money = %d, want %d", got, economy.StartMoney+4321)
+	}
+	if got := tPlayer.GetMoney(); got != economy.StartMoney+1234 {
+		t.Fatalf("t money = %d, want %d", got, economy.StartMoney+1234)
 	}
 }

@@ -2,6 +2,8 @@ package hitbox
 
 import (
 	"math"
+
+	"fps-game/internal/balance"
 )
 
 // RaySphereIntersect 检测射线是否与球体相交，返回最近的交点距离 t
@@ -53,14 +55,12 @@ func CalculateDamage(baseDamage int, hitBoxType HitBoxType, distance, weaponRang
 	damage := float64(baseDamage)
 
 	// 2. 命中部位倍率
-	if multiplier, ok := DamageMultipliers[hitBoxType]; ok {
-		damage *= multiplier
-	}
+	damage *= balance.Get().GetHitboxMultiplier(string(hitBoxType))
 
 	// 3. 距离衰减 (超过射程后衰减到最小 30%)
 	if distance > weaponRange {
 		falloff := 1.0 - (distance-weaponRange)/weaponRange
-		falloff = math.Max(0.3, falloff)
+		falloff = math.Max(balance.Get().Hitbox.MinDamageFactor, falloff)
 		damage *= falloff
 	}
 
