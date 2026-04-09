@@ -26,7 +26,7 @@ var (
 )
 
 func formattedBuildVersion() string {
-	if buildCommit == "" || buildCommit == "unknown" {
+	if buildCommit == "" || buildCommit == "unknown" || buildVersion == buildCommit {
 		return buildVersion
 	}
 	return fmt.Sprintf("%s+%s", buildVersion, buildCommit)

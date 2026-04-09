@@ -35,6 +35,34 @@ func TestHealthHandler_ReturnsBuildVersion(t *testing.T) {
 	}
 }
 
+func TestHealthHandler_DoesNotDuplicateCommitWhenVersionMatches(t *testing.T) {
+	originalVersion := buildVersion
+	originalCommit := buildCommit
+	buildVersion = "ad40e8e"
+	buildCommit = "ad40e8e"
+	defer func() {
+		buildVersion = originalVersion
+		buildCommit = originalCommit
+	}()
+
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	w := httptest.NewRecorder()
+
+	healthHandler(w, req)
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if got := resp["version"]; got != "ad40e8e" {
+		t.Fatalf("version = %v, want %q", got, "ad40e8e")
+	}
+	if got := resp["commit"]; got != "ad40e8e" {
+		t.Fatalf("commit = %v, want %q", got, "ad40e8e")
+	}
+}
+
 func TestWithStaticAssetHeaders_DisablesCachingForStaticAssets(t *testing.T) {
 	originalVersion := buildVersion
 	originalCommit := buildCommit
