@@ -94,7 +94,7 @@ jobs:
           {
             echo "#### Go Unit Coverage"
             echo
-            go tool cover -func=server/coverage.out
+            cd server && go tool cover -func=coverage.out && cd ..
             echo
             echo "#### Frontend Unit Coverage"
             echo
