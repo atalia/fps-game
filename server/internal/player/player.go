@@ -266,6 +266,20 @@ func (p *Player) GetAmmo() int {
 	return p.Ammo
 }
 
+// GetPosition 线程安全地获取当前位置
+func (p *Player) GetPosition() (x, y, z float64) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Position.X, p.Position.Y, p.Position.Z
+}
+
+// GetRotation 线程安全地获取当前旋转角度
+func (p *Player) GetRotation() float64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.Rotation
+}
+
 // Reload 换弹
 func (p *Player) Reload() {
 	p.mu.Lock()
