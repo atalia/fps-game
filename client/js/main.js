@@ -921,11 +921,17 @@ function setupVoiceHandlers() {
   // 语音开始
   window.network.on("voice_start", (data) => {
     console.log("[VOICE] Player started speaking:", data.playerId);
+    if (window.ui) {
+      window.ui.showSpeakingIndicator(data.playerId, true);
+    }
   });
 
   // 语音停止
   window.network.on("voice_stop", (data) => {
     console.log("[VOICE] Player stopped speaking:", data.playerId);
+    if (window.ui) {
+      window.ui.showSpeakingIndicator(data.playerId, false);
+    }
     if (window.voiceSystem) {
       window.voiceSystem.stopReceiving(data.playerId);
     }

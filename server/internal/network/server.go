@@ -295,6 +295,29 @@ func (h *Hub) BroadcastToRoom(r *room.Room, msgType string, data interface{}, ex
 	}
 }
 
+// BroadcastToTeam 广播消息给房间内特定队伍的玩家
+func (h *Hub) BroadcastToTeam(r *room.Room, teamID string, msgType string, data interface{}, excludeID string) {
+	if r == nil {
+		return
+	}
+	payload := NewMessage(msgType, data).ToJSON()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	players := r.GetPlayers()
+	for _, p := range players {
+		if p.ID == excludeID {
+			continue
+		}
+		if p.GetTeam() != teamID {
+			continue
+		}
+		if client, ok := h.clientMap[p.ID]; ok {
+			_ = tryEnqueueMessage(client, payload)
+		}
+	}
+}
+
 // Message 消息结构
 type Message struct {
 	Type      string          `json:"type"`
@@ -1332,7 +1355,7 @@ func (c *Client) handleVoiceStart() {
 		return
 	}
 
-	c.hub.BroadcastToRoom(c.Room, "voice_start", map[string]string{
+	c.hub.BroadcastToTeam(c.Room, c.Player.GetTeam(), "voice_start", map[string]string{
 		"playerId": c.Player.ID,
 	}, c.Player.ID)
 }
@@ -1343,7 +1366,7 @@ func (c *Client) handleVoiceStop() {
 		return
 	}
 
-	c.hub.BroadcastToRoom(c.Room, "voice_stop", map[string]string{
+	c.hub.BroadcastToTeam(c.Room, c.Player.GetTeam(), "voice_stop", map[string]string{
 		"playerId": c.Player.ID,
 	}, c.Player.ID)
 }
@@ -1363,7 +1386,7 @@ func (c *Client) handleVoiceData(data json.RawMessage) {
 	}
 
 	// 转发语音数据给房间内其他玩家
-	c.hub.BroadcastToRoom(c.Room, "voice_data", map[string]interface{}{
+	c.hub.BroadcastToTeam(c.Room, c.Player.GetTeam(), "voice_data", map[string]interface{}{
 		"playerId": c.Player.ID,
 		"audio":    voiceMsg.Audio,
 	}, c.Player.ID)

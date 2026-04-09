@@ -124,7 +124,7 @@ class UIManager {
         : "";
 
       div.innerHTML = `
-        <span class="name">${teamPrefix}${this.escapeHtml(name)}${player.is_bot ? " BOT" : ""}</span>
+        <span class="name" data-player-id="' + player.id + '">${teamPrefix}${this.escapeHtml(name)}${player.is_bot ? " BOT" : ""}</span>
         <span class="kills">${kills}K</span>
         <span class="health">${health}HP</span>
       `;
@@ -337,7 +337,7 @@ class UIManager {
 
     const div = document.createElement("div");
     div.className = "chat-message";
-    div.innerHTML = `<span class="name">${this.escapeHtml(name)}:</span> ${this.escapeHtml(message)}`;
+    div.innerHTML = `<span class="name" data-player-id="' + player.id + '">${this.escapeHtml(name)}:</span> ${this.escapeHtml(message)}`;
     this.elements.chatMessages.appendChild(div);
     this.elements.chatMessages.scrollTop =
       this.elements.chatMessages.scrollHeight;
@@ -1466,6 +1466,49 @@ class UIManager {
       clearInterval(this.c4TimerInterval);
       this.c4TimerInterval = null;
     }
+  }
+
+  // 显示/隐藏说话状态指示器
+  showSpeakingIndicator(playerId, speaking) {
+    const playerItems = this.elements.playersContainer?.querySelectorAll(".player-item") || [];
+    for (const item of playerItems) {
+      const nameSpan = item.querySelector(".name");
+      if (nameSpan && nameSpan.dataset.playerId === playerId) {
+        let indicator = item.querySelector(".speaking-indicator");
+        if (speaking && !indicator) {
+          indicator = document.createElement("span");
+          indicator.className = "speaking-indicator";
+          indicator.textContent = " 🔊";
+          indicator.style.marginLeft = "4px";
+          item.appendChild(indicator);
+        } else if (!speaking && indicator) {
+          indicator.remove();
+        }
+        break;
+      }
+    }
+  }
+
+  // 更新玩家列表中的说话状态
+  updateSpeakingStates(speakingPlayers) {
+    const playerItems = this.elements.playersContainer?.querySelectorAll(".player-item") || [];
+    playerItems.forEach((item) => {
+      const nameSpan = item.querySelector(".name");
+      if (!nameSpan) return;
+      const playerId = nameSpan.dataset.playerId;
+      let indicator = item.querySelector(".speaking-indicator");
+      if (speakingPlayers.has(playerId)) {
+        if (!indicator) {
+          indicator = document.createElement("span");
+          indicator.className = "speaking-indicator";
+          indicator.textContent = " 🔊";
+          indicator.style.marginLeft = "4px";
+          item.appendChild(indicator);
+        }
+      } else if (indicator) {
+        indicator.remove();
+      }
+    });
   }
 }
 
