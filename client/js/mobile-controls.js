@@ -402,6 +402,41 @@ class MobileControls {
         }
         
         if (jumpBtn) {
+            jumpBtn.addEventListener("touchstart", (e) => {
+                e.preventDefault();
+                if (window.player) {
+                    window.player.jump();
+                }
+            });
+        }
+        
+        // 语音按钮
+        const voiceBtn = document.getElementById("voice-btn");
+        if (voiceBtn) {
+            voiceBtn.addEventListener("touchstart", async (e) => {
+                e.preventDefault();
+                if (window.voiceSystem) {
+                    // 首次使用需要请求权限
+                    if (!window.voiceSystem.enabled) {
+                        const granted = await window.voiceSystem.init();
+                        if (!granted) {
+                            console.warn("[MOBILE] Microphone permission denied");
+                            voiceBtn.classList.add("muted");
+                            return;
+                        }
+                    }
+                    window.voiceSystem.startTransmission();
+                    voiceBtn.classList.add("active");
+                }
+            });
+            voiceBtn.addEventListener("touchend", (e) => {
+                e.preventDefault();
+                if (window.voiceSystem) {
+                    window.voiceSystem.stopTransmission();
+                    voiceBtn.classList.remove("active");
+                }
+            });
+        }
             jumpBtn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 if (window.player) {
