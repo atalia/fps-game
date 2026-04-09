@@ -10,6 +10,10 @@ class Game {
     this.lastUpdate = Date.now();
     this.tickRate = 60;
     this.effects = null;
+    this.connectionState = "connected";
+    this.lifecycleState = "playing";
+    this.spectator = null;
+    this.spectatorUI = null;
     this._eventHandlers = {}; // 存储事件处理器引用，用于清理
   }
 
@@ -59,6 +63,21 @@ class Game {
       this.effects = new EffectsManager(this.renderer);
     }
 
+    if (
+      this.renderer?.camera &&
+      typeof SpectatorMode !== "undefined" &&
+      typeof SpectatorUI !== "undefined"
+    ) {
+      this.spectator = new SpectatorMode(
+        this.renderer.camera,
+        this.players,
+        () => this.player?.id || this.selfPlayerId || window.network?.playerId,
+      );
+      this.spectatorUI = new SpectatorUI(
+        document.getElementById("game-container") || document.body,
+      );
+    }
+
     this.running = true;
 
     // 初始化音频
@@ -76,6 +95,9 @@ class Game {
     // 设置武器切换
     this.setupWeaponSwitch();
 
+    // 设置观战控制
+    this.setupSpectatorControls();
+
     // 设置小地图
     this.setupMinimap();
   }
@@ -87,14 +109,22 @@ class Game {
     const deltaTime = (now - this.lastUpdate) / 1000;
     this.lastUpdate = now;
 
-    // 更新玩家
-    const { position, rotation } = this.player.update();
+    let position = this.player?.position || { x: 0, y: 0, z: 0 };
+    let rotation = this.player?.rotation || 0;
+    const usingSpectator = this.spectator?.active && !this.canControlPlayer();
 
-    // 更新相机
-    this.renderer.updateCamera(position, rotation);
+    if (usingSpectator) {
+      this.spectator.update(deltaTime);
+    } else if (this.player && this.canControlPlayer()) {
+      const update = this.player.update();
+      position = update.position;
+      rotation = update.rotation;
+      this.renderer.updateCamera(position, rotation);
+    } else if (this.renderer && this.player) {
+      this.renderer.updateCamera(position, rotation);
+    }
 
-    // 发送位置到服务器
-    if (window.network.connected) {
+    if (window.network.connected && this.canControlPlayer()) {
       window.network.send("move", { ...position, rotation });
     }
 
@@ -116,7 +146,8 @@ class Game {
     if (window.dynamicCrosshair && this.player) {
       const keys = this.player.keys;
       const isMoving =
-        keys["KeyW"] || keys["KeyA"] || keys["KeyS"] || keys["KeyD"];
+        this.canControlPlayer() &&
+        (keys["KeyW"] || keys["KeyA"] || keys["KeyS"] || keys["KeyD"]);
       window.dynamicCrosshair.setMoving(isMoving);
       window.dynamicCrosshair.update(deltaTime);
     }
@@ -174,7 +205,7 @@ class Game {
 
   setupWeaponSwitch() {
     this._eventHandlers.weaponSwitchKeydown = (e) => {
-      if (this.chatFocused) {
+      if (this.chatFocused || !this.canControlPlayer()) {
         return;
       }
 
@@ -230,6 +261,41 @@ class Game {
       "keydown",
       this._eventHandlers.weaponSwitchKeydown,
     );
+  }
+
+  setupSpectatorControls() {
+    this._eventHandlers.spectatorKeydown = (event) => {
+      if (!this.spectator?.active) {
+        return;
+      }
+
+      switch (event.code) {
+        case "Space":
+          event.preventDefault();
+          this.spectator.selectNextTarget();
+          return;
+        case "KeyQ":
+          this.spectator.selectPrevTarget();
+          return;
+        case "KeyE":
+          this.spectator.toggleMode();
+          return;
+        default:
+          break;
+      }
+
+      this.spectator.setKey(event.key.toLowerCase(), true);
+    };
+
+    this._eventHandlers.spectatorKeyup = (event) => {
+      if (!this.spectator?.active) {
+        return;
+      }
+      this.spectator.setKey(event.key.toLowerCase(), false);
+    };
+
+    document.addEventListener("keydown", this._eventHandlers.spectatorKeydown);
+    document.addEventListener("keyup", this._eventHandlers.spectatorKeyup);
   }
 
   switchWeapon(weapon) {
@@ -346,16 +412,16 @@ class Game {
     ctx.strokeRect(0, 0, 150, 150);
 
     // 绘制自己
-    const myX = 75 + this.player.position.x * scale;
-    const myZ = 75 + this.player.position.z * scale;
+    const myX = 75 + (this.player?.position?.x || 0) * scale;
+    const myZ = 75 + (this.player?.position?.z || 0) * scale;
     ctx.fillStyle = "#00ff00";
     ctx.beginPath();
     ctx.arc(myX, myZ, 4, 0, Math.PI * 2);
     ctx.fill();
 
     // 绘制朝向
-    const dirX = Math.sin(this.player.rotation) * 10;
-    const dirZ = Math.cos(this.player.rotation) * 10;
+    const dirX = Math.sin(this.player?.rotation || 0) * 10;
+    const dirZ = Math.cos(this.player?.rotation || 0) * 10;
     ctx.strokeStyle = "#00ff00";
     ctx.beginPath();
     ctx.moveTo(myX, myZ);
@@ -375,10 +441,137 @@ class Game {
 
   updateUI() {
     // 更新血量警告
-    if (this.player.health < 30) {
+    if ((this.player?.health || 0) > 0 && this.player.health < 30) {
       window.uiManager.showLowHealthWarning();
     } else {
       window.uiManager.hideLowHealthWarning();
+    }
+
+    if (this.spectatorUI) {
+      this.spectatorUI.update(
+        this.spectator?.getUIInfo?.() || { active: false },
+      );
+    }
+  }
+
+  canControlPlayer() {
+    return (
+      Boolean(this.player) &&
+      (this.player.health || 0) > 0 &&
+      this.connectionState === "connected"
+    );
+  }
+
+  setConnectionState(state) {
+    this.connectionState = state || "disconnected";
+    if (this.connectionState !== "connected") {
+      this.lifecycleState = "reconnecting";
+      document.exitPointerLock?.();
+      return;
+    }
+
+    this.lifecycleState = this.player?.health > 0 ? "playing" : "spectating";
+  }
+
+  enterSpectatorMode() {
+    if (!this.spectator) {
+      this.lifecycleState = "spectating";
+      document.exitPointerLock?.();
+      return;
+    }
+
+    this.lifecycleState = "spectating";
+    document.exitPointerLock?.();
+    if (!this.spectator.active) {
+      this.spectator.start();
+    } else {
+      this.spectator.syncCurrentTarget?.();
+    }
+  }
+
+  exitSpectatorMode() {
+    this.spectator?.stop?.();
+    this.spectatorUI?.hide?.();
+    if (this.connectionState === "connected") {
+      this.lifecycleState = "playing";
+    }
+  }
+
+  resetRemotePlayers() {
+    this.players.forEach((_player, playerId) => {
+      this.renderer?.removePlayer?.(playerId);
+      window.aiLabels?.removeLabel?.(playerId);
+    });
+    this.players.clear();
+    this.spectator?.syncCurrentTarget?.();
+  }
+
+  applyAuthoritativePlayerState(state = {}) {
+    if (!this.player) {
+      return;
+    }
+
+    if (state.id) {
+      this.player.id = state.id;
+      this.selfPlayerId = state.id;
+      this.spectator?.setSelfPlayerId?.(state.id);
+    }
+    if (typeof state.name === "string" && state.name) {
+      this.player.name = state.name;
+    }
+    if (state.position) {
+      this.player.position = { ...state.position };
+    }
+    if (typeof state.rotation === "number") {
+      this.player.rotation = state.rotation;
+    }
+    if (typeof state.health === "number") {
+      this.player.health = state.health;
+    }
+    if (typeof state.max_health === "number") {
+      this.player.maxHealth = state.max_health;
+    }
+    if (typeof state.money === "number") {
+      this.player.money = state.money;
+    }
+    if (typeof state.kills === "number") {
+      this.player.kills = state.kills;
+    }
+    if (typeof state.deaths === "number") {
+      this.player.deaths = state.deaths;
+    }
+    if (typeof state.score === "number") {
+      this.player.score = state.score;
+    }
+    if (typeof state.team === "string") {
+      this.player.team = state.team;
+    }
+    if (typeof state.weapon === "string" && state.weapon) {
+      this.player.weapon = state.weapon;
+    }
+    if (typeof state.armor === "number") {
+      this.player.armor = state.armor;
+      this.player.hasHelmet = Boolean(state.has_helmet);
+    }
+    if (typeof state.ammo === "number") {
+      this.player.ammo = state.ammo;
+    }
+    if (typeof state.ammo_reserve === "number") {
+      this.player.ammoReserve = state.ammo_reserve;
+    }
+
+    window.uiManager?.updateHealth?.(this.player.health, this.player.maxHealth);
+    window.uiManager?.updateMoney?.(this.player.money);
+    window.uiManager?.updateWeapon?.(this.player.weapon);
+    window.uiManager?.updateAmmo?.(this.player.ammo, this.player.ammoReserve);
+    window.uiManager?.updateArmor?.(this.player.armor, this.player.hasHelmet);
+
+    if ((this.player.health || 0) > 0) {
+      this.exitSpectatorMode();
+      window.uiManager?.hideDeathScreen?.();
+    } else {
+      this.enterSpectatorMode();
+      window.uiManager?.showDeathScreen?.();
     }
   }
 
@@ -488,6 +681,7 @@ class Game {
     window.screenEffects.showDeath();
     window.audioManager.playDeath();
     this.addKillFeed(`你被 ${killerId} 击杀了`);
+    this.enterSpectatorMode();
 
     // 3秒后重生
     setTimeout(() => this.respawn(), 3000);
@@ -506,6 +700,7 @@ class Game {
     window.uiManager.updateAmmo(30, this.player.ammoReserve);
     window.screenEffects.hideDeath();
     window.uiManager.showMessage("已重生");
+    this.exitSpectatorMode();
 
     // 通知服务器
     window.network.send("respawn", {
@@ -579,6 +774,15 @@ class Game {
         this._eventHandlers.weaponSwitchKeydown,
       );
     }
+    if (this._eventHandlers.spectatorKeydown) {
+      document.removeEventListener(
+        "keydown",
+        this._eventHandlers.spectatorKeydown,
+      );
+    }
+    if (this._eventHandlers.spectatorKeyup) {
+      document.removeEventListener("keyup", this._eventHandlers.spectatorKeyup);
+    }
 
     // 清理 PlayerController 的事件监听器
     if (this.player && typeof this.player.destroy === "function") {
@@ -599,4 +803,3 @@ class Game {
 }
 
 window.Game = Game;
-

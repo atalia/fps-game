@@ -16,6 +16,8 @@ class ScreenEffectsEnhanced {
     this.muzzleFlashOverlay = null;
     this.hitMarker = null;
     this.hitMarkerLabel = null;
+    this.lastHitMarkerSignature = "";
+    this.lastHitMarkerAt = 0;
     this.gameContainer = null;
     this.nightVisionActive = false;
     this.lowHealthActive = false;
@@ -201,11 +203,25 @@ class ScreenEffectsEnhanced {
       options?.hitbox === "head";
     const damage = Number(options?.damage) || 0;
     const label = headshot ? "HEADSHOT" : damage > 0 ? `+${Math.round(damage)}` : "HIT";
+    const signature = `${headshot ? "head" : "body"}:${label}`;
+    const now = Date.now();
 
     if (this.hitMarkerLabel) {
       this.hitMarkerLabel.textContent = label;
     }
 
+    if (
+      signature === this.lastHitMarkerSignature &&
+      now - this.lastHitMarkerAt < 90
+    ) {
+      this.restartTimer("hitMarker", () => {
+        this.hitMarker?.classList.remove("active", "headshot");
+      }, 180);
+      return;
+    }
+
+    this.lastHitMarkerSignature = signature;
+    this.lastHitMarkerAt = now;
     this.hitMarker.classList.remove("active", "headshot");
     void this.hitMarker.offsetWidth;
     this.hitMarker.classList.add("active");

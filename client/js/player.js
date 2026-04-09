@@ -362,12 +362,20 @@ class PlayerController {
   }
 
   canMoveDuringRound() {
+    if ((this.health || 0) <= 0) return false;
+    if (window.game?.connectionState && window.game.connectionState !== "connected") {
+      return false;
+    }
     const roundState = window.roundState || null;
     if (!roundState) return true;
     return roundState.can_move !== false;
   }
 
   canShootDuringRound() {
+    if ((this.health || 0) <= 0) return false;
+    if (window.game?.connectionState && window.game.connectionState !== "connected") {
+      return false;
+    }
     const roundState = window.roundState || null;
     if (!roundState) return true;
     return roundState.can_shoot !== false;
@@ -464,4 +472,3 @@ class PlayerController {
 }
 
 window.PlayerController = PlayerController;
-

@@ -9,6 +9,8 @@ class UIManager {
     this.hitMarkerTimer = null;
     this.crosshairHitTimer = null;
     this.killConfirmationTimer = null;
+    this.lastHitMarkerSignature = "";
+    this.lastHitMarkerAt = 0;
     this.bridgeInterval = null;
     this.bridgeAttempts = 0;
     this.runtimeSyncInterval = null;
@@ -323,13 +325,27 @@ class UIManager {
     }
   }
 
-  updateConnectionStatus(connected) {
+  updateConnectionStatus(status, detail = "") {
     if (!this.elements.connectionStatus) return;
 
-    this.elements.connectionStatus.textContent = connected ? "已连接" : "已断开";
-    this.elements.connectionStatus.className = connected
-      ? "connected"
-      : "disconnected";
+    let normalized = status;
+    if (typeof status === "boolean") {
+      normalized = status ? "connected" : "disconnected";
+    }
+
+    const labelByState = {
+      connected: "已连接",
+      reconnecting: "重连中",
+      recovering: "同步中",
+      disconnected: "已断开",
+    };
+    const connectionState = labelByState[normalized] ? normalized : "disconnected";
+    const baseLabel = labelByState[connectionState];
+
+    this.elements.connectionStatus.textContent = detail
+      ? `${baseLabel} · ${detail}`
+      : baseLabel;
+    this.elements.connectionStatus.className = connectionState;
   }
 
   addChatMessage(name, message) {
@@ -556,11 +572,26 @@ class UIManager {
       options?.hitbox === "head";
     const damage = Number(options?.damage) || 0;
     const label = headshot ? "HEADSHOT" : damage > 0 ? `+${Math.round(damage)}` : "HIT";
+    const signature = `${headshot ? "head" : "body"}:${label}`;
+    const now = Date.now();
 
     if (this.elements.hitMarkerLabel) {
       this.elements.hitMarkerLabel.textContent = label;
     }
 
+    if (
+      signature === this.lastHitMarkerSignature &&
+      now - this.lastHitMarkerAt < 90
+    ) {
+      window.clearTimeout(this.hitMarkerTimer);
+      this.hitMarkerTimer = window.setTimeout(() => {
+        this.elements.hitMarker?.classList.remove("active", "headshot");
+      }, 180);
+      return;
+    }
+
+    this.lastHitMarkerSignature = signature;
+    this.lastHitMarkerAt = now;
     this.elements.hitMarker.classList.remove("active", "headshot");
     void this.elements.hitMarker.offsetWidth;
     this.elements.hitMarker.classList.add("active");
@@ -836,8 +867,8 @@ class UIManager {
       }
     };
 
-    crosshair.showHit = () => {
-      this.showHitMarker();
+    crosshair.showHit = (options = {}) => {
+      this.showHitMarker(options);
       element.classList.remove("hit");
       void element.offsetWidth;
       element.classList.add("hit");
@@ -1482,4 +1513,3 @@ if (typeof document !== 'undefined') {
 }
 
 window.UIManager = UIManager;
-

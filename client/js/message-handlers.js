@@ -22,15 +22,66 @@ function createMessageHandlers(deps) {
     aiLabels,
   } = deps;
 
+  const recentEvents = new Map();
+
+  function rememberEvent(prefix, data, ttl = 300) {
+    const signature = [
+      prefix,
+      data?.player_id || data?.victim_id || "",
+      data?.attacker_id || data?.killer_id || "",
+      data?.damage || 0,
+      data?.remaining_health ?? "",
+      data?.hitbox || "",
+      data?.weapon_id || "",
+      data?.position?.x ?? "",
+      data?.position?.y ?? "",
+      data?.position?.z ?? "",
+    ].join(":");
+    const now = Date.now();
+    const previous = recentEvents.get(signature);
+    if (previous && now - previous < ttl) {
+      return false;
+    }
+    recentEvents.set(signature, now);
+    if (recentEvents.size > 128) {
+      const threshold = now - 2000;
+      recentEvents.forEach((timestamp, key) => {
+        if (timestamp < threshold) {
+          recentEvents.delete(key);
+        }
+      });
+    }
+    return true;
+  }
+
+  function updateRemotePlayerState(playerId, patch = {}) {
+    if (!game?.players || !playerId) {
+      return;
+    }
+    const player = game.players.get(playerId);
+    if (!player) {
+      return;
+    }
+    Object.assign(player, patch);
+    if (typeof patch.health === "number" && typeof patch.alive !== "boolean") {
+      player.alive = patch.health > 0;
+    }
+  }
+
   return {
     /**
      * 处理 player_damaged 消息
      * 对应 main.js line 292-328 的真实逻辑
      */
     handlePlayerDamaged(data) {
+      if (!rememberEvent("player_damaged", data, 350)) {
+        return;
+      }
+
       // 更新血量
       if (data.player_id === game?.player?.id) {
         game.player.health = data.remaining_health;
+        game.player.alive = data.remaining_health > 0;
         uiManager.updateHealth(data.remaining_health);
 
         // 屏幕闪红 + 受击指示
@@ -40,7 +91,16 @@ function createMessageHandlers(deps) {
         if (hitIndicator && data.attacker_position) {
           hitIndicator.show(data.attacker_position, data.damage);
         }
+        if (data.remaining_health <= 0) {
+          game?.enterSpectatorMode?.();
+        }
       } else {
+        updateRemotePlayerState(data.player_id, {
+          health: data.remaining_health,
+          alive: data.remaining_health > 0,
+          position: data.position || game?.players?.get(data.player_id)?.position,
+        });
+
         // 显示命中标记 (射击者视角)
         if (data.attacker_id === game?.player?.id) {
           // 命中粒子效果
@@ -62,7 +122,11 @@ function createMessageHandlers(deps) {
           }
           // 准星命中反馈
           if (dynamicCrosshair) {
-            dynamicCrosshair.showHit();
+            dynamicCrosshair.showHit({
+              hitbox: data.hitbox,
+              damage: data.damage,
+              isHeadshot: data.hitbox === "head",
+            });
           }
           // 命中音效
           if (audioManager) {
@@ -110,6 +174,10 @@ function createMessageHandlers(deps) {
      * 对应 main.js line 331-358
      */
     handlePlayerKilled(data) {
+      if (!rememberEvent("player_killed", data, 500)) {
+        return;
+      }
+
       const resolvePlayerName = (playerId) => {
         if (!playerId) return "Unknown";
         if (playerId === game?.player?.id) {
@@ -128,6 +196,11 @@ function createMessageHandlers(deps) {
           isHeadshot: data.is_headshot,
         });
       }
+
+      updateRemotePlayerState(data.victim_id, {
+        health: 0,
+        alive: false,
+      });
 
       // 更新击杀计数
       if (data.killer_id === game?.player?.id) {
@@ -161,7 +234,10 @@ function createMessageHandlers(deps) {
 
       if (data.victim_id === game?.player?.id) {
         game.player.deaths++;
+        game.player.health = 0;
+        game.player.alive = false;
         uiManager.updateDeaths(game.player.deaths);
+        game?.enterSpectatorMode?.();
         uiManager.showDeathScreen();
       }
     },
@@ -305,31 +381,30 @@ function createMessageHandlers(deps) {
      */
     handlePlayerRespawned(data) {
       if (data.player_id === game?.player?.id) {
-        game.player.health = data.health;
-        game.player.position = data.position;
-        uiManager.updateHealth(data.health);
-        // 重生时更新护甲
-        if (typeof data.armor === "number") {
-          game.player.armor = data.armor;
-          game.player.hasHelmet = data.has_helmet || false;
-          uiManager.updateArmor(data.armor, data.has_helmet);
-        }
-        if (typeof data.ammo === "number") {
-          game.player.ammo = data.ammo;
-          uiManager.updateAmmo(game.player.ammo, game.player.ammoReserve);
-        }
+        game?.applyAuthoritativePlayerState?.({
+          id: data.player_id,
+          position: data.position,
+          rotation: data.rotation,
+          health: data.health,
+          armor: data.armor,
+          has_helmet: data.has_helmet,
+          ammo: data.ammo,
+          ammo_reserve: data.ammo_reserve,
+          weapon: data.weapon || game?.player?.weapon,
+        });
+        game?.exitSpectatorMode?.();
         uiManager.hideDeathScreen();
       }
 
-      if (game?.players) {
-        const player = game.players.get(data.player_id);
-        if (player) {
-          player.position = data.position;
-          if (typeof data.health === "number") {
-            player.health = data.health;
-          }
-        }
-      }
+      updateRemotePlayerState(data.player_id, {
+        position: data.position,
+        health: typeof data.health === "number" ? data.health : 100,
+        alive: true,
+        armor: data.armor,
+        has_helmet: data.has_helmet,
+        ammo: data.ammo,
+        ammo_reserve: data.ammo_reserve,
+      });
 
       renderer.updatePlayer(data.player_id, data.position, 0);
     },

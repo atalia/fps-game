@@ -1,14 +1,73 @@
 // spectator.js - 观战模式
 class SpectatorMode {
-    constructor(camera, players) {
+    constructor(camera, players, selfPlayerId = null) {
         this.camera = camera;
         this.players = players; // 玩家列表引用
+        this.selfPlayerId = selfPlayerId;
         this.active = false;
         this.currentTarget = null;
-        this.targetIndex = 0;
+        this.targetIndex = -1;
         this.mode = 'free'; // 'free' | 'follow' | 'firstperson'
         this.moveSpeed = 10;
         this.keys = {};
+    }
+
+    setSelfPlayerId(playerId) {
+        this.selfPlayerId = playerId;
+    }
+
+    getSelfPlayerId() {
+        return typeof this.selfPlayerId === 'function'
+            ? this.selfPlayerId()
+            : this.selfPlayerId;
+    }
+
+    getPlayerList() {
+        if (this.players instanceof Map) {
+            return Array.from(this.players.values());
+        }
+        return Object.values(this.players || {});
+    }
+
+    getAliveTargets() {
+        const selfPlayerId = this.getSelfPlayerId();
+        return this.getPlayerList().filter((player) => {
+            if (!player || player.id === selfPlayerId) {
+                return false;
+            }
+            if (player.alive === false) {
+                return false;
+            }
+            const health = Number(player.health);
+            return Number.isNaN(health) || health > 0;
+        });
+    }
+
+    syncCurrentTarget() {
+        const targets = this.getAliveTargets();
+        if (targets.length === 0) {
+            this.currentTarget = null;
+            this.targetIndex = -1;
+            this.mode = 'free';
+            return targets;
+        }
+
+        if (this.currentTarget) {
+            const nextIndex = targets.findIndex(
+                (player) => player.id === this.currentTarget.id,
+            );
+            if (nextIndex >= 0) {
+                this.targetIndex = nextIndex;
+                this.currentTarget = targets[nextIndex];
+                return targets;
+            }
+        }
+
+        if (this.targetIndex < 0 || this.targetIndex >= targets.length) {
+            this.targetIndex = 0;
+        }
+        this.currentTarget = targets[this.targetIndex];
+        return targets;
     }
 
     // 开启观战
@@ -17,6 +76,7 @@ class SpectatorMode {
         this.mode = 'follow';
         
         // 选择第一个玩家跟随
+        this.targetIndex = -1;
         this.selectNextTarget();
     }
 
@@ -24,30 +84,49 @@ class SpectatorMode {
     stop() {
         this.active = false;
         this.currentTarget = null;
+        this.targetIndex = -1;
+        this.mode = 'free';
+        this.keys = {};
     }
 
     // 选择下一个目标
     selectNextTarget() {
-        const playerList = Object.values(this.players).filter(p => p.alive);
+        const playerList = this.getAliveTargets();
         
         if (playerList.length === 0) {
             this.currentTarget = null;
+            this.targetIndex = -1;
             this.mode = 'free';
             return;
         }
 
-        this.targetIndex = (this.targetIndex + 1) % playerList.length;
+        if (this.currentTarget) {
+            const currentIndex = playerList.findIndex(
+                (player) => player.id === this.currentTarget.id,
+            );
+            this.targetIndex = currentIndex >= 0 ? currentIndex : this.targetIndex;
+        }
+
+        this.targetIndex = (this.targetIndex + 1 + playerList.length) % playerList.length;
         this.currentTarget = playerList[this.targetIndex];
     }
 
     // 选择上一个目标
     selectPrevTarget() {
-        const playerList = Object.values(this.players).filter(p => p.alive);
+        const playerList = this.getAliveTargets();
         
         if (playerList.length === 0) {
             this.currentTarget = null;
+            this.targetIndex = -1;
             this.mode = 'free';
             return;
+        }
+
+        if (this.currentTarget) {
+            const currentIndex = playerList.findIndex(
+                (player) => player.id === this.currentTarget.id,
+            );
+            this.targetIndex = currentIndex >= 0 ? currentIndex : this.targetIndex;
         }
 
         this.targetIndex = (this.targetIndex - 1 + playerList.length) % playerList.length;
@@ -73,6 +152,7 @@ class SpectatorMode {
     // 更新
     update(dt) {
         if (!this.active) return;
+        this.syncCurrentTarget();
 
         switch (this.mode) {
             case 'free':
@@ -104,10 +184,10 @@ class SpectatorMode {
         if (this.keys['d'] || this.keys['arrowright']) {
             this.camera.position.x += move;
         }
-        if (this.keys[' ']) {
+        if (this.keys['r']) {
             this.camera.position.y += move;
         }
-        if (this.keys['shift']) {
+        if (this.keys['f'] || this.keys['shift']) {
             this.camera.position.y -= move;
         }
     }
@@ -196,7 +276,7 @@ class SpectatorUI {
             <p style="margin: 5px 0;">模式: ${info.modeName}</p>
             ${info.targetName ? `<p style="margin: 5px 0;">观看: ${info.targetName}</p>` : ''}
             <p style="margin: 15px 0 0 0; font-size: 14px; color: #888;">
-                [空格] 下一个目标 | [Q/E] 切换模式
+                [空格] 下一个目标 | [Q] 上一个 | [E] 切换模式 | [R/F] 升降
             </p>
         `;
 
