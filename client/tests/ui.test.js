@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
 
 async function loadUIManager() {
@@ -66,12 +67,12 @@ describe("UIManager", () => {
 
   it("updates connection status classes and text", () => {
     ui.updateConnectionStatus(true);
-    expect(ui.elements.connectionStatus.textContent).toBe("已连接");
-    expect(ui.elements.connectionStatus.className).toBe("connected");
+    expect(ui.elements.connectionStatus.textContent).toBe("ONLINE");
+    expect(ui.elements.connectionStatus.classList.contains("connected")).toBe(true);
 
     ui.updateConnectionStatus(false);
-    expect(ui.elements.connectionStatus.textContent).toBe("已断开");
-    expect(ui.elements.connectionStatus.className).toBe("disconnected");
+    expect(ui.elements.connectionStatus.textContent).toBe("OFFLINE");
+    expect(ui.elements.connectionStatus.classList.contains("disconnected")).toBe(true);
   });
 
   it("renders chat messages with escaped content", () => {

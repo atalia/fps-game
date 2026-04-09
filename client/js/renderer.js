@@ -1,6 +1,168 @@
 // renderer.js - Three.js 3D 渲染器（全面优化版）
 console.log("[RENDERER] renderer.js loading...");
 
+const REMOTE_PLAYER_INTERPOLATION_MIN_MS = 30;
+const REMOTE_PLAYER_INTERPOLATION_MAX_MS = 100;
+const REMOTE_PLAYER_DEFAULT_INTERVAL_MS = 50;
+
+function getRendererNowMs() {
+  if (window.FrameTiming?.nowMs) {
+    return window.FrameTiming.nowMs();
+  }
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function cloneRemoteVector(source, fallbackY = 0) {
+  return {
+    x: Number(source?.x) || 0,
+    y: Number(source?.y ?? fallbackY) || 0,
+    z: Number(source?.z) || 0,
+  };
+}
+
+function lerpRemoteVector(from, to, alpha) {
+  return {
+    x: from.x + (to.x - from.x) * alpha,
+    y: from.y + (to.y - from.y) * alpha,
+    z: from.z + (to.z - from.z) * alpha,
+  };
+}
+
+function normalizeAngle(angle) {
+  let normalized = Number(angle) || 0;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  while (normalized < -Math.PI) normalized += Math.PI * 2;
+  return normalized;
+}
+
+function lerpAngle(from, to, alpha) {
+  const start = normalizeAngle(from);
+  const end = normalizeAngle(to);
+  let delta = end - start;
+
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+
+  return normalizeAngle(start + delta * alpha);
+}
+
+class RemotePlayerState {
+  constructor(initialPosition = { x: 0, y: 0, z: 0 }, rotation = 0) {
+    this.snapshots = [];
+    this.maxExtrapolationMs = REMOTE_PLAYER_INTERPOLATION_MAX_MS;
+    this.interpolationDelayMs = REMOTE_PLAYER_DEFAULT_INTERVAL_MS;
+    this.lastPose = {
+      position: cloneRemoteVector(initialPosition),
+      rotation: Number(rotation) || 0,
+    };
+  }
+
+  pushSnapshot(position, rotation = 0, velocity = null, receivedAt = getRendererNowMs()) {
+    const normalizedSnapshot = {
+      position: cloneRemoteVector(position),
+      rotation: Number(rotation) || 0,
+      velocity: cloneRemoteVector(velocity),
+      receivedAt,
+    };
+    const previous = this.snapshots[this.snapshots.length - 1] || null;
+
+    this.snapshots.push(normalizedSnapshot);
+    if (this.snapshots.length > 2) {
+      this.snapshots.shift();
+    }
+
+    if (previous) {
+      const intervalMs = normalizedSnapshot.receivedAt - previous.receivedAt;
+      if (intervalMs > 0) {
+        this.interpolationDelayMs = Math.max(
+          REMOTE_PLAYER_INTERPOLATION_MIN_MS,
+          Math.min(REMOTE_PLAYER_INTERPOLATION_MAX_MS, intervalMs),
+        );
+      }
+    }
+
+    if (this.snapshots.length === 1) {
+      this.lastPose = {
+        position: cloneRemoteVector(normalizedSnapshot.position),
+        rotation: normalizedSnapshot.rotation,
+      };
+    }
+  }
+
+  getLatestSnapshot() {
+    return this.snapshots[this.snapshots.length - 1] || null;
+  }
+
+  getStalenessMs(nowMs = getRendererNowMs()) {
+    const latest = this.getLatestSnapshot();
+    if (!latest) {
+      return 0;
+    }
+    return Math.max(0, nowMs - latest.receivedAt);
+  }
+
+  isDegraded(nowMs = getRendererNowMs()) {
+    return this.getStalenessMs(nowMs) > this.maxExtrapolationMs;
+  }
+
+  sample(nowMs = getRendererNowMs()) {
+    const latest = this.getLatestSnapshot();
+    if (!latest) {
+      return {
+        position: cloneRemoteVector(this.lastPose.position),
+        rotation: this.lastPose.rotation,
+        staleMs: 0,
+        degraded: false,
+      };
+    }
+
+    const previous = this.snapshots[this.snapshots.length - 2] || null;
+    const renderAt = nowMs - this.interpolationDelayMs;
+    let nextPose = {
+      position: cloneRemoteVector(latest.position),
+      rotation: latest.rotation,
+    };
+
+    if (previous && renderAt <= latest.receivedAt) {
+      const intervalMs = Math.max(1, latest.receivedAt - previous.receivedAt);
+      const alpha = clamp01((renderAt - previous.receivedAt) / intervalMs);
+      nextPose = {
+        position: lerpRemoteVector(previous.position, latest.position, alpha),
+        rotation: lerpAngle(previous.rotation, latest.rotation, alpha),
+      };
+    } else {
+      const extrapolationMs = Math.max(0, renderAt - latest.receivedAt);
+      const cappedExtrapolationMs = Math.min(
+        extrapolationMs,
+        this.maxExtrapolationMs,
+      );
+      const seconds = cappedExtrapolationMs / 1000;
+      nextPose = {
+        position: {
+          x: latest.position.x + latest.velocity.x * seconds,
+          y: latest.position.y + latest.velocity.y * seconds,
+          z: latest.position.z + latest.velocity.z * seconds,
+        },
+        rotation: latest.rotation,
+      };
+    }
+
+    this.lastPose = nextPose;
+    return {
+      ...nextPose,
+      staleMs: this.getStalenessMs(nowMs),
+      degraded: this.isDegraded(nowMs),
+    };
+  }
+}
+
 class Renderer {
   constructor(containerId) {
     console.log("[RENDERER] Constructor called, containerId:", containerId);
@@ -20,6 +182,7 @@ class Renderer {
     });
 
     this.players = new Map();
+    this.remotePlayerStates = new Map();
     this.projectiles = [];
     this.clock = new THREE.Clock();
     this.time = 0;
@@ -490,8 +653,10 @@ class Renderer {
       dayFactor,
     );
 
-    this.sky.material.uniforms.topColor.value = topColor;
-    this.sky.material.uniforms.bottomColor.value = bottomColor;
+    if (this.sky?.material?.uniforms) {
+      this.sky.material.uniforms.topColor.value = topColor;
+      this.sky.material.uniforms.bottomColor.value = bottomColor;
+    }
   }
 
   updateParticles(deltaTime) {
@@ -640,6 +805,10 @@ class Renderer {
     };
     this.scene.add(bodyGroup);
     this.players.set(id, bodyGroup);
+    if (!this.remotePlayerStates) {
+      this.remotePlayerStates = new Map();
+    }
+    this.remotePlayerStates.set(id, new RemotePlayerState(position, 0));
 
     return bodyGroup;
   }
@@ -655,11 +824,24 @@ class Renderer {
       this.scene.remove(player);
       this.players.delete(id);
     }
+    if (this.remotePlayerStates) {
+      this.remotePlayerStates.delete(id);
+    }
   }
 
-  updatePlayer(id, position, rotation) {
+  updatePlayer(id, position, rotation, velocity = null) {
     const player = this.players.get(id);
     if (player) {
+      if (!this.remotePlayerStates) {
+        this.remotePlayerStates = new Map();
+      }
+      let remoteState = this.remotePlayerStates.get(id);
+      if (!remoteState) {
+        remoteState = new RemotePlayerState(position, rotation);
+        this.remotePlayerStates.set(id, remoteState);
+      }
+      remoteState.pushSnapshot(position, rotation, velocity);
+      // 兼容旧行为：立即设置位置（update() 会用插值覆盖）
       player.position.set(position.x, position.y ?? 0, position.z);
       player.rotation.y = rotation;
     }
@@ -729,7 +911,47 @@ class Renderer {
       this.scene.remove(player);
     });
     this.players.clear();
+    this.remotePlayerStates.clear();
     console.log("[RENDERER] Cleared all players");
+  }
+
+  updateRemotePlayers(nowMs = getRendererNowMs()) {
+    this.remotePlayerStates.forEach((remoteState, id) => {
+      const player = this.players.get(id);
+      if (!player) {
+        return;
+      }
+
+      const sampledPose = remoteState.sample(nowMs);
+      player.position.set(
+        sampledPose.position.x,
+        sampledPose.position.y,
+        sampledPose.position.z,
+      );
+      player.rotation.y = sampledPose.rotation;
+      player.userData.remoteSync = {
+        staleMs: sampledPose.staleMs,
+        degraded: sampledPose.degraded,
+      };
+    });
+  }
+
+  getRemoteSyncStatus(nowMs = getRendererNowMs()) {
+    let degradedPlayers = 0;
+    let maxStalenessMs = 0;
+
+    this.remotePlayerStates.forEach((remoteState) => {
+      const staleMs = remoteState.getStalenessMs(nowMs);
+      maxStalenessMs = Math.max(maxStalenessMs, staleMs);
+      if (remoteState.isDegraded(nowMs)) {
+        degradedPlayers += 1;
+      }
+    });
+
+    return {
+      degradedPlayers,
+      maxStalenessMs: Math.round(maxStalenessMs),
+    };
   }
 
   update() {
@@ -746,6 +968,8 @@ class Renderer {
     if (this.sky) {
       this.sky.material.uniforms.time.value = this.time;
     }
+
+    this.updateRemotePlayers();
 
     // 更新弹道
     const speed = 2;
@@ -782,6 +1006,6 @@ class Renderer {
   }
 }
 
+window.RemotePlayerState = RemotePlayerState;
 window.Renderer = Renderer;
 console.log("[RENDERER] renderer.js loaded");
-

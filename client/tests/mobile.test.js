@@ -3,6 +3,7 @@
  * 测试手机触控支持
  */
 
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock DOM elements

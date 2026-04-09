@@ -15,6 +15,7 @@ class UIManager {
     this.crosshairColorKey = this.loadStoredCrosshairColor();
     this.lastSyncedWeapon = "";
     this.lastSyncedTeam = "";
+    this.lastNetworkHudSignature = "";
 
     this.initElements();
     this.lastMoneyValue = this.parseCurrency(this.elements.money?.textContent);
@@ -44,6 +45,11 @@ class UIManager {
       weaponIcon: document.getElementById("weapon-icon"),
       roomId: document.getElementById("room-id"),
       playerCount: document.getElementById("player-count"),
+      networkRtt: document.getElementById("network-rtt"),
+      networkQualityIcon: document.getElementById("network-quality-icon"),
+      networkQualityLabel: document.getElementById("network-quality-label"),
+      remoteSyncCount: document.getElementById("remote-sync-count"),
+      remoteSyncStaleness: document.getElementById("remote-sync-staleness"),
       playersContainer: document.getElementById("players-container"),
       connectionStatus: document.getElementById("connection-status"),
       chatMessages: document.getElementById("chat-messages"),
@@ -326,10 +332,62 @@ class UIManager {
   updateConnectionStatus(connected) {
     if (!this.elements.connectionStatus) return;
 
-    this.elements.connectionStatus.textContent = connected ? "已连接" : "已断开";
-    this.elements.connectionStatus.className = connected
-      ? "connected"
-      : "disconnected";
+    this.elements.connectionStatus.textContent = connected ? "ONLINE" : "OFFLINE";
+    this.elements.connectionStatus.classList.toggle("connected", connected);
+    this.elements.connectionStatus.classList.toggle("disconnected", !connected);
+  }
+
+  updateRemoteSyncStatus(status = {}) {
+    const degradedPlayers = Math.max(0, Number(status.degradedPlayers) || 0);
+    const maxStalenessMs = Math.max(0, Number(status.maxStalenessMs) || 0);
+    const networkQuality = window.network?.getNetworkQuality?.() || {
+      connected: false,
+      rttMs: null,
+      quality: "offline",
+      icon: "x...",
+    };
+    const signature = [
+      degradedPlayers,
+      maxStalenessMs,
+      networkQuality.connected,
+      networkQuality.rttMs,
+      networkQuality.quality,
+      networkQuality.icon,
+    ].join("|");
+
+    if (signature === this.lastNetworkHudSignature) {
+      return;
+    }
+
+    this.lastNetworkHudSignature = signature;
+    this.updateConnectionStatus(Boolean(networkQuality.connected));
+
+    if (this.elements.networkRtt) {
+      this.elements.networkRtt.textContent =
+        networkQuality.rttMs === null ? "--" : `${networkQuality.rttMs}ms`;
+    }
+
+    if (this.elements.networkQualityIcon) {
+      this.elements.networkQualityIcon.textContent =
+        networkQuality.icon || this.getNetworkQualityIcon(networkQuality.quality);
+      this.elements.networkQualityIcon.dataset.quality =
+        networkQuality.quality || "probing";
+    }
+
+    if (this.elements.networkQualityLabel) {
+      this.elements.networkQualityLabel.textContent =
+        this.getNetworkQualityLabel(networkQuality.quality);
+      this.elements.networkQualityLabel.dataset.quality =
+        networkQuality.quality || "probing";
+    }
+
+    if (this.elements.remoteSyncCount) {
+      this.elements.remoteSyncCount.textContent = `${degradedPlayers}`;
+    }
+
+    if (this.elements.remoteSyncStaleness) {
+      this.elements.remoteSyncStaleness.textContent = `${Math.round(maxStalenessMs)}ms`;
+    }
   }
 
   addChatMessage(name, message) {
@@ -1288,6 +1346,40 @@ class UIManager {
     return normalized < 0 ? normalized + 360 : normalized;
   }
 
+  getNetworkQualityLabel(quality) {
+    switch (quality) {
+      case "excellent":
+        return "EXCELLENT";
+      case "good":
+        return "GOOD";
+      case "fair":
+        return "FAIR";
+      case "poor":
+        return "POOR";
+      case "offline":
+        return "OFFLINE";
+      default:
+        return "PROBING";
+    }
+  }
+
+  getNetworkQualityIcon(quality) {
+    switch (quality) {
+      case "excellent":
+        return "||||";
+      case "good":
+        return "|||.";
+      case "fair":
+        return "||..";
+      case "poor":
+        return "|...";
+      case "offline":
+        return "x...";
+      default:
+        return "....";
+    }
+  }
+
   withAlpha(color, alphaHex = "33") {
     if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) {
       return `${color}${alphaHex}`;
@@ -1482,4 +1574,3 @@ if (typeof document !== 'undefined') {
 }
 
 window.UIManager = UIManager;
-

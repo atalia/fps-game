@@ -137,9 +137,10 @@ class PlayerController {
     this._eventHandlers = {};
   }
 
-  update() {
-    const dt = 1 / 60;
+  update(deltaTime = 1 / 60) {
+    const dt = window.FrameTiming?.clampDelta?.(deltaTime, 1 / 60) ?? 1 / 60;
     const canMove = this.canMoveDuringRound();
+    const previousPosition = { ...this.position };
 
     // 移动
     let moveX = 0;
@@ -182,9 +183,13 @@ class PlayerController {
     this.position.x = Math.max(-boundary, Math.min(boundary, this.position.x));
     this.position.z = Math.max(-boundary, Math.min(boundary, this.position.z));
 
+    this.velocity.x = (this.position.x - previousPosition.x) / dt;
+    this.velocity.z = (this.position.z - previousPosition.z) / dt;
+
     return {
       position: { ...this.position },
       rotation: this.rotation,
+      velocity: { ...this.velocity },
     };
   }
 
@@ -464,4 +469,3 @@ class PlayerController {
 }
 
 window.PlayerController = PlayerController;
-

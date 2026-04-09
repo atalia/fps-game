@@ -84,18 +84,21 @@ class Game {
     if (!this.running) return;
 
     const now = Date.now();
-    const deltaTime = (now - this.lastUpdate) / 1000;
+    const deltaTime = window.FrameTiming?.clampDelta?.(
+      (now - this.lastUpdate) / 1000,
+      1 / 60,
+    ) ?? (now - this.lastUpdate) / 1000;
     this.lastUpdate = now;
 
     // 更新玩家
-    const { position, rotation } = this.player.update();
+    const { position, rotation, velocity } = this.player.update(deltaTime);
 
     // 更新相机
     this.renderer.updateCamera(position, rotation);
 
     // 发送位置到服务器
     if (window.network.connected) {
-      window.network.send("move", { ...position, rotation });
+      window.network.send("move", { ...position, rotation, velocity });
     }
 
     // 更新性能监控
@@ -380,6 +383,15 @@ class Game {
     } else {
       window.uiManager.hideLowHealthWarning();
     }
+
+    if (window.uiManager?.updateRemoteSyncStatus) {
+      window.uiManager.updateRemoteSyncStatus(
+        this.renderer?.getRemoteSyncStatus?.() || {
+          degradedPlayers: 0,
+          maxStalenessMs: 0,
+        },
+      );
+    }
   }
 
   onRoomJoined(data) {
@@ -431,12 +443,18 @@ class Game {
 
   onPlayerMoved(data) {
     if (data.player_id !== window.network.playerId) {
-      this.renderer.updatePlayer(data.player_id, data.position, data.rotation);
+      this.renderer.updatePlayer(
+        data.player_id,
+        data.position,
+        data.rotation,
+        data.velocity,
+      );
 
       const player = this.players.get(data.player_id);
       if (player) {
         player.position = data.position;
         player.rotation = data.rotation;
+        player.velocity = data.velocity;
       }
     }
   }
@@ -599,4 +617,3 @@ class Game {
 }
 
 window.Game = Game;
-

@@ -18,6 +18,7 @@ async function loadAILabels() {
   return mod.default || window.AILabels
 }
 
+// @vitest-environment jsdom
 describe('security sanitization', () => {
   beforeEach(() => {
     document.body.innerHTML = `

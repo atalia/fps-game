@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 const originalWindow = global.window
@@ -5,8 +6,15 @@ const originalTHREE = global.THREE
 const originalGetContext = HTMLCanvasElement.prototype.getContext
 
 function createMockMesh() {
+  const position = { x: 0, y: 0, z: 0 }
+  position.set = vi.fn((x, y, z) => {
+    position.x = x
+    position.y = y
+    position.z = z
+  })
+
   return {
-    position: { set: vi.fn(), x: 0, y: 0, z: 0 },
+    position,
     rotation: { x: 0, y: 0, z: 0 },
     scale: { set: vi.fn() },
     add: vi.fn(),
@@ -75,6 +83,7 @@ function createThreeMock() {
     setHSL() {}
     copy() { return this }
     lerp() { return this }
+    lerpColors() { return this }
   }
 
   class MockVector3 {
@@ -183,6 +192,61 @@ describe('Renderer', () => {
 
     renderer.removePlayer('p1')
     expect(renderer.players.has('p1')).toBe(false)
+  })
+
+  it('interpolates remote player snapshots and reports degraded sync', () => {
+    const renderer = new Renderer('game-container')
+    let nowMs = 1000
+    window.FrameTiming = {
+      nowMs: () => nowMs
+    }
+
+    renderer.addPlayer('p1', { x: 0, y: 0, z: 0 }, false)
+
+    // 第一个快照
+    nowMs = 1050
+    renderer.updatePlayer(
+      'p1',
+      { x: 10, y: 0, z: 0 },
+      Math.PI / 2,
+      { x: 20, y: 0, z: 0 }
+    )
+
+    // 第二个快照（需要两个快照才能插值）
+    nowMs = 1100
+    renderer.updatePlayer(
+      'p1',
+      { x: 20, y: 0, z: 0 },
+      Math.PI / 2,
+      { x: 20, y: 0, z: 0 }
+    )
+
+    // 渲染时刻 = 1125 - 50ms插值延迟 = 1075
+    // 在第一个快照(1050, x=10)和第二个快照(1100, x=20)之间插值
+    // alpha = (1075 - 1050) / (1100 - 1050) = 0.5
+    // position.x = 10 + (20 - 10) * 0.5 = 15
+    nowMs = 1125
+    renderer.update()
+
+    const player = renderer.players.get('p1')
+    expect(player.position.x).toBeCloseTo(15)
+    expect(renderer.getRemoteSyncStatus(nowMs)).toEqual({
+      degradedPlayers: 0,
+      maxStalenessMs: 25
+    })
+
+    // 超过外推上限（100ms），进入降级状态
+    nowMs = 1250
+    renderer.update()
+
+    // 渲染时刻 = 1250 - 50 = 1200
+    // 最后快照时间 = 1100，外推 100ms（上限）
+    // position.x = 20 + 20 * 0.1 = 22
+    expect(player.position.x).toBeCloseTo(22)
+    expect(renderer.getRemoteSyncStatus(nowMs)).toEqual({
+      degradedPlayers: 1,
+      maxStalenessMs: 150
+    })
   })
 
   it('renders without invoking a second update pass', () => {

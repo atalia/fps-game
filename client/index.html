@@ -116,6 +116,7 @@
 
       .vitals-stack,
       #room-info,
+      #network-hud,
       #round-panel,
       #player-list,
       #ammo-display,
@@ -1503,6 +1504,7 @@
       }
 
       #room-info,
+      #network-hud,
       #round-panel,
       #player-list,
       #ammo-display,
@@ -1518,8 +1520,128 @@
         min-width: 172px;
       }
 
+      #network-hud {
+        top: 124px;
+        left: 24px;
+        min-width: 196px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border);
+        background: linear-gradient(180deg, rgba(10, 16, 24, 0.92), rgba(8, 12, 18, 0.82));
+        box-shadow: var(--panel-shadow);
+      }
+
+      .network-hud-header,
+      .network-hud-row,
+      .network-metric {
+        display: flex;
+        align-items: center;
+      }
+
+      .network-hud-header,
+      .network-hud-row {
+        justify-content: space-between;
+      }
+
+      .network-hud-header {
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .network-hud-label,
+      .network-metric-label {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        color: var(--text-2);
+        text-transform: uppercase;
+      }
+
+      #connection-status {
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--warning-0);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      #connection-status.connected {
+        color: var(--accent-0);
+        border-color: rgba(124, 255, 154, 0.2);
+        background: rgba(124, 255, 154, 0.08);
+      }
+
+      #connection-status.disconnected {
+        color: var(--danger-1);
+        border-color: rgba(255, 90, 111, 0.22);
+        background: rgba(255, 90, 111, 0.08);
+      }
+
+      .network-hud-row {
+        gap: 14px;
+        margin-bottom: 12px;
+      }
+
+      #network-quality-icon {
+        min-width: 44px;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--warning-0);
+      }
+
+      #network-quality-icon[data-quality="excellent"],
+      #network-quality-label[data-quality="excellent"] {
+        color: var(--accent-0);
+      }
+
+      #network-quality-icon[data-quality="good"],
+      #network-quality-label[data-quality="good"] {
+        color: #7be4ff;
+      }
+
+      #network-quality-icon[data-quality="fair"],
+      #network-quality-label[data-quality="fair"] {
+        color: var(--warning-0);
+      }
+
+      #network-quality-icon[data-quality="poor"],
+      #network-quality-label[data-quality="poor"],
+      #network-quality-icon[data-quality="offline"],
+      #network-quality-label[data-quality="offline"] {
+        color: var(--danger-1);
+      }
+
+      #network-quality-label {
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        color: var(--text-0);
+      }
+
+      .network-metrics {
+        display: grid;
+        gap: 8px;
+      }
+
+      .network-metric {
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .network-metric-value {
+        font-size: 13px;
+        color: var(--text-0);
+      }
+
       #room-id,
       #player-count,
+      .network-hud-label,
+      .network-metric-label,
+      .network-metric-value,
+      #network-quality-icon,
+      #network-quality-label,
+      #connection-status,
       .hud-vital-label,
       .hud-vital-value,
       .player-list-header,
@@ -2186,6 +2308,7 @@
 
       @media (max-width: 720px) {
         #room-info,
+        #network-hud,
         #round-panel,
         #ammo-display {
           left: 12px;
@@ -2198,8 +2321,12 @@
           top: 12px;
         }
 
+        #network-hud {
+          top: 92px;
+        }
+
         #round-panel {
-          top: 98px;
+          top: 178px;
         }
 
         #kill-feed {
@@ -2294,6 +2421,31 @@
         >
           退出房间
         </button>
+      </div>
+
+      <div id="network-hud" aria-live="polite">
+        <div class="network-hud-header">
+          <span class="network-hud-label">Network</span>
+          <span id="connection-status" class="disconnected">OFFLINE</span>
+        </div>
+        <div class="network-hud-row">
+          <span id="network-quality-icon" data-quality="offline">x...</span>
+          <span id="network-quality-label" data-quality="offline">OFFLINE</span>
+        </div>
+        <div class="network-metrics">
+          <div class="network-metric">
+            <span class="network-metric-label">RTT</span>
+            <span id="network-rtt" class="network-metric-value">--</span>
+          </div>
+          <div class="network-metric">
+            <span class="network-metric-label">DEGRADED</span>
+            <span id="remote-sync-count" class="network-metric-value">0</span>
+          </div>
+          <div class="network-metric">
+            <span class="network-metric-label">STALE</span>
+            <span id="remote-sync-staleness" class="network-metric-value">0ms</span>
+          </div>
+        </div>
       </div>
 
       <div id="round-panel">

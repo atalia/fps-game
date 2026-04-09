@@ -129,4 +129,27 @@ describe('Network', () => {
 
     expect(handler).toHaveBeenCalledWith({ id: 'p2' })
   })
+
+  it('records RTT from pong responses and exposes network quality', () => {
+    vi.setSystemTime(new Date('2026-04-09T00:00:00.000Z'))
+
+    const network = new Network('ws://localhost:8080/ws')
+    const ws = MockWebSocket.instances[0]
+
+    ws.onopen()
+    const probeId = [...network.pendingRttProbes.keys()][0]
+
+    vi.advanceTimersByTime(48)
+    network.handleMessage(`{"type":"pong","data":{"probe_id":"${probeId}"}}\n`)
+
+    expect(network.getNetworkQuality()).toEqual(
+      expect.objectContaining({
+        connected: true,
+        rttMs: 48,
+        averageRttMs: 48,
+        quality: 'excellent',
+        icon: '||||'
+      })
+    )
+  })
 })

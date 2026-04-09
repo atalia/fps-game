@@ -11,6 +11,12 @@ class Network {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.allowReconnect = true;
+        this.pendingRttProbes = new Map();
+        this.rttSamples = [];
+        this.maxRttSamples = 10;
+        this.lastRttMs = null;
+        this.lastPongAt = 0;
+        this.heartbeatSequence = 0;
 
         this.connect();
     }
@@ -45,8 +51,8 @@ class Network {
             this.connected = true;
             this.reconnectAttempts = 0;
             this.startHeartbeat();
-            // 发送测试消息
-            this.send('ping', { time: Date.now() });
+            this.sendHeartbeatProbe();
+            window.uiManager?.updateConnectionStatus?.(true);
             if (this.onConnect) this.onConnect();
         };
 
@@ -59,7 +65,9 @@ class Network {
             console.log('❌ WebSocket disconnected, code:', event.code);
             this.connected = false;
             this.stopHeartbeat();
+            this.pendingRttProbes.clear();
             this.ws = null;
+            window.uiManager?.updateConnectionStatus?.(false);
 
             if (!this.allowReconnect) {
                 return;
@@ -96,7 +104,7 @@ class Network {
         // 每30秒发送一次心跳
         this.heartbeatInterval = setInterval(() => {
             if (this.connected) {
-                this.send('heartbeat', { time: Date.now() });
+                this.sendHeartbeatProbe();
             }
         }, 30000);
     }
@@ -119,6 +127,7 @@ class Network {
 
             try {
                 const parsed = JSON.parse(msg);
+                this.maybeRecordPong(parsed);
                 // 只在 DEBUG 模式下打印详细日志
                 if (window.DEBUG_MODE) {
                     console.log('[NETWORK] Received:', parsed.type, parsed.data ? JSON.stringify(parsed.data).substring(0, 100) : '');
@@ -149,10 +158,109 @@ class Network {
         this.handlers.set(type, handler);
     }
 
+    sendHeartbeatProbe() {
+        if (!this.connected) {
+            return false;
+        }
+
+        const sentAt = Date.now();
+        const probeId = `hb_${++this.heartbeatSequence}`;
+        this.pendingRttProbes.set(probeId, sentAt);
+
+        const sent = this.send('heartbeat', {
+            time: sentAt,
+            probe_id: probeId,
+        });
+
+        if (!sent) {
+            this.pendingRttProbes.delete(probeId);
+        }
+
+        return sent;
+    }
+
+    maybeRecordPong(message) {
+        const type = String(message?.type || '').toLowerCase();
+        const data = message?.data || {};
+        const isProbeAck =
+            type === 'pong' ||
+            type === 'heartbeat_ack' ||
+            (type === 'heartbeat' && (data.ack === true || data.pong === true));
+
+        if (!isProbeAck) {
+            return;
+        }
+
+        const probeId = data.probe_id || data.id || null;
+        const echoedSentAt = Number(data.time) || null;
+        const receivedAt = Date.now();
+        let sentAt = echoedSentAt;
+
+        if (probeId && this.pendingRttProbes.has(probeId)) {
+            sentAt = this.pendingRttProbes.get(probeId);
+            this.pendingRttProbes.delete(probeId);
+        }
+
+        if (!Number.isFinite(sentAt)) {
+            return;
+        }
+
+        const rttMs = Math.max(0, receivedAt - sentAt);
+        this.lastRttMs = rttMs;
+        this.lastPongAt = receivedAt;
+        this.rttSamples.push(rttMs);
+        if (this.rttSamples.length > this.maxRttSamples) {
+            this.rttSamples.shift();
+        }
+    }
+
+    getNetworkQuality() {
+        const averageRttMs = this.rttSamples.length
+            ? this.rttSamples.reduce((sum, value) => sum + value, 0) / this.rttSamples.length
+            : null;
+        const roundedRttMs =
+            this.lastRttMs === null ? null : Math.round(this.lastRttMs);
+        const roundedAverageRttMs =
+            averageRttMs === null ? null : Math.round(averageRttMs);
+
+        let quality = 'probing';
+        if (!this.connected) {
+            quality = 'offline';
+        } else if (roundedAverageRttMs === null) {
+            quality = 'probing';
+        } else if (roundedAverageRttMs <= 60) {
+            quality = 'excellent';
+        } else if (roundedAverageRttMs <= 120) {
+            quality = 'good';
+        } else if (roundedAverageRttMs <= 200) {
+            quality = 'fair';
+        } else {
+            quality = 'poor';
+        }
+
+        const icons = {
+            offline: 'x...',
+            probing: '....',
+            poor: '|...',
+            fair: '||..',
+            good: '|||.',
+            excellent: '||||',
+        };
+
+        return {
+            connected: this.connected,
+            rttMs: roundedRttMs,
+            averageRttMs: roundedAverageRttMs,
+            lastPongAgeMs: this.lastPongAt ? Date.now() - this.lastPongAt : null,
+            quality,
+            icon: icons[quality] || icons.probing,
+        };
+    }
+
     send(type, data) {
         if (!this.connected) {
             console.warn('[NETWORK] WebSocket not connected, cannot send:', type);
-            return;
+            return false;
         }
 
         const message = JSON.stringify({
@@ -166,6 +274,7 @@ class Network {
             console.log('[NETWORK] Sending:', type, JSON.stringify(data).substring(0, 100));
         }
         this.ws.send(message);
+        return true;
     }
 
     // 设置语音处理器
@@ -193,6 +302,7 @@ class Network {
         this.allowReconnect = false;
         this.connected = false;
         this.stopHeartbeat();
+        this.pendingRttProbes.clear();
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -209,4 +319,3 @@ class Network {
 }
 
 window.Network = Network;
-

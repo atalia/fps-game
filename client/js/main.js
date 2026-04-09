@@ -410,7 +410,12 @@ function setupNetworkHandlers() {
 
   // 玩家移动
   window.network.on("player_moved", (data) => {
-    window.renderer.updatePlayer(data.player_id, data.position, data.rotation);
+    window.renderer.updatePlayer(
+      data.player_id,
+      data.position,
+      data.rotation,
+      data.velocity,
+    );
 
     // 同步到 game.players Map
     if (window.game && window.game.players) {
@@ -418,6 +423,7 @@ function setupNetworkHandlers() {
       if (player) {
         player.position = data.position;
         player.rotation = data.rotation;
+        player.velocity = data.velocity;
       }
     }
   });
@@ -936,4 +942,3 @@ function setupVoiceHandlers() {
 if (typeof window !== "undefined" && !window.__FPS_DISABLE_AUTO_INIT__) {
   init();
 }
-

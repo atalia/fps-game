@@ -48,6 +48,24 @@ class GameLoop {
     }
 }
 
+const FrameTiming = {
+    nowMs() {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+            return performance.now();
+        }
+        return Date.now();
+    },
+
+    clampDelta(deltaTime, fallback = 1 / 60) {
+        if (!Number.isFinite(deltaTime) || deltaTime <= 0) {
+            return fallback;
+        }
+        return Math.min(deltaTime, 0.1);
+    }
+};
+
+window.FrameTiming = FrameTiming;
+
 // 粒子系统
 class ParticleSystem {
     constructor() {
