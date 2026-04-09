@@ -1,16 +1,20 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "C4ExplodedEvent",
+  "$id": "c4_exploded.json",
+  "title": "C4Exploded",
+  "description": "Broadcast when the planted C4 explodes",
   "type": "object",
+  "required": ["position"],
   "properties": {
     "position": {
       "type": "object",
-      "description": "Position where C4 exploded",
+      "required": ["x", "y", "z"],
       "properties": {
         "x": { "type": "number" },
         "y": { "type": "number" },
         "z": { "type": "number" }
       }
     }
-  }
+  },
+  "additionalProperties": true
 }

@@ -1,24 +1,23 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "C4PlantedEvent",
+  "$id": "c4_planted.json",
+  "title": "C4Planted",
+  "description": "Broadcast when the C4 has been planted",
   "type": "object",
-  "required": ["planter_id", "explosion_in", "position"],
+  "required": ["player_id", "position"],
   "properties": {
-    "planter_id": {
-      "type": "string",
-      "description": "ID of the player who planted the C4"
-    },
-    "explosion_in": {
-      "type": "integer",
-      "description": "Seconds until explosion"
-    },
+    "player_id": { "type": "string" },
     "position": {
       "type": "object",
+      "required": ["x", "y", "z"],
       "properties": {
         "x": { "type": "number" },
         "y": { "type": "number" },
         "z": { "type": "number" }
       }
-    }
-  }
+    },
+    "team": { "type": "string", "enum": ["ct", "t"] },
+    "explosion_in": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": true
 }

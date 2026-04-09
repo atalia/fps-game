@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "grenade_thrown.json",
+  "title": "GrenadeThrown",
+  "description": "Broadcast when a grenade is thrown",
+  "type": "object",
+  "required": ["player_id", "type", "position", "velocity"],
+  "properties": {
+    "player_id": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["flashbang", "smoke", "he", "molotov", "decoy"]
+    },
+    "position": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "velocity": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  },
+  "additionalProperties": true
+}
