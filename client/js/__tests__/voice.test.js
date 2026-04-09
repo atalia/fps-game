@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
-const voiceCode = readFileSync(join(__dirname, "../voice.js"), "utf8");
+const voiceCode = readFileSync(`${__dirname}/../voice.js`, "utf8");
 
 function loadVoiceSystem(window, document, navigatorOverride) {
   const fn = new Function("window", "document", "navigator", "console", voiceCode);

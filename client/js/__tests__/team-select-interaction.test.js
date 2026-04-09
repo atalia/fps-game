@@ -1,10 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
-const teamCode = readFileSync(join(__dirname, "../team.js"), "utf8");
-const playerCode = readFileSync(join(__dirname, "../player.js"), "utf8");
+const teamCode = readFileSync(`${__dirname}/../team.js`, "utf8");
+const playerCode = readFileSync(`${__dirname}/../player.js`, "utf8");
 
 function loadTeamClasses(window, document) {
   const fn = new Function("window", "document", teamCode);
