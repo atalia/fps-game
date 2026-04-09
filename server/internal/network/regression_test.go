@@ -291,6 +291,51 @@ func TestClient_handleShoot_UsesAuthoritativeServerState(t *testing.T) {
 	}
 }
 
+func TestClient_handleShoot_HorizontalAimHitsStandingTarget(t *testing.T) {
+	hub := NewHub()
+	roomManager := room.NewManager(10, 4)
+	r := roomManager.CreateRoom()
+
+	shooter := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+	target := &Client{
+		Player: player.NewPlayer(),
+		Send:   make(chan []byte, 10),
+		hub:    hub,
+		Room:   r,
+	}
+
+	shooter.Player.SetPosition(0, 0, 0)
+	shooter.Player.SetRotation(0)
+	shooter.Player.SetWeapon("rifle")
+	target.Player.SetPosition(0, 0, -6)
+
+	if !r.AddPlayer(shooter.Player) || !r.AddPlayer(target.Player) {
+		t.Fatal("failed to seed room players")
+	}
+	registerClient(hub, shooter)
+	registerClient(hub, target)
+
+	healthBefore := target.Player.Snapshot().Health
+
+	shooter.handleShoot(mustMarshal(map[string]interface{}{
+		"position":  map[string]float64{"x": 0, "y": 1.7, "z": 0},
+		"rotation":  0,
+		"pitch":     0,
+		"direction": map[string]float64{"x": 0, "y": 0, "z": -1},
+		"weapon_id": "rifle",
+	}), roomManager)
+
+	healthAfter := target.Player.Snapshot().Health
+	if healthAfter >= healthBefore {
+		t.Fatalf("target health = %d, want less than %d after direct horizontal shot", healthAfter, healthBefore)
+	}
+}
+
 func TestClient_handleMove_BlocksPositionDuringFreezeTime(t *testing.T) {
 	hub := NewHub()
 	roomManager := room.NewManager(10, 4)

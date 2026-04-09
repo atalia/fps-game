@@ -892,7 +892,7 @@ func (c *Client) handleShoot(data json.RawMessage, roomManager *room.Manager) {
 	loadout, hasLoadout := team.GetWeaponLoadout(shooter.Team, weaponID)
 	origin := hitbox.Position{
 		X: shooter.Position.X,
-		Y: shooter.Position.Y,
+		Y: shooter.Position.Y + 1.7,
 		Z: shooter.Position.Z,
 	}
 
