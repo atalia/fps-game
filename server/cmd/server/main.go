@@ -15,6 +15,7 @@ import (
 	"fps-game/internal/network"
 	"fps-game/internal/room"
 	"fps-game/pkg/metrics"
+	"fps-game/internal/balance"
 
 	"github.com/gorilla/mux"
 )
@@ -98,6 +99,8 @@ func main() {
 	api.HandleFunc("/stats", statsHandler(gameEngine, roomManager)).Methods("GET")
 	api.HandleFunc("/rooms", listRoomsHandler(roomManager)).Methods("GET")
 	api.HandleFunc("/metrics", metricsHandler).Methods("GET")
+	api.HandleFunc("/balance", balanceHandler).Methods("GET")
+	api.HandleFunc("/balance/difficulty/{difficulty}", setDifficultyHandler).Methods("POST")
 
 	// WebSocket 路由
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -120,6 +123,27 @@ func main() {
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+func balanceHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(balance.Get().Snapshot())
+}
+
+func setDifficultyHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	difficulty := vars["difficulty"]
+	
+	valid := map[string]bool{"easy": true, "normal": true, "hard": true, "nightmare": true}
+	if !valid[difficulty] {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid difficulty"})
+		return
+	}
+	
+	balance.Get().SetDifficulty(difficulty)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "difficulty": difficulty})
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
