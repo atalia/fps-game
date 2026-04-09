@@ -105,6 +105,7 @@ class UIManager {
     players.forEach((player) => {
       const div = document.createElement("div");
       div.className = "player-item";
+      div.dataset.playerId = player.id == null ? "" : String(player.id);
 
       const isSelf = player.id === this.selfPlayerId;
       if (isSelf) {
@@ -115,7 +116,8 @@ class UIManager {
       }
 
       const shortId = this.shortId(player.id);
-      const name = isSelf ? `${shortId} (you)` : player.name || shortId;
+      const displayName = player.name || shortId;
+      const youSuffix = isSelf ? " (you)" : "";
       const kills = player.kills || 0;
       const health = player.health || 100;
       const team = this.formatTeam(player.team);
@@ -124,7 +126,8 @@ class UIManager {
         : "";
 
       div.innerHTML = `
-        <span class="name" data-player-id="${this.escapeHtml(player.id)}">${teamPrefix}${this.escapeHtml(name)}${player.is_bot ? " BOT" : ""}</span>
+        <span class="name" data-player-id="${this.escapeHtml(player.id)}">${teamPrefix}${this.escapeHtml(displayName)}${this.escapeHtml(youSuffix)}${player.is_bot ? " BOT" : ""}</span>
+        <span class="player-id">${this.escapeHtml(shortId)}</span>
         <span class="kills">${kills}K</span>
         <span class="health">${health}HP</span>
       `;

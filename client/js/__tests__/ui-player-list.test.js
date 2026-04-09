@@ -25,7 +25,7 @@ describe("UIManager player list", () => {
     return { document, ui };
   }
 
-  it("shows self using id with a you marker instead of plain You", () => {
+  it("shows each row with the player name and its real id", () => {
     const { document, ui } = setup();
 
     ui.updatePlayerList([
@@ -33,12 +33,16 @@ describe("UIManager player list", () => {
       { id: "other999", name: "Other", health: 100, kills: 0, team: "t" },
     ]);
 
-    const items = [...document.querySelectorAll(".player-item .name")].map(
-      (n) => n.textContent,
+    const rows = [...document.querySelectorAll(".player-item")].map((row) =>
+      row.textContent,
     );
-    expect(items[0]).toContain("abcd1234");
-    expect(items[0].toLowerCase()).toContain("you");
-    expect(items[1]).toContain("Other");
+    expect(rows[0]).toContain("You");
+    expect(rows[0].includes("abcd1234") || rows[0].includes("ABCD1234")).toBe(
+      true,
+    );
+    expect(rows[0].toLowerCase()).toContain("you");
+    expect(rows[1]).toContain("Other");
+    expect(rows[1]).toContain("other999");
   });
 
   it("stores the real player id on each player row", () => {
@@ -49,7 +53,10 @@ describe("UIManager player list", () => {
       { id: "other999", name: "Other", health: 100, kills: 0, team: "t" },
     ]);
 
+    const rows = [...document.querySelectorAll(".player-item")];
     const items = [...document.querySelectorAll(".player-item .name")];
+    expect(rows[0].dataset.playerId).toBe("abcd1234");
+    expect(rows[1].dataset.playerId).toBe("other999");
     expect(items[0].dataset.playerId).toBe("abcd1234");
     expect(items[1].dataset.playerId).toBe("other999");
   });
