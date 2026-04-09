@@ -68,13 +68,7 @@ jobs:
           cd ${{ secrets.DEPLOY_PATH }}
           git fetch origin main
           git reset --hard origin/main
-          export BUILD_VERSION="$(git describe --tags --always --dirty)"
-          export BUILD_COMMIT="$(git rev-parse --short HEAD)"
-          python3 -c "from pathlib import Path; import os, re; path = Path('client/index.html'); text = path.read_text(encoding='utf-8'); text = re.sub(r'((?:src|href)=\"/(?:js|css)/[^\"?]+)(?:\\?v=[^\"]*)?\"', rf'\\1?v={os.environ[\"BUILD_COMMIT\"]}\"', text); path.write_text(text, encoding='utf-8')"
-          docker compose --profile production build --no-cache game-server
-          docker compose --profile production up -d
-          sleep 5
-          docker compose --profile production ps
+          bash scripts/deploy-prod.sh --skip-precheck
 
     - name: Health check
       run: |
@@ -98,5 +92,4 @@ jobs:
         script: |
           cd ${{ secrets.DEPLOY_PATH }}
           git reset --hard HEAD~1
-          docker compose --profile production build --no-cache game-server
-          docker compose --profile production up -d
+          bash scripts/deploy-prod.sh --skip-precheck

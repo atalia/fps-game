@@ -114,8 +114,8 @@ dev:
 	@echo "🎮 Game: http://localhost:8080"
 
 # 生产环境 (+ nginx) - 部署前先检查
-prod: pre-deploy
-	docker-compose --profile production up -d --build
+prod:
+	./scripts/deploy-prod.sh
 	@echo "✅ Production environment started!"
 	@echo "🎮 Game: http://localhost"
 
@@ -128,7 +128,7 @@ monitoring:
 
 # 完整部署 (生产 + 监控)
 full:
-	docker-compose --profile production --profile monitoring up -d --build
+	./scripts/deploy-prod.sh --with-monitoring
 	@echo "✅ Full deployment started!"
 
 # ================================
