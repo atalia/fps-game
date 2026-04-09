@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
 
-const rendererCode = readFileSync(join(__dirname, "../renderer.js"), "utf8");
+const rendererCode = readFileSync(`${__dirname}/../renderer.js`, "utf8");
 
 function createThreeMock() {
   class MockObject3D {

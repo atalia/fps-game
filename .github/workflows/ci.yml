@@ -2,259 +2,396 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
-  # ================================
-  # 预部署检查 (最先运行)
-  # ================================
-  pre-deploy:
-    name: Pre-deploy Check
+  deploy_precheck:
+    name: Deploy Precheck
     runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Make script executable
-      run: chmod +x scripts/pre-deploy-check.sh
-
-    - name: Run pre-deploy checks
-      run: ./scripts/pre-deploy-check.sh
-      continue-on-error: false
-
-    - name: Upload check results
-      if: always()
-      run: |
-        echo "## Pre-deploy Check Results" >> $GITHUB_STEP_SUMMARY
-        echo "✅ All configuration checks passed" >> $GITHUB_STEP_SUMMARY
-
-  # ================================
-  # Go 后端 CI
-  # ================================
-  backend:
-    name: Backend CI
-    runs-on: ubuntu-latest
-    needs: pre-deploy
-    defaults:
-      run:
-        working-directory: server
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
-        cache: true
-        cache-dependency-path: server/go.sum
+      - name: Run deploy precheck gate
+        id: run_deploy_precheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts
+          make pre-deploy 2>&1 | tee .ci-artifacts/deploy-precheck.log
 
-    - name: Download dependencies
-      run: go mod download
+      - name: Summarize deploy precheck result
+        if: always()
+        run: |
+          bash scripts/ci/append_failure_summary.sh \
+            predeploy \
+            "Deploy Precheck" \
+            .ci-artifacts/deploy-precheck.log \
+            "${{ steps.run_deploy_precheck.outcome }}"
 
-    - name: Verify dependencies
-      run: go mod verify
+      - name: Fail with deploy precheck guidance
+        if: steps.run_deploy_precheck.outcome != 'success'
+        run: |
+          echo "::error::Deploy precheck failed. Review the blocking configuration check in the Step Summary."
+          exit 1
 
-    - name: Build
-      run: go build -v ./...
-
-    - name: Run all tests
-      run: go test -v -coverprofile=coverage.out -covermode=atomic ./...
-      
-    - name: Run race detector (non-blocking)
-      run: go test -race ./... || echo "Race detector found issues, but not blocking CI"
-      continue-on-error: true
-
-    - name: Run WebSocket Origin tests (critical)
-      run: go test -v ./internal/network/... -run "Origin|Deployment"
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        files: ./server/coverage.out
-        flags: backend
-        name: backend-coverage
-        fail_ci_if_error: false
-
-    - name: Generate coverage report
-      run: |
-        echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
-
-  # ================================
-  # 前端 CI
-  # ================================
-  frontend:
-    name: Frontend CI
+  unit_tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    needs: pre-deploy
-    defaults:
-      run:
-        working-directory: client
+    needs: deploy_precheck
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: npm
-        cache-dependency-path: client/package-lock.json
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: server/go.sum
 
-    - name: Install dependencies
-      run: npm ci --include=dev
-      env:
-        NODE_ENV: development
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
-    - name: Run all tests with coverage
-      run: npm test -- --run --coverage
-      env:
-        NODE_ENV: development
+      - name: Run unit test gate
+        id: run_unit_tests
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-artifacts
+          {
+            echo "==> Install client dependencies"
+            cd client
+            npm ci --include=dev
+            cd ..
+            echo
+            echo "==> Run unit tests"
+            COVERAGE=1 make test-unit
+          } 2>&1 | tee .ci-artifacts/unit-tests.log
+        env:
+          NODE_ENV: development
 
-    - name: Run connection tests (critical)
-      run: npm test -- --run tests/connection.test.js
+      - name: Summarize unit test result
+        if: always()
+        run: |
+          bash scripts/ci/append_failure_summary.sh \
+            test \
+            "Unit Tests" \
+            .ci-artifacts/unit-tests.log \
+            "${{ steps.run_unit_tests.outcome }}"
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        files: ./client/coverage/coverage-final.json
-        flags: frontend
-        name: frontend-coverage
-        fail_ci_if_error: false
+      - name: Append coverage summary
+        if: always() && steps.run_unit_tests.outcome == 'success'
+        run: |
+          {
+            echo "#### Go Unit Coverage"
+            echo
+            cd server && go tool cover -func=coverage.out && cd ..
+            echo
+            echo "#### Frontend Unit Coverage"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Generate coverage summary
-      run: |
-        echo "## Frontend Coverage Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [ -f coverage/coverage-summary.json ]; then
-          cat coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
-        else
-          echo "Coverage report generated" >> $GITHUB_STEP_SUMMARY
-        fi
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const path = 'client/coverage/coverage-summary.json';
+          if (!fs.existsSync(path)) {
+            console.log('coverage summary not generated');
+            process.exit(0);
+          }
 
-    - name: Check JavaScript syntax
-      run: |
-        npm install -g acorn
-        for file in js/*.js; do
-          acorn --silent "$file" > /dev/null || echo "Syntax error in $file"
-        done
-      continue-on-error: true
+          const report = JSON.parse(fs.readFileSync(path, 'utf8')).total;
+          console.log(`- Lines: ${report.lines.pct}%`);
+          console.log(`- Statements: ${report.statements.pct}%`);
+          console.log(`- Functions: ${report.functions.pct}%`);
+          console.log(`- Branches: ${report.branches.pct}%`);
+          NODE
 
-  # ================================
-  # 代码质量检查
-  # ================================
+      - name: Upload backend coverage
+        if: steps.run_unit_tests.outcome == 'success'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./server/coverage.out
+          flags: backend-unit
+          name: backend-unit-coverage
+          fail_ci_if_error: false
+
+      - name: Upload frontend coverage
+        if: steps.run_unit_tests.outcome == 'success'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./client/coverage/coverage-final.json
+          flags: frontend-unit
+          name: frontend-unit-coverage
+          fail_ci_if_error: false
+
+      - name: Fail with unit regression guidance
+        if: steps.run_unit_tests.outcome != 'success'
+        run: |
+          echo "::error::Unit test regression detected. Review the failing packages and specs in the Step Summary."
+          exit 1
+
+  race_detector:
+    name: Race Detector
+    runs-on: ubuntu-latest
+    needs: deploy_precheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: server/go.sum
+
+      - name: Run race detector gate
+        id: run_race_detector
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts
+          make test-race 2>&1 | tee .ci-artifacts/race-detector.log
+
+      - name: Summarize race detector result
+        if: always()
+        run: |
+          bash scripts/ci/append_failure_summary.sh \
+            test \
+            "Race Detector" \
+            .ci-artifacts/race-detector.log \
+            "${{ steps.run_race_detector.outcome }}"
+
+      - name: Fail with race detector guidance
+        if: steps.run_race_detector.outcome != 'success'
+        run: |
+          echo "::error::Go race detector found a blocking concurrency regression. Review the Step Summary for the failing tests."
+          exit 1
+
+  integration_tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: deploy_precheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: server/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Run integration test gate
+        id: run_integration_tests
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-artifacts
+          {
+            echo "==> Install client dependencies"
+            cd client
+            npm ci --include=dev
+            cd ..
+            echo
+            echo "==> Run integration tests"
+            make test-integration
+          } 2>&1 | tee .ci-artifacts/integration-tests.log
+        env:
+          NODE_ENV: development
+
+      - name: Summarize integration test result
+        if: always()
+        run: |
+          bash scripts/ci/append_failure_summary.sh \
+            test \
+            "Integration Tests" \
+            .ci-artifacts/integration-tests.log \
+            "${{ steps.run_integration_tests.outcome }}"
+
+      - name: Fail with integration regression guidance
+        if: steps.run_integration_tests.outcome != 'success'
+        run: |
+          echo "::error::Integration test regression detected. Review the failing server/network or client/connection checks in the Step Summary."
+          exit 1
+
+  mobile_tests:
+    name: Mobile Tests
+    runs-on: ubuntu-latest
+    needs: deploy_precheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Run mobile test gate
+        id: run_mobile_tests
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-artifacts
+          {
+            echo "==> Install client dependencies"
+            cd client
+            npm ci --include=dev
+            cd ..
+            echo
+            echo "==> Run mobile tests"
+            make test-mobile
+          } 2>&1 | tee .ci-artifacts/mobile-tests.log
+        env:
+          NODE_ENV: development
+
+      - name: Summarize mobile test result
+        if: always()
+        run: |
+          bash scripts/ci/append_failure_summary.sh \
+            test \
+            "Mobile Tests" \
+            .ci-artifacts/mobile-tests.log \
+            "${{ steps.run_mobile_tests.outcome }}"
+
+      - name: Fail with mobile regression guidance
+        if: steps.run_mobile_tests.outcome != 'success'
+        run: |
+          echo "::error::Mobile regression detected. Review the failing mobile-focused specs in the Step Summary."
+          exit 1
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: pre-deploy
-    defaults:
-      run:
-        working-directory: server
+    needs: deploy_precheck
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
 
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v7
-      with:
-        version: v2.11.3
-        working-directory: server
-        args: --timeout=5m
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.3
+          working-directory: server
+          args: --timeout=5m
 
-  # ================================
-  # Docker 构建
-  # ================================
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [backend, frontend, lint]
+    needs: [unit_tests, race_detector, integration_tests, mobile_tests, lint]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: false
-        tags: fps-game:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: fps-game:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Docker image ready
-      run: |
-        echo "## Docker Build" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Image built: fps-game:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+      - name: Summarize docker build
+        run: |
+          {
+            echo "### Docker Build"
+            echo "- Status: passed"
+            echo "- Image tag: fps-game:${{ github.sha }}"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # ================================
-  # 安全检查
-  # ================================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: pre-deploy
-    defaults:
-      run:
-        working-directory: server
+    needs: deploy_precheck
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
 
-    - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
-      with:
-        args: ./...
-      continue-on-error: true
+      - name: Run gosec scanner
+        uses: securego/gosec@master
+        with:
+          args: ./server/...
+        continue-on-error: true
 
-  # ================================
-  # 最终报告
-  # ================================
   report:
     name: CI Report
     runs-on: ubuntu-latest
-    needs: [backend, frontend, lint, docker, security]
     if: always()
+    needs:
+      [
+        deploy_precheck,
+        unit_tests,
+        race_detector,
+        integration_tests,
+        mobile_tests,
+        lint,
+        docker,
+        security,
+      ]
 
     steps:
-    - name: Generate report
-      run: |
-        echo "## CI Pipeline Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Pre-deploy | ${{ needs.pre-deploy.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Backend | ${{ needs.backend.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Frontend | ${{ needs.frontend.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Lint | ${{ needs.lint.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Docker | ${{ needs.docker.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Security | ${{ needs.security.result == 'success' && '✅ Pass' || '⚠️ Warnings' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+      - name: Generate CI report
+        run: |
+          {
+            echo "## CI Pipeline Report"
+            echo
+            echo "| Gate | Status |"
+            echo "|------|--------|"
+            echo "| Deploy precheck | ${{ needs.deploy_precheck.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Unit tests | ${{ needs.unit_tests.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Race detector | ${{ needs.race_detector.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Integration tests | ${{ needs.integration_tests.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Mobile tests | ${{ needs.mobile_tests.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Lint | ${{ needs.lint.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Docker build | ${{ needs.docker.result == 'success' && '✅ Pass' || '❌ Fail' }} |"
+            echo "| Security scan | ${{ needs.security.result == 'success' && '✅ Completed' || '⚠️ Review' }} |"
+            echo
+            echo "**Commit:** ${{ github.sha }}"
+            echo "**Branch:** ${{ github.ref_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Check overall status
-      if: contains(needs.*.result, 'failure')
-      run: exit 1
+      - name: Fail pipeline when a blocking gate fails
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

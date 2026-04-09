@@ -145,8 +145,8 @@ func TestClient_handleMove_UsesAuthoritativePositionState(t *testing.T) {
 		"rotation": 1.25,
 	}), roomManager)
 
-	if client.Player.Position.X != 100 || client.Player.Position.Y != 7 || client.Player.Position.Z != -100 {
-		t.Fatalf("player position = %+v, want {100 7 -100}", client.Player.Position)
+	if x, y, z := client.Player.GetPosition(); x != 100 || y != 7 || z != -100 {
+		t.Fatalf("player position = (%.1f, %.1f, %.1f), want {100 7 -100}", x, y, z)
 	}
 
 	msg := recvClientMessage(t, observer.Send)
@@ -341,8 +341,8 @@ func TestClient_handleMove_BlocksPositionDuringFreezeTime(t *testing.T) {
 		"rotation": 1.1,
 	}), roomManager)
 
-	if client.Player.Position.X != 0 || client.Player.Position.Z != 0 {
-		t.Fatalf("position changed during freeze: %+v", client.Player.Position)
+	if x, _, z := client.Player.GetPosition(); x != 0 || z != 0 {
+		t.Fatalf("position changed during freeze: (%.1f, %.1f), want (0, 0)", x, z)
 	}
 	if client.Player.Rotation != 1.1 {
 		t.Fatalf("rotation = %f, want 1.1", client.Player.Rotation)
@@ -454,11 +454,11 @@ func TestClient_handleRespawn_IgnoresClientSuppliedCoordinates(t *testing.T) {
 	if client.Player.Health != client.Player.MaxHealth {
 		t.Fatalf("health = %d, want %d", client.Player.Health, client.Player.MaxHealth)
 	}
-	if client.Player.Position.X == 999 || client.Player.Position.Y == 999 || client.Player.Position.Z == 999 {
-		t.Fatalf("respawn position should ignore client coordinates, got %+v", client.Player.Position)
+	if x, y, z := client.Player.GetPosition(); x == 999 || y == 999 || z == 999 {
+		t.Fatalf("respawn position should ignore client coordinates, got (%.1f, %.1f, %.1f)", x, y, z)
 	}
-	if math.Abs(client.Player.Position.X) > 50 || client.Player.Position.Y != 0 || math.Abs(client.Player.Position.Z) > 50 {
-		t.Fatalf("respawn position = %+v, want server-generated spawn within map bounds", client.Player.Position)
+	if x, y, z := client.Player.GetPosition(); math.Abs(x) > 50 || y != 0 || math.Abs(z) > 50 {
+		t.Fatalf("respawn position = (%.1f, %.1f, %.1f), want server-generated spawn within map bounds", x, y, z)
 	}
 
 	respawnMsg := recvClientMessage(t, client.Send)

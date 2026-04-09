@@ -22,6 +22,11 @@ pass() { echo -e "${GREEN}✓${NC} $1"; }
 fail() { echo -e "${RED}✗${NC} $1"; exit 1; }
 warn() { echo -e "${YELLOW}!${NC} $1"; }
 
+GO_CMD="go"
+if ! command -v "$GO_CMD" >/dev/null 2>&1 && [ -f "$HOME/.local/go/bin/go" ]; then
+    GO_CMD="$HOME/.local/go/bin/go"
+fi
+
 # 1. 检查 WebSocket Origin 配置
 echo "1️⃣  Checking WebSocket Origin configuration..."
 if grep -q "CheckOrigin" server/internal/network/server.go; then
@@ -74,10 +79,10 @@ fi
 # 5. 测试编译
 echo ""
 echo "5️⃣  Testing build..."
-if ~/.local/go/bin/go build -o /dev/null ./server/cmd/server 2>/dev/null; then
+if command -v "$GO_CMD" >/dev/null 2>&1 && (cd server && $GO_CMD build -o /dev/null ./cmd/server) 2>/dev/null; then
     pass "Server builds successfully"
 else
-    warn "Server build failed (may need Go in PATH)"
+    warn "Server build failed (Go toolchain missing or build did not succeed)"
 fi
 
 if command -v node &> /dev/null && node -e "console.log('ok')" &>/dev/null; then
@@ -89,14 +94,10 @@ fi
 # 6. 运行关键测试
 echo ""
 echo "6️⃣  Running critical tests..."
-GO_CMD="go"
-if [ -f "$HOME/.local/go/bin/go" ]; then
-    GO_CMD="$HOME/.local/go/bin/go"
-fi
-if $GO_CMD test -v ./server/internal/network/... -run "TestWebSocketOriginCheck" 2>&1 | grep -q "PASS"; then
+if command -v "$GO_CMD" >/dev/null 2>&1 && (cd server && $GO_CMD test -v ./internal/network/... -run "TestWebSocketOriginCheck") 2>&1 | grep -q "PASS"; then
     pass "WebSocket Origin tests pass"
 else
-    warn "WebSocket Origin tests failed or not found"
+    warn "WebSocket Origin tests failed or Go toolchain is unavailable"
 fi
 
 # 7. 检查 Docker 配置
