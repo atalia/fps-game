@@ -30,6 +30,16 @@ BUILD_VERSION="${BUILD_VERSION:-$(git describe --tags --always --dirty)}"
 BUILD_COMMIT="${BUILD_COMMIT:-$(git rev-parse --short HEAD)}"
 export BUILD_VERSION BUILD_COMMIT
 
+INDEX_FILE="client/index.html"
+INDEX_BACKUP="$(mktemp)"
+cp "$INDEX_FILE" "$INDEX_BACKUP"
+restore_index_file() {
+  if [[ -f "$INDEX_BACKUP" ]]; then
+    mv "$INDEX_BACKUP" "$INDEX_FILE"
+  fi
+}
+trap restore_index_file EXIT
+
 profiles=(--profile production)
 if [[ "$WITH_MONITORING" -eq 1 ]]; then
   profiles+=(--profile monitoring)

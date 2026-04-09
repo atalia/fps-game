@@ -28,6 +28,9 @@ jobs:
         go-version: '1.22'
         cache-dependency-path: server/go.sum
 
+    - name: Deploy script regression test
+      run: bash scripts/ci/test_deploy_prod_restores_index.sh
+
     - name: Backend tests
       run: |
         cd server
