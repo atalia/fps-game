@@ -237,3 +237,100 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 - [ ] 技能系统
 - [ ] 道具系统
 - [ ] 成就系统
+
+## 核心系统
+
+### 团队系统 (Team System)
+
+- 文件: `server/internal/team/`
+- 功能: CT vs T 队伍对抗
+- 消息: `team_join`, `team_updated`
+- API: 自动平衡队伍人数
+
+### 经济系统 (Economy System)
+
+- 文件: `server/internal/economy/`
+- 功能: 金钱系统、武器购买
+- 配置: 起始金钱 $800，击杀奖励 $300
+- API: 通过 `balance` 包可配置
+
+### 回合系统 (Round System)
+
+- 文件: `server/internal/room/round_manager.go`
+- 功能: CS 风格回合制
+- 阶段: waiting → freeze → live → ended → match_over
+- 配置: 冻结时间 15s，回合时间 1m55s
+
+### C4 爆破模式 (Bomb Defusal)
+
+- 文件: `server/internal/network/c4_*.go`
+- 功能: 安装/拆除 C4
+- 消息: `c4_plant`, `c4_planted`, `c4_defuse`, `c4_defused`, `c4_exploded`
+- 计时: 安装 3s，拆除 5s，爆炸 40s
+
+### 语音系统 (Voice System)
+
+- 文件: `client/js/voice.js`, `server/internal/network/voice.go`
+- 功能: 团队语音通信
+- 模式: Push-to-talk, Open-mic
+- 隔离: 仅队伍内广播
+
+### AI 机器人 (Bot System)
+
+- 文件: `server/internal/ai/`
+- 功能: 自动填充机器人玩家
+- 难度: easy, normal, hard, nightmare
+- 行为: 巡逻、追击、攻击、掩护
+
+### 命中检测 (Hit Detection)
+
+- 文件: `server/internal/hitbox/`
+- 功能: 射线-球体相交检测
+- 部位: head (2.5x), body (1.0x), arm (0.8x), leg (0.7x)
+- 距离衰减: 最小 30% 伤害
+
+### 遥测系统 (Telemetry)
+
+- 文件: `server/pkg/metrics/`
+- API: `GET /api/metrics`
+- 指标: 连接率、断线率、对局时长、武器使用、平台分布
+
+### 平衡系统 (Balance)
+
+- 文件: `server/internal/balance/`
+- API: 
+  - `GET /api/balance` - 获取配置
+  - `POST /api/balance/difficulty/{level}` - 设置难度
+- 参数: 经济、武器、机器人、命中倍率
+
+## API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/health` | GET | 健康检查 |
+| `/api/stats` | GET | 游戏统计 |
+| `/api/rooms` | GET | 房间列表 |
+| `/api/metrics` | GET | 遥测数据 |
+| `/api/balance` | GET | 平衡配置 |
+| `/api/balance/difficulty/{level}` | POST | 设置难度 |
+| `/ws` | WS | WebSocket 连接 |
+
+## 测试覆盖
+
+| 模块 | 覆盖率 |
+|------|--------|
+| config | 100% |
+| utils | 98.9% |
+| weapon | 95%+ |
+| game | 92%+ |
+| player | 85%+ |
+| match | 87%+ |
+| room | 78%+ |
+| network | 88%+ |
+
+运行测试:
+```bash
+make test         # 常规测试
+make race-test    # 竞争检测
+make coverage     # 覆盖率报告
+```
