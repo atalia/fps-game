@@ -56,6 +56,8 @@ class Renderer {
     // 相机位置
     this.camera.position.set(0, 2, 5);
 
+    this.ensureMapEnhanced();
+
     // 光照系统
     this.setupLighting();
 
@@ -64,12 +66,6 @@ class Renderer {
 
     // 创建地图
     this.createMap();
-
-    // 初始化增强版地图系统
-    if (typeof MapEnhanced !== "undefined") {
-      this.mapEnhanced = new MapEnhanced(this);
-      console.log("[RENDERER] MapEnhanced initialized");
-    }
 
     const testMode =
       typeof window !== "undefined" && window.__FPS_RENDERER_TEST_MODE__;
@@ -98,14 +94,22 @@ class Renderer {
     console.log("[RENDERER] Initialization complete");
   }
 
+  ensureMapEnhanced() {
+    if (!this.mapEnhanced && typeof MapEnhanced !== "undefined") {
+      this.mapEnhanced = new MapEnhanced(this);
+      console.log("[RENDERER] MapEnhanced initialized");
+    }
+
+    return this.mapEnhanced;
+  }
+
   setupLighting() {
-    // 环境光 - 动态变化
-    this.ambientLight = new THREE.AmbientLight(0x4488ff, 0.2);
+    // 竞技风光照，强调体积和可读性
+    this.ambientLight = new THREE.AmbientLight(0xc7d2e2, 0.42);
     this.scene.add(this.ambientLight);
 
-    // 主光源（太阳）- 支持昼夜循环
-    this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.2);
-    this.sunLight.position.set(50, 100, 50);
+    this.sunLight = new THREE.DirectionalLight(0xfff1d6, 1.35);
+    this.sunLight.position.set(65, 95, 40);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 2048;
     this.sunLight.shadow.mapSize.height = 2048;
@@ -118,37 +122,34 @@ class Renderer {
     this.sunLight.shadow.bias = -0.0001;
     this.scene.add(this.sunLight);
 
-    // 月光（夜间）
-    this.moonLight = new THREE.DirectionalLight(0x8888ff, 0.3);
-    this.moonLight.position.set(-50, 80, -50);
+    this.moonLight = new THREE.DirectionalLight(0x8ca8d8, 0.18);
+    this.moonLight.position.set(-40, 55, -45);
     this.scene.add(this.moonLight);
 
-    // 补光 - 蓝色调
-    const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
-    fillLight.position.set(-30, 50, -30);
+    const fillLight = new THREE.DirectionalLight(0xd9e2f0, 0.38);
+    fillLight.position.set(-25, 50, -35);
     this.scene.add(fillLight);
 
-    // 半球光 - 模拟天空和地面反射
-    this.hemisphereLight = new THREE.HemisphereLight(0x4488ff, 0x222233, 0.4);
+    this.hemisphereLight = new THREE.HemisphereLight(0xb7c8df, 0x1f242c, 0.52);
     this.scene.add(this.hemisphereLight);
 
-    // 点光源 - 增加氛围
     const pointLights = [
-      { x: 25, z: 25, color: 0x4488ff, intensity: 0.5 },
-      { x: -25, z: 25, color: 0xff8844, intensity: 0.5 },
-      { x: 25, z: -25, color: 0x44ff88, intensity: 0.5 },
-      { x: -25, z: -25, color: 0xff4488, intensity: 0.5 },
+      { x: -48, z: 0, color: 0x60a5fa, intensity: 0.65, height: 5.5 },
+      { x: 48, z: 0, color: 0xf59e0b, intensity: 0.65, height: 5.5 },
+      { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.3, height: 6.5 },
+      { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.3, height: 6.5 },
     ];
 
     pointLights.forEach((light) => {
-      const pointLight = new THREE.PointLight(light.color, light.intensity, 30);
-      pointLight.position.set(light.x, 5, light.z);
+      const pointLight = new THREE.PointLight(light.color, light.intensity, 24);
+      pointLight.position.set(light.x, light.height, light.z);
       this.scene.add(pointLight);
     });
   }
 
   createGround() {
-    // 使用增强版地图系统
+    this.ensureMapEnhanced();
+
     if (this.mapEnhanced) {
       this.mapEnhanced.createGround(150, "tech");
       return;
@@ -215,51 +216,16 @@ class Renderer {
   }
 
   createMap() {
-    // 使用增强版地图系统
+    this.ensureMapEnhanced();
+
     if (this.mapEnhanced) {
-      // 中心建筑
-      this.mapEnhanced.createObstacle(0, 0, 15, 5, 15, 0x555566, {
-        glowEdge: true,
+      this.mapEnhanced.createCompetitiveArena();
+      this.mapEnhanced.generateDecorations(18, {
+        minX: -62,
+        maxX: 62,
+        minZ: -62,
+        maxZ: 62,
       });
-
-      // 四角掩体
-      const corners = [
-        { x: 25, z: 25, color: 0x44cc66 },
-        { x: -25, z: 25, color: 0xcc4466 },
-        { x: 25, z: -25, color: 0x4466cc },
-        { x: -25, z: -25, color: 0xcccc44 },
-      ];
-
-      corners.forEach((c) => {
-        this.mapEnhanced.createObstacle(c.x, c.z, 6, 3, 6, c.color, {
-          details: true,
-        });
-      });
-
-      // 走廊掩体
-      const corridors = [
-        { x: 35, z: 0, w: 2, h: 4, d: 20, color: 0x444455 },
-        { x: -35, z: 0, w: 2, h: 4, d: 20, color: 0x444455 },
-        { x: 0, z: 35, w: 20, h: 4, d: 2, color: 0x444455 },
-        { x: 0, z: -35, w: 20, h: 4, d: 2, color: 0x444455 },
-      ];
-
-      corridors.forEach((c) => {
-        this.mapEnhanced.createObstacle(c.x, c.z, c.w, c.h, c.d, c.color, {
-          details: false,
-        });
-      });
-
-      // 生成随机装饰物
-      this.mapEnhanced.generateDecorations(40, {
-        minX: -70,
-        maxX: 70,
-        minZ: -70,
-        maxZ: 70,
-      });
-
-      // 创建边界墙
-      this.mapEnhanced.createBounds(-70, 70, -70, 70, 10);
 
       console.log("[RENDERER] Enhanced map created");
       return;
@@ -516,6 +482,14 @@ class Renderer {
     }
   }
 
+  createVisualMaterial(options = {}) {
+    const MaterialCtor =
+      THREE.MeshStandardMaterial ||
+      THREE.MeshToonMaterial ||
+      THREE.MeshBasicMaterial;
+    return new MaterialCtor(options);
+  }
+
   resolvePlayerOptions(isBotOrOptions = false, teamId = "") {
     if (typeof isBotOrOptions === "object" && isBotOrOptions !== null) {
       return {
@@ -545,99 +519,183 @@ class Renderer {
     const isT = normalizedTeam === "t";
 
     const bodyColor = isCT
-      ? 0x2d7dd2
+      ? 0x556070
       : isT
-        ? 0xbf2f2f
+        ? 0x68564d
         : isBot
-          ? 0xff5533
-          : 0x7a7a7a;
-    const headColor = isCT ? 0xcad9f1 : isT ? 0xd9b28f : 0xffddaa;
-    const accentColor = isCT ? 0x0b1f3a : isT ? 0x4b140f : 0x3a3a3a;
+          ? 0x6a6f78
+          : 0x636973;
+    const headColor = isCT ? 0xd6c5b5 : isT ? 0xcaa07e : 0xd6b998;
+    const gearColor = isCT ? 0x313846 : isT ? 0x3d2b24 : 0x3a3f46;
+    const accentColor = isCT ? 0x60a5fa : isT ? 0xf59e0b : 0xa3a3a3;
 
-    const bodyMaterial = new THREE.MeshToonMaterial({ color: bodyColor });
-    const headMaterial = new THREE.MeshToonMaterial({ color: headColor });
-    const accentMaterial = new THREE.MeshToonMaterial({ color: accentColor });
+    const bodyMaterial = this.createVisualMaterial({
+      color: bodyColor,
+      roughness: 0.78,
+      metalness: 0.08,
+    });
+    const headMaterial = this.createVisualMaterial({
+      color: headColor,
+      roughness: 0.92,
+      metalness: 0.02,
+    });
+    const gearMaterial = this.createVisualMaterial({
+      color: gearColor,
+      roughness: 0.68,
+      metalness: 0.16,
+    });
+    const accentMaterial = this.createVisualMaterial({
+      color: accentColor,
+      roughness: 0.42,
+      metalness: 0.28,
+      emissive: accentColor,
+      emissiveIntensity: 0.12,
+    });
 
     const bodyGroup = new THREE.Group();
+    bodyGroup.userData = {
+      isBot,
+      team: normalizedTeam,
+      visualProfile: "competitive-light-realistic",
+    };
 
-    // 大头小身比例（卡通风格）
-    // 躯干
-    const TorsoGeometry =
+    const addPart = (partName, mesh) => {
+      mesh.userData = {
+        ...(mesh.userData || {}),
+        part: partName,
+      };
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      bodyGroup.add(mesh);
+      return mesh;
+    };
+
+    const torsoGeometry =
       typeof THREE.CapsuleGeometry === "function"
-        ? new THREE.CapsuleGeometry(0.35, 0.6, 8, 16)
-        : new THREE.CylinderGeometry(0.35, 0.38, 1.1, 12);
-    const torso = new THREE.Mesh(TorsoGeometry, bodyMaterial);
-    torso.position.y = 0.7;
-    torso.castShadow = true;
-    bodyGroup.add(torso);
+        ? new THREE.CapsuleGeometry(0.28, 0.78, 8, 16)
+        : new THREE.CylinderGeometry(0.3, 0.34, 1.25, 12);
+    const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+    torso.position.y = 1.02;
+    addPart("torso", torso);
 
-    // 头部（略大）
-    const headGeometry = new THREE.SphereGeometry(0.38, 16, 16);
-    const head = new THREE.Mesh(headGeometry, headMaterial);
-    head.position.y = 1.45;
-    head.castShadow = true;
-    bodyGroup.add(head);
+    const chestRig = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.54, 0.34),
+      gearMaterial,
+    );
+    chestRig.position.set(0, 1.04, 0.12);
+    addPart("chest-rig", chestRig);
+
+    const pelvis = new THREE.Mesh(
+      new THREE.BoxGeometry(0.58, 0.28, 0.28),
+      gearMaterial,
+    );
+    pelvis.position.set(0, 0.36, 0);
+    addPart("pelvis", pelvis);
+
+    const leftShoulder = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.22, 0.22),
+      gearMaterial,
+    );
+    leftShoulder.position.set(-0.42, 1.18, 0);
+    addPart("shoulder-left", leftShoulder);
+
+    const rightShoulder = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.22, 0.22),
+      gearMaterial,
+    );
+    rightShoulder.position.set(0.42, 1.18, 0);
+    addPart("shoulder-right", rightShoulder);
+
+    const leftAccent = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.34, 0.1),
+      accentMaterial,
+    );
+    leftAccent.position.set(-0.44, 1.02, 0.22);
+    addPart("team-accent-left", leftAccent);
+
+    const rightAccent = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.34, 0.1),
+      accentMaterial,
+    );
+    rightAccent.position.set(0.44, 1.02, 0.22);
+    addPart("team-accent-right", rightAccent);
+
+    const leftLeg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.86, 0.24),
+      bodyMaterial,
+    );
+    leftLeg.position.set(-0.16, -0.2, 0);
+    addPart("leg-left", leftLeg);
+
+    const rightLeg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.86, 0.24),
+      bodyMaterial,
+    );
+    rightLeg.position.set(0.16, -0.2, 0);
+    addPart("leg-right", rightLeg);
+
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 16, 16),
+      headMaterial,
+    );
+    head.position.y = 1.72;
+    addPart("head", head);
+
+    const helmet = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.28, 0.18, 12),
+      gearMaterial,
+    );
+    helmet.position.y = 1.95;
+    addPart(isCT ? "helmet" : "headgear", helmet);
 
     if (isCT) {
-      const helmetGeometry = new THREE.CylinderGeometry(0.34, 0.42, 0.18, 12);
-      const helmet = new THREE.Mesh(helmetGeometry, accentMaterial);
-      helmet.position.y = 1.72;
-      bodyGroup.add(helmet);
-
-      const vestGeometry = new THREE.BoxGeometry(0.8, 0.65, 0.42);
-      const vest = new THREE.Mesh(vestGeometry, accentMaterial);
-      vest.position.set(0, 0.75, 0);
-      bodyGroup.add(vest);
+      const visor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.08, 0.08),
+        accentMaterial,
+      );
+      visor.position.set(0, 1.72, 0.24);
+      addPart("visor", visor);
     }
 
     if (isT) {
-      const bandanaGeometry = new THREE.TorusGeometry(0.28, 0.05, 8, 16);
-      const bandana = new THREE.Mesh(bandanaGeometry, accentMaterial);
+      const bandana = new THREE.Mesh(
+        new THREE.TorusGeometry(0.22, 0.04, 8, 16),
+        accentMaterial,
+      );
       bandana.rotation.x = Math.PI / 2;
-      bandana.position.y = 1.58;
-      bodyGroup.add(bandana);
-
-      const harnessGeometry = new THREE.BoxGeometry(0.75, 0.12, 0.42);
-      const harness = new THREE.Mesh(harnessGeometry, accentMaterial);
-      harness.position.set(0, 0.92, 0.03);
-      bodyGroup.add(harness);
+      bandana.position.y = 1.83;
+      addPart("bandana", bandana);
     }
 
-    // 眼睛
     const eyeGeometry = new THREE.SphereGeometry(0.06, 8, 8);
     const eyeMaterial = new THREE.MeshBasicMaterial({
       color: isBot ? 0xff0000 : 0x000000,
     });
 
     const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.set(-0.12, 1.5, 0.3);
-    bodyGroup.add(leftEye);
+    leftEye.position.set(-0.09, 1.75, 0.21);
+    addPart("eye-left", leftEye);
 
     const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.set(0.12, 1.5, 0.3);
-    bodyGroup.add(rightEye);
+    rightEye.position.set(0.09, 1.75, 0.21);
+    addPart("eye-right", rightEye);
 
-    // 机器人天线
     if (isBot) {
       const antennaGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8);
       const antennaMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
       const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
-      antenna.position.set(0, 1.85, 0);
-      bodyGroup.add(antenna);
+      antenna.position.set(0, 2.15, 0);
+      addPart("antenna", antenna);
 
       const antennaBall = new THREE.Mesh(
         new THREE.SphereGeometry(0.05, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xff0000 }),
       );
-      antennaBall.position.set(0, 2.0, 0);
-      bodyGroup.add(antennaBall);
+      antennaBall.position.set(0, 2.32, 0);
+      addPart("antenna-tip", antennaBall);
     }
 
     bodyGroup.position.set(position.x || 0, position.y ?? 0, position.z || 0);
-    bodyGroup.userData = {
-      isBot,
-      team: normalizedTeam,
-    };
     this.scene.add(bodyGroup);
     this.players.set(id, bodyGroup);
 

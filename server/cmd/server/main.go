@@ -127,7 +127,9 @@ func main() {
 
 func balanceHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(balance.Get().Snapshot())
+	if err := json.NewEncoder(w).Encode(balance.Get().Snapshot()); err != nil {
+		log.Printf("Error encoding balance response: %v", err)
+	}
 }
 
 func setDifficultyHandler(w http.ResponseWriter, r *http.Request) {
@@ -137,18 +139,24 @@ func setDifficultyHandler(w http.ResponseWriter, r *http.Request) {
 	valid := map[string]bool{"easy": true, "normal": true, "hard": true, "nightmare": true}
 	if !valid[difficulty] {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid difficulty"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": "invalid difficulty"}); err != nil {
+			log.Printf("Error encoding difficulty error response: %v", err)
+		}
 		return
 	}
 
 	balance.Get().SetDifficulty(difficulty)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "difficulty": difficulty})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok", "difficulty": difficulty}); err != nil {
+		log.Printf("Error encoding difficulty response: %v", err)
+	}
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(metrics.Get().Snapshot())
+	if err := json.NewEncoder(w).Encode(metrics.Get().Snapshot()); err != nil {
+		log.Printf("Error encoding metrics response: %v", err)
+	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
