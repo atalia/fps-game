@@ -38,6 +38,7 @@ class Renderer {
 
     // 增强版地图系统
     this.mapEnhanced = null;
+    this.environmentKit = null;
 
     this.init();
   }
@@ -56,6 +57,7 @@ class Renderer {
     // 相机位置
     this.camera.position.set(0, 2, 5);
 
+    this.ensureEnvironmentKit();
     this.ensureMapEnhanced();
 
     // 光照系统
@@ -94,7 +96,18 @@ class Renderer {
     console.log("[RENDERER] Initialization complete");
   }
 
+  ensureEnvironmentKit() {
+    if (!this.environmentKit && typeof EnvironmentKit !== "undefined") {
+      this.environmentKit = new EnvironmentKit(this);
+      console.log("[RENDERER] EnvironmentKit initialized");
+    }
+
+    return this.environmentKit;
+  }
+
   ensureMapEnhanced() {
+    this.ensureEnvironmentKit();
+
     if (!this.mapEnhanced && typeof MapEnhanced !== "undefined") {
       this.mapEnhanced = new MapEnhanced(this);
       console.log("[RENDERER] MapEnhanced initialized");
