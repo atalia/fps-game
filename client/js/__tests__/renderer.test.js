@@ -83,6 +83,46 @@ function createThreeMock() {
     }
   }
 
+  class AmbientLight extends MockObject3D {
+    constructor(color, intensity) {
+      super();
+      this.color = color;
+      this.intensity = intensity;
+    }
+  }
+
+  class DirectionalLight extends MockObject3D {
+    constructor(color, intensity) {
+      super();
+      this.color = color;
+      this.intensity = intensity;
+      this.castShadow = false;
+      this.shadow = {
+        mapSize: { width: 0, height: 0 },
+        camera: {},
+        bias: 0,
+      };
+    }
+  }
+
+  class HemisphereLight extends MockObject3D {
+    constructor(skyColor, groundColor, intensity) {
+      super();
+      this.skyColor = skyColor;
+      this.groundColor = groundColor;
+      this.intensity = intensity;
+    }
+  }
+
+  class PointLight extends MockObject3D {
+    constructor(color, intensity, distance) {
+      super();
+      this.color = color;
+      this.intensity = intensity;
+      this.distance = distance;
+    }
+  }
+
   return {
     Group,
     Mesh,
@@ -93,6 +133,11 @@ function createThreeMock() {
     CylinderGeometry,
     BoxGeometry,
     TorusGeometry,
+    AmbientLight,
+    DirectionalLight,
+    HemisphereLight,
+    PointLight,
+    ACESFilmicToneMapping: "ACESFilmicToneMapping",
   };
 }
 
@@ -170,5 +215,38 @@ describe("Renderer remote player positioning", () => {
     const remote = renderer.players.get("remote-4");
     expect(remote.userData.visualProfile).toBe("semi-realistic-tactical");
     expect(remote.userData.team).toBe("ct");
+  });
+
+  it("captures a tactical lighting profile with medium post-processing guardrails", () => {
+    const renderer = Object.create(Renderer.prototype);
+    renderer.scene = { add() {} };
+    renderer.renderer = {
+      toneMapping: "ACESFilmicToneMapping",
+      toneMappingExposure: 1.0,
+    };
+
+    renderer.setupLighting();
+
+    expect(renderer.tacticalLightingProfile.primaryDirectionalLights).toBe(1);
+    expect(renderer.tacticalLightingProfile.postProcessingLevel).toBe("medium");
+    expect(renderer.tacticalLightingProfile.readabilityGuardrails).toContain(
+      "target-visibility",
+    );
+    expect(renderer.localFunctionalLights).toHaveLength(4);
+  });
+
+  it("toggles tactical post-processing without losing the medium profile", () => {
+    const renderer = Object.create(Renderer.prototype);
+    renderer.postProcessingProfile = {
+      level: "medium",
+      bloomStrength: 0.35,
+    };
+    renderer.postProcessingEnabled = true;
+
+    renderer.setPostProcessingEnabled(false);
+
+    expect(renderer.postProcessingEnabled).toBe(false);
+    expect(renderer.postProcessingProfile.level).toBe("medium");
+    expect(renderer.postProcessingProfile.bloomStrength).toBe(0.35);
   });
 });

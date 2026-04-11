@@ -35,6 +35,19 @@ class Renderer {
     // 后处理
     this.composer = null;
     this.bloomPass = null;
+    this.postProcessingEnabled = true;
+    this.postProcessingProfile = {
+      level: "medium",
+      bloomEnabled: true,
+      bloomStrength: 0.35,
+      bloomRadius: 0.22,
+      bloomThreshold: 0.84,
+    };
+
+    // 光照状态
+    this.localFunctionalLights = [];
+    this.secondaryDirectionalLights = [];
+    this.tacticalLightingProfile = null;
 
     // 增强版地图系统
     this.mapEnhanced = null;
@@ -51,7 +64,7 @@ class Renderer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.04;
     this.renderer.outputEncoding = THREE.sRGBEncoding;
     this.container.appendChild(this.renderer.domElement);
 
@@ -140,6 +153,38 @@ class Renderer {
     return this.mapEnhanced;
   }
 
+  getFunctionalLightAnchors() {
+    if (this.mapEnhanced?.getFunctionalLightAnchors) {
+      return this.mapEnhanced.getFunctionalLightAnchors();
+    }
+
+    return [
+      { x: -48, z: 0, color: 0x60a5fa, intensity: 0.65, height: 5.5, zone: "spawn-ct" },
+      { x: 48, z: 0, color: 0xf59e0b, intensity: 0.65, height: 5.5, zone: "spawn-t" },
+      { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: "lane-north" },
+      { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: "lane-south" },
+    ];
+  }
+
+  setPostProcessingEnabled(enabled) {
+    this.postProcessingEnabled = Boolean(enabled);
+    this.postProcessingProfile = {
+      ...(this.postProcessingProfile || {}),
+      level: "medium",
+      bloomEnabled: this.postProcessingEnabled,
+      bloomStrength: 0.35,
+      bloomRadius: 0.22,
+      bloomThreshold: 0.84,
+      enabled: this.postProcessingEnabled,
+    };
+
+    if (this.bloomPass) {
+      this.bloomPass.enabled = this.postProcessingEnabled;
+    }
+
+    return this.postProcessingEnabled;
+  }
+
   setupLighting() {
     // 竞技风光照，强调体积和可读性
     this.ambientLight = new THREE.AmbientLight(0xc7d2e2, 0.42);
@@ -163,25 +208,41 @@ class Renderer {
     this.moonLight.position.set(-40, 55, -45);
     this.scene.add(this.moonLight);
 
-    const fillLight = new THREE.DirectionalLight(0xd9e2f0, 0.38);
-    fillLight.position.set(-25, 50, -35);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.DirectionalLight(0xd9e2f0, 0.38);
+    this.fillLight.position.set(-25, 50, -35);
+    this.scene.add(this.fillLight);
 
     this.hemisphereLight = new THREE.HemisphereLight(0xb7c8df, 0x1f242c, 0.52);
     this.scene.add(this.hemisphereLight);
 
-    const pointLights = [
-      { x: -48, z: 0, color: 0x60a5fa, intensity: 0.65, height: 5.5 },
-      { x: 48, z: 0, color: 0xf59e0b, intensity: 0.65, height: 5.5 },
-      { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.3, height: 6.5 },
-      { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.3, height: 6.5 },
-    ];
-
-    pointLights.forEach((light) => {
+    this.localFunctionalLights = this.getFunctionalLightAnchors().map((light) => {
       const pointLight = new THREE.PointLight(light.color, light.intensity, 24);
       pointLight.position.set(light.x, light.height, light.z);
+      pointLight.userData = {
+        ...(pointLight.userData || {}),
+        zone: light.zone,
+        category: "functional-light",
+      };
       this.scene.add(pointLight);
+      return pointLight;
     });
+
+    this.secondaryDirectionalLights = [this.moonLight, this.fillLight];
+    this.setPostProcessingEnabled(this.postProcessingEnabled);
+    this.tacticalLightingProfile = {
+      primaryDirectionalLights: 1,
+      secondaryDirectionalLights: this.secondaryDirectionalLights.length,
+      ambientLights: 2,
+      localFunctionalLights: this.localFunctionalLights.length,
+      postProcessingLevel: this.postProcessingProfile.level,
+      toneMapping: this.renderer?.toneMapping,
+      exposure: this.renderer?.toneMappingExposure,
+      readabilityGuardrails: [
+        "target-visibility",
+        "cover-definition",
+        "lane-contrast",
+      ],
+    };
   }
 
   createGround() {
