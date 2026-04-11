@@ -188,4 +188,32 @@ describe("MapEnhanced competitive scene kit", () => {
     expect(zones.has("spawn-ct")).toBe(true);
     expect(zones.has("spawn-t")).toBe(true);
   });
+
+  it("does not duplicate north or south boundary walls when environment kit provides them", () => {
+    const added = [];
+    const scene = {
+      add(object) {
+        added.push(object);
+      },
+    };
+    const renderer = { scene };
+    renderer.environmentKit = new EnvironmentKit(renderer);
+    const map = new MapEnhanced(renderer);
+
+    map.createCompetitiveArena();
+
+    const northLikeBoundaries = added.filter(
+      (item) =>
+        item?.userData?.category === "boundary" &&
+        item?.position?.z < -60,
+    );
+    const southLikeBoundaries = added.filter(
+      (item) =>
+        item?.userData?.category === "boundary" &&
+        item?.position?.z > 60,
+    );
+
+    expect(northLikeBoundaries).toHaveLength(1);
+    expect(southLikeBoundaries).toHaveLength(1);
+  });
 });

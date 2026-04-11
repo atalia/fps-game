@@ -25,20 +25,21 @@ class RuntimeAssets {
    * @param {string} source - Source path/URL for the asset
    * @returns {Promise<any>} The loaded asset or fallback
    */
-  async load(key, source) {
+  load(key, source) {
     if (this.cache.has(key)) {
       return this.cache.get(key)
     }
 
-    try {
-      const loaded = await this.loader(source)
-      this.cache.set(key, loaded)
-      return loaded
-    } catch (error) {
-      const fallback = this.fallbackFactory(key, source, error)
-      this.cache.set(key, fallback)
-      return fallback
-    }
+    const loadPromise = (async () => {
+      try {
+        return await this.loader(source)
+      } catch (error) {
+        return this.fallbackFactory(key, source, error)
+      }
+    })()
+
+    this.cache.set(key, loadPromise)
+    return loadPromise
   }
 }
 

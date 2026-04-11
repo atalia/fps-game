@@ -47,6 +47,30 @@ describe('RuntimeAssets', () => {
     expect(fakeLoader).toHaveBeenCalledTimes(2)
   })
 
+  test('shares in-flight loads for the same key', async () => {
+    const runtime = new RuntimeAssets({
+      loader: fakeLoader,
+      fallbackFactory: fallbackFactory,
+    })
+
+    let resolveLoad
+    const loadPromise = new Promise((resolve) => {
+      resolveLoad = resolve
+    })
+    fakeLoader.mockReturnValue(loadPromise)
+
+    const firstLoad = runtime.load('shared-key', '/shared.glb')
+    const secondLoad = runtime.load('shared-key', '/shared.glb')
+
+    expect(fakeLoader).toHaveBeenCalledTimes(1)
+    expect(firstLoad).toBe(secondLoad)
+
+    resolveLoad({ id: 'shared-asset' })
+
+    await expect(firstLoad).resolves.toEqual({ id: 'shared-asset' })
+    await expect(secondLoad).resolves.toEqual({ id: 'shared-asset' })
+  })
+
   test('returns cached assets without calling loader again', async () => {
     const runtime = new RuntimeAssets({
       loader: fakeLoader,

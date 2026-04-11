@@ -218,12 +218,27 @@ class MapEnhanced {
         return this.createModule(x, h / 2, z, w, h, d, 'boundary', variant, { color: 0x3b4450 })
     }
 
-    createBounds(minX, maxX, minZ, maxZ, height = 8) {
+    createBounds(minX, maxX, minZ, maxZ, height = 8, options = {}) {
         const wallThickness = 2.4
-        this.createBoundaryWall(0, minZ - wallThickness / 2, maxX - minX, height, wallThickness, 'north')
-        this.createBoundaryWall(0, maxZ + wallThickness / 2, maxX - minX, height, wallThickness, 'south')
-        this.createBoundaryWall(minX - wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'west')
-        this.createBoundaryWall(maxX + wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'east')
+        const {
+            includeNorth = true,
+            includeSouth = true,
+            includeWest = true,
+            includeEast = true,
+        } = options
+
+        if (includeNorth) {
+            this.createBoundaryWall(0, minZ - wallThickness / 2, maxX - minX, height, wallThickness, 'north')
+        }
+        if (includeSouth) {
+            this.createBoundaryWall(0, maxZ + wallThickness / 2, maxX - minX, height, wallThickness, 'south')
+        }
+        if (includeWest) {
+            this.createBoundaryWall(minX - wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'west')
+        }
+        if (includeEast) {
+            this.createBoundaryWall(maxX + wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'east')
+        }
     }
 
     getFunctionalLightAnchors() {
@@ -241,9 +256,14 @@ class MapEnhanced {
             modules: 0,
         }
 
+        let coreZoneBoundaries = { north: false, south: false }
         if (this.renderer.environmentKit?.buildCoreZones) {
             const coreZones = this.renderer.environmentKit.buildCoreZones()
             coreZones.forEach((item) => this.structures.push(item))
+            coreZoneBoundaries = {
+                north: coreZones.some((item) => item?.userData?.category === 'boundary' && item?.position?.z < -60),
+                south: coreZones.some((item) => item?.userData?.category === 'boundary' && item?.position?.z > 60),
+            }
             summary.modules += coreZones.length
         }
 
@@ -292,8 +312,11 @@ class MapEnhanced {
             summary.modules += 1
         })
 
-        this.createBounds(-70, 70, -70, 70, 10)
-        summary.modules += 4
+        this.createBounds(-70, 70, -70, 70, 10, {
+            includeNorth: !coreZoneBoundaries.north,
+            includeSouth: !coreZoneBoundaries.south,
+        })
+        summary.modules += (coreZoneBoundaries.north ? 0 : 1) + (coreZoneBoundaries.south ? 0 : 1) + 2
 
         return summary
     }
