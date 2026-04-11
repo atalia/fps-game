@@ -39,6 +39,7 @@ class Renderer {
     // 增强版地图系统
     this.mapEnhanced = null;
     this.environmentKit = null;
+    this.characterKit = null;
 
     this.init();
   }
@@ -58,6 +59,7 @@ class Renderer {
     this.camera.position.set(0, 2, 5);
 
     this.ensureEnvironmentKit();
+    this.ensureCharacterKit();
     this.ensureMapEnhanced();
 
     // 光照系统
@@ -96,20 +98,42 @@ class Renderer {
     console.log("[RENDERER] Initialization complete");
   }
 
+  resolveGlobal(name) {
+    if (typeof globalThis !== "undefined" && globalThis[name]) {
+      return globalThis[name];
+    }
+    if (typeof window !== "undefined" && window[name]) {
+      return window[name];
+    }
+    return undefined;
+  }
+
   ensureEnvironmentKit() {
-    if (!this.environmentKit && typeof EnvironmentKit !== "undefined") {
-      this.environmentKit = new EnvironmentKit(this);
+    const EnvironmentKitCtor = this.resolveGlobal("EnvironmentKit");
+    if (!this.environmentKit && EnvironmentKitCtor) {
+      this.environmentKit = new EnvironmentKitCtor(this);
       console.log("[RENDERER] EnvironmentKit initialized");
     }
 
     return this.environmentKit;
   }
 
+  ensureCharacterKit() {
+    const CharacterKitCtor = this.resolveGlobal("CharacterKit");
+    if (!this.characterKit && CharacterKitCtor) {
+      this.characterKit = new CharacterKitCtor(this);
+      console.log("[RENDERER] CharacterKit initialized");
+    }
+
+    return this.characterKit;
+  }
+
   ensureMapEnhanced() {
     this.ensureEnvironmentKit();
 
-    if (!this.mapEnhanced && typeof MapEnhanced !== "undefined") {
-      this.mapEnhanced = new MapEnhanced(this);
+    const MapEnhancedCtor = this.resolveGlobal("MapEnhanced");
+    if (!this.mapEnhanced && MapEnhancedCtor) {
+      this.mapEnhanced = new MapEnhancedCtor(this);
       console.log("[RENDERER] MapEnhanced initialized");
     }
 
@@ -530,6 +554,18 @@ class Renderer {
           : resolvedTeam;
     const isCT = normalizedTeam === "ct";
     const isT = normalizedTeam === "t";
+
+    this.ensureCharacterKit();
+    if (this.characterKit?.buildPlayer) {
+      const character = this.characterKit.buildPlayer({
+        team: normalizedTeam,
+        isBot,
+      });
+      character.position.set(position.x || 0, position.y ?? 0, position.z || 0);
+      this.scene.add(character);
+      this.players.set(id, character);
+      return character;
+    }
 
     const bodyColor = isCT
       ? 0x556070

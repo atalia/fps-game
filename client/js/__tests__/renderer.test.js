@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
 const rendererCode = readFileSync(`${__dirname}/../renderer.js`, "utf8");
+const characterKitCode = readFileSync(
+  `${__dirname}/../assets/character-kit.js`,
+  "utf8",
+);
 
 function createThreeMock() {
   class MockObject3D {
@@ -98,6 +102,13 @@ function loadRenderer(threeOverride) {
     console,
     THREE: threeOverride || createThreeMock(),
   };
+  const characterKitFn = new Function(
+    "window",
+    "THREE",
+    "console",
+    characterKitCode,
+  );
+  characterKitFn(context.window, context.THREE, context.console);
   const fn = new Function("window", "THREE", "console", rendererCode);
   fn(context.window, context.THREE, context.console);
   return context.window.Renderer;
@@ -147,5 +158,17 @@ describe("Renderer remote player positioning", () => {
     const remote = renderer.players.get("remote-3");
     expect(remote).toBeTruthy();
     expect(remote.position.y).toBe(1.25);
+  });
+
+  it("uses CharacterKit when available for remote player creation", () => {
+    const renderer = Object.create(Renderer.prototype);
+    renderer.scene = { add() {} };
+    renderer.players = new Map();
+
+    renderer.addPlayer("remote-4", { x: 2, y: 1.25, z: 4 }, { team: "ct" });
+
+    const remote = renderer.players.get("remote-4");
+    expect(remote.userData.visualProfile).toBe("semi-realistic-tactical");
+    expect(remote.userData.team).toBe("ct");
   });
 });
