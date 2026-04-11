@@ -27,12 +27,13 @@ class MapEnhanced {
         return new MaterialCtor({ ...(presets[kind] || presets.structure), ...overrides })
     }
 
-    tagMesh(mesh, category, variant = '') {
+    tagMesh(mesh, category, variant = '', zone = 'peripheral') {
         mesh.userData = {
             ...(mesh.userData || {}),
             category,
             variant,
-            visualProfile: 'competitive-light-realistic',
+            zone,
+            visualProfile: 'semi-realistic-tactical',
         }
         this.structures.push(mesh)
         return mesh
@@ -117,7 +118,7 @@ class MapEnhanced {
         const ground = new THREE.Mesh(geometry, material)
         ground.rotation.x = -Math.PI / 2
         ground.receiveShadow = true
-        this.tagMesh(ground, 'ground', 'arena-floor')
+        this.tagMesh(ground, 'ground', 'arena-floor', 'arena-floor')
         this.scene.add(ground)
 
         this.ground = ground
@@ -217,12 +218,36 @@ class MapEnhanced {
         return this.createModule(x, h / 2, z, w, h, d, 'boundary', variant, { color: 0x3b4450 })
     }
 
-    createBounds(minX, maxX, minZ, maxZ, height = 8) {
+    createBounds(minX, maxX, minZ, maxZ, height = 8, options = {}) {
         const wallThickness = 2.4
-        this.createBoundaryWall(0, minZ - wallThickness / 2, maxX - minX, height, wallThickness, 'north')
-        this.createBoundaryWall(0, maxZ + wallThickness / 2, maxX - minX, height, wallThickness, 'south')
-        this.createBoundaryWall(minX - wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'west')
-        this.createBoundaryWall(maxX + wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'east')
+        const {
+            includeNorth = true,
+            includeSouth = true,
+            includeWest = true,
+            includeEast = true,
+        } = options
+
+        if (includeNorth) {
+            this.createBoundaryWall(0, minZ - wallThickness / 2, maxX - minX, height, wallThickness, 'north')
+        }
+        if (includeSouth) {
+            this.createBoundaryWall(0, maxZ + wallThickness / 2, maxX - minX, height, wallThickness, 'south')
+        }
+        if (includeWest) {
+            this.createBoundaryWall(minX - wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'west')
+        }
+        if (includeEast) {
+            this.createBoundaryWall(maxX + wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'east')
+        }
+    }
+
+    getFunctionalLightAnchors() {
+        return [
+            { x: -48, z: 0, color: 0x60a5fa, intensity: 0.65, height: 5.5, zone: 'spawn-ct' },
+            { x: 48, z: 0, color: 0xf59e0b, intensity: 0.65, height: 5.5, zone: 'spawn-t' },
+            { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: 'lane-north' },
+            { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: 'lane-south' },
+        ]
     }
 
     createCompetitiveArena() {
@@ -231,46 +256,48 @@ class MapEnhanced {
             modules: 0,
         }
 
+        let coreZoneBoundaries = { north: false, south: false }
+        if (this.renderer.environmentKit?.buildCoreZones) {
+            const coreZones = this.renderer.environmentKit.buildCoreZones()
+            coreZones.forEach((item) => this.structures.push(item))
+            coreZoneBoundaries = {
+                north: coreZones.some((item) => item?.userData?.category === 'boundary' && item?.position?.z < -60),
+                south: coreZones.some((item) => item?.userData?.category === 'boundary' && item?.position?.z > 60),
+            }
+            summary.modules += coreZones.length
+        }
+
         const centralBase = this.createModule(0, 2.2, 0, 18, 4.4, 18, 'structure', 'central-core', { color: 0x707987 })
+        centralBase.userData.zone = 'mid-lane'
         this.createAccentStrip(centralBase, 1.45, 11.5, 0.2, 0x8fb4ff)
 
         const upperFrame = this.createModule(0, 4.75, 0, 14, 0.4, 14, 'trim', 'upper-frame', { color: 0xc7d0db })
+        upperFrame.userData.zone = 'mid-lane'
         summary.modules += 2
 
-        const laneWalls = [
-            [0, 2.4, 28, 20, 4.8, 2.2, 'structure', 'north-lane'],
-            [0, 2.4, -28, 20, 4.8, 2.2, 'structure', 'south-lane'],
-            [28, 2.4, 0, 2.2, 4.8, 20, 'structure', 'east-lane'],
-            [-28, 2.4, 0, 2.2, 4.8, 20, 'structure', 'west-lane'],
-        ]
-        laneWalls.forEach(([x, y, z, w, h, d, kind, variant]) => {
-            this.createModule(x, y, z, w, h, d, kind, variant, { color: 0x646e7d })
-            summary.modules += 1
-        })
-
         const trims = [
-            [0, 3.9, 28, 18, 0.18, 0.4, 'trim', 'north-trim'],
-            [0, 3.9, -28, 18, 0.18, 0.4, 'trim', 'south-trim'],
-            [28, 3.9, 0, 0.4, 0.18, 18, 'trim', 'east-trim'],
-            [-28, 3.9, 0, 0.4, 0.18, 18, 'trim', 'west-trim'],
+            [0, 3.9, 28, 18, 0.18, 0.4, 'trim', 'north-trim', 'mid-lane'],
+            [0, 3.9, -28, 18, 0.18, 0.4, 'trim', 'south-trim', 'mid-lane'],
+            [28, 3.9, 0, 0.4, 0.18, 18, 'trim', 'east-trim', 'mid-lane'],
+            [-28, 3.9, 0, 0.4, 0.18, 18, 'trim', 'west-trim', 'mid-lane'],
         ]
-        trims.forEach(([x, y, z, w, h, d, kind, variant]) => {
-            this.createModule(x, y, z, w, h, d, kind, variant, { color: 0xb8c2cf })
+        trims.forEach(([x, y, z, w, h, d, kind, variant, zone]) => {
+            const trim = this.createModule(x, y, z, w, h, d, kind, variant, { color: 0xb8c2cf })
+            trim.userData.zone = zone
             summary.modules += 1
         })
 
         const coverClusters = [
-            [22, 22, Math.PI / 4, 0x60a5fa],
-            [-22, 22, -Math.PI / 4, 0x60a5fa],
-            [22, -22, -Math.PI / 4, 0xf59e0b],
-            [-22, -22, Math.PI / 4, 0xf59e0b],
-            [0, 38, 0, 0x93c5fd],
-            [0, -38, 0, 0xfbbf24],
-            [38, 0, Math.PI / 2, 0x93c5fd],
-            [-38, 0, Math.PI / 2, 0xfbbf24],
+            [22, -22, -Math.PI / 4, 0xf59e0b, 'flank-east'],
+            [-22, -22, Math.PI / 4, 0xf59e0b, 'flank-west'],
+            [0, 38, 0, 0x93c5fd, 'spawn-ct'],
+            [0, -38, 0, 0xfbbf24, 'spawn-t'],
+            [38, 0, Math.PI / 2, 0x93c5fd, 'lane-east'],
+            [-38, 0, Math.PI / 2, 0xfbbf24, 'lane-west'],
         ]
-        coverClusters.forEach((args) => {
-            this.createCoverCluster(...args)
+        coverClusters.forEach(([x, z, rotation, accentColor, zone]) => {
+            const cluster = this.createCoverCluster(x, z, rotation, accentColor)
+            cluster.userData.zone = zone
             summary.modules += 1
         })
 
@@ -280,16 +307,16 @@ class MapEnhanced {
             [16, -16],
             [-16, -16],
         ].forEach(([x, z]) => {
-            this.createColumn(x, z)
+            const column = this.createColumn(x, z)
+            column.userData.zone = 'mid-lane'
             summary.modules += 1
         })
 
-        this.createModule(-52, 1.6, 0, 7, 3.2, 14, 'accent', 'ct-spawn-anchor', { color: 0x375f9b, emissive: 0x1f3f6f, emissiveIntensity: 0.22 })
-        this.createModule(52, 1.6, 0, 7, 3.2, 14, 'accent', 't-spawn-anchor', { color: 0x8b5b37, emissive: 0x4a2913, emissiveIntensity: 0.22 })
-        summary.modules += 2
-
-        this.createBounds(-70, 70, -70, 70, 10)
-        summary.modules += 4
+        this.createBounds(-70, 70, -70, 70, 10, {
+            includeNorth: !coreZoneBoundaries.north,
+            includeSouth: !coreZoneBoundaries.south,
+        })
+        summary.modules += (coreZoneBoundaries.north ? 0 : 1) + (coreZoneBoundaries.south ? 0 : 1) + 2
 
         return summary
     }

@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
 const rendererCode = readFileSync(`${__dirname}/../renderer.js`, "utf8");
+const characterKitCode = readFileSync(
+  `${__dirname}/../assets/character-kit.js`,
+  "utf8",
+);
 
 function createThreeMock() {
   class MockObject3D {
@@ -98,6 +102,13 @@ function loadRenderer(threeOverride) {
     console,
     THREE: threeOverride || createThreeMock(),
   };
+  const characterKitFn = new Function(
+    "window",
+    "THREE",
+    "console",
+    characterKitCode,
+  );
+  characterKitFn(context.window, context.THREE, context.console);
   const fn = new Function("window", "THREE", "console", rendererCode);
   fn(context.window, context.THREE, context.console);
   return context.window.Renderer;
@@ -161,7 +172,7 @@ describe("Renderer competitive player visuals", () => {
         "team-accent-right",
       ]),
     );
-    expect(player.userData.visualProfile).toBe("competitive-light-realistic");
+    expect(player.userData.visualProfile).toBe("semi-realistic-tactical");
   });
 
   it("uses restrained team accents instead of painting the whole model", () => {

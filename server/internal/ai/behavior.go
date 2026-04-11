@@ -14,6 +14,8 @@ type Room interface {
 	GetBots() []*Bot
 }
 
+const botMapBoundaryHalf = 50.0
+
 // Update 更新 AI 状态
 func (b *Bot) Update(room Room, delta time.Duration) {
 	// 检查决策间隔
@@ -134,6 +136,7 @@ func (b *Bot) findCover(room Room) {
 
 		b.Position.X += dir.X * 2
 		b.Position.Z += dir.Z * 2
+		b.clampToMapBounds()
 	}
 }
 
@@ -147,6 +150,7 @@ func (b *Bot) moveToward(target player.Position, speed float64) {
 	if length > 0 {
 		b.Position.X += dx / length * speed
 		b.Position.Z += dz / length * speed
+		b.clampToMapBounds()
 	}
 }
 
@@ -196,12 +200,32 @@ func (b *Bot) findNearestEnemy(room Room, maxDistance float64) *player.Player {
 func (b *Bot) generateRandomPath(points int) []player.Position {
 	path := make([]player.Position, points)
 	for i := 0; i < points; i++ {
-		path[i] = player.Position{
+		path[i] = clampPositionToMapBounds(player.Position{
 			X: b.Position.X + rand.Float64()*20 - 10,
 			Z: b.Position.Z + rand.Float64()*20 - 10,
-		}
+		})
 	}
 	return path
+}
+
+func (b *Bot) clampToMapBounds() {
+	b.Position = clampPositionToMapBounds(b.Position)
+}
+
+func clampPositionToMapBounds(pos player.Position) player.Position {
+	pos.X = clampBotCoordinate(pos.X)
+	pos.Z = clampBotCoordinate(pos.Z)
+	return pos
+}
+
+func clampBotCoordinate(v float64) float64 {
+	if v < -botMapBoundaryHalf {
+		return -botMapBoundaryHalf
+	}
+	if v > botMapBoundaryHalf {
+		return botMapBoundaryHalf
+	}
+	return v
 }
 
 func (b *Bot) shootAtTarget() {

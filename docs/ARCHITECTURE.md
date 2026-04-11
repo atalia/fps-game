@@ -178,19 +178,31 @@ Makefile                     # 构建脚本
 - 出生点：对称分布
 - 补给点：弹药/血包刷新
 
-### 前端视觉架构（Phase 1）
+### 前端视觉架构（Phase 2 Tactical Upgrade）
 
-- `client/js/renderer.js`
-  - 负责统一光照、玩家视觉构建、场景创建入口
-  - 通过 `createVisualMaterial()` 在支持时优先走 `MeshStandardMaterial`，保留对测试/降级环境的兼容
+- `client/js/assets/runtime-assets.js`
+  - 负责运行时资产缓存与 graceful fallback
+  - 真实外部资产缺失时不阻断游戏流程
+- `client/js/assets/environment-kit.js`
+  - 负责核心战区的环境套件拼装
+  - 输出对象统一带 `userData.category`、`userData.zone`、`userData.visualProfile`
+  - 与 `map-enhanced.js` 配合，保持核心战区升级、外围几何轻量
+- `client/js/assets/character-kit.js`
+  - 负责 CT/T 角色轮廓、装备层次和 restrained team accents
+  - 保持共享原点和尺度，兼容测试环境 fallback mesh
 - `client/js/effects/map-enhanced.js`
-  - 负责竞技风模块化场景套件
-  - 提供地面分区、结构模块、掩体簇、边界墙、区域强调件
-  - 所有关键场景对象带 `userData.category` 和 `visualProfile`，方便测试和后续调优
-- 玩家模型策略
-  - 保持现有 `renderer.addPlayer()/updatePlayer()` 接口不变
-  - 用 torso、chest-rig、pelvis、shoulders、legs、team accents 等层次替代占位几何体
-  - 通过局部 accent 而不是全身涂色保留 CT/T 识别
+  - 负责竞技风模块化场景套件与核心战区布局
+  - 对外提供功能性光源锚点，供渲染器统一管理战术光照
+- `client/js/renderer.js`
+  - 负责统一光照、角色构建接线、场景创建入口
+  - 维护 `tacticalLightingProfile`、`localFunctionalLights`、`postProcessingProfile`
+  - 保持 `renderer.addPlayer()/updatePlayer()` 兼容，不改调用方接口
+
+#### 视觉护栏
+
+- 真实感升级不能牺牲敌我识别、掩体识别和路线理解
+- 后处理保持中等强度，可切换，不允许压住目标可见性
+- 资产层只负责 kit 和 fallback，玩法逻辑不依赖外部模型是否成功加载
 
 ## 部署架构
 
