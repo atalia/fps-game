@@ -35,4 +35,34 @@ describe("VoiceSystem.init", () => {
     expect(warnSpy).toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
+
+  it("gracefully warns instead of erroring when no microphone device is available", async () => {
+    const dom = new JSDOM(`<!doctype html><html><head></head><body></body></html>`);
+    const { window } = dom;
+    const { document } = window;
+    const navigatorOverride = {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockRejectedValue(new DOMException("Requested device not found", "NotFoundError")),
+      },
+    };
+
+    window.AudioContext = vi.fn(() => ({
+      createMediaStreamSource: vi.fn(),
+      createAnalyser: vi.fn(),
+    }));
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const VoiceSystem = loadVoiceSystem(window, document, navigatorOverride);
+    const voice = new VoiceSystem();
+
+    await expect(voice.init()).resolves.toBe(false);
+    expect(voice.enabled).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[VOICE] Microphone unavailable, voice disabled:",
+      "NotFoundError",
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
 });

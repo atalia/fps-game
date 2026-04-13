@@ -55,8 +55,14 @@ class VoiceSystem {
             this.enabled = true;
             return true;
         } catch (err) {
-            console.error('Failed to initialize voice:', err);
-            return false;
+            const recoverableDeviceErrors = new Set(['NotFoundError', 'NotAllowedError', 'NotReadableError', 'AbortError'])
+            if (recoverableDeviceErrors.has(err?.name)) {
+                console.warn('[VOICE] Microphone unavailable, voice disabled:', err.name)
+                return false
+            }
+
+            console.error('Failed to initialize voice:', err)
+            return false
         }
     }
 
