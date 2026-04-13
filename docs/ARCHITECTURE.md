@@ -187,14 +187,16 @@ Makefile                     # 构建脚本
   - 负责核心战区的环境套件拼装
   - 输出对象统一带 `userData.category`、`userData.zone`、`userData.visualProfile`
   - 与 `map-enhanced.js` 配合，保持核心战区升级、外围几何轻量
-- `client/js/assets/character-kit.js`
-  - 负责 CT/T 角色轮廓、装备层次和 restrained team accents
-  - 保持共享原点和尺度，兼容测试环境 fallback mesh
 - `client/js/effects/map-enhanced.js`
-  - 负责竞技风模块化场景套件与核心战区布局
-  - 对外提供功能性光源锚点，供渲染器统一管理战术光照
+  - 负责地图侧表现组合，是 no-texture visual polish 的主场景编排层
+  - 拥有中路主体、掩体簇、边界节奏、地面程序化分区和功能性光源锚点
+  - 目标是在不引入外部贴图的前提下，用几何层次、程序材质和有限灯光维持战术可读性
+- `client/js/assets/character-kit.js`
+  - 负责玩家轮廓组合，是角色侧 no-texture silhouette 层
+  - 拥有 torso / armor / gear / accent 的材料分层，以及胸挂、腰封、背板、腿挂等装备 breakup
+  - 保持共享原点和尺度，兼容测试环境 fallback mesh
 - `client/js/renderer.js`
-  - 负责统一光照、角色构建接线、场景创建入口
+  - 负责总装配和呈现护栏，是场景创建、灯光配置、后处理配置的统一入口
   - 维护 `tacticalLightingProfile`、`localFunctionalLights`、`postProcessingProfile`
   - 保持 `renderer.addPlayer()/updatePlayer()` 兼容，不改调用方接口
 
