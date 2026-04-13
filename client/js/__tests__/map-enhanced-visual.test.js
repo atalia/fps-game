@@ -240,4 +240,22 @@ describe("MapEnhanced competitive scene kit", () => {
     expect(trimParts.length).toBeGreaterThanOrEqual(10);
     expect(boundaryParts.length).toBeGreaterThanOrEqual(6);
   });
+
+  it("assigns restrained no-texture material families across arena surfaces", () => {
+    const map = new MapEnhanced({ scene: { add() {} } });
+
+    const ground = map.createMaterial("ground");
+    const structure = map.createMaterial("structure");
+    const cover = map.createMaterial("cover");
+    const trim = map.createMaterial("trim");
+    const accent = map.createMaterial("accent");
+    const boundary = map.createMaterial("boundary");
+
+    expect(ground.options.roughness).toBeGreaterThan(0.9);
+    expect(structure.options.roughness).toBeLessThan(0.76);
+    expect(cover.options.roughness).toBeGreaterThan(structure.options.roughness);
+    expect(trim.options.metalness).toBeGreaterThanOrEqual(0.42);
+    expect(accent.options.emissiveIntensity).toBeLessThanOrEqual(0.18);
+    expect(boundary.options.roughness).toBeGreaterThan(structure.options.roughness);
+  });
 });

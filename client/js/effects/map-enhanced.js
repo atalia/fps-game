@@ -14,12 +14,12 @@ class MapEnhanced {
 
     createMaterial(kind, overrides = {}) {
         const presets = {
-            ground: { color: 0x2f343d, roughness: 0.95, metalness: 0.02 },
-            structure: { color: 0x6b7280, roughness: 0.82, metalness: 0.08 },
-            cover: { color: 0x4b5563, roughness: 0.78, metalness: 0.12 },
-            trim: { color: 0x9aa4b2, roughness: 0.55, metalness: 0.35 },
-            accent: { color: 0x3b82f6, roughness: 0.35, metalness: 0.55, emissive: 0x15233d, emissiveIntensity: 0.35 },
-            boundary: { color: 0x374151, roughness: 0.88, metalness: 0.1 },
+            ground: { color: 0x2f343d, roughness: 0.96, metalness: 0.02 },
+            structure: { color: 0x687180, roughness: 0.72, metalness: 0.1 },
+            cover: { color: 0x4a535f, roughness: 0.86, metalness: 0.08 },
+            trim: { color: 0xb2bcc8, roughness: 0.48, metalness: 0.46 },
+            accent: { color: 0x4c8fe8, roughness: 0.42, metalness: 0.32, emissive: 0x142033, emissiveIntensity: 0.16 },
+            boundary: { color: 0x343d48, roughness: 0.91, metalness: 0.05 },
             prop: { color: 0x7c5d3c, roughness: 0.86, metalness: 0.06 },
         }
 
@@ -56,6 +56,18 @@ class MapEnhanced {
 
         ctx.fillStyle = '#262b33'
         ctx.fillRect(760, 760, 528, 528)
+
+        ctx.fillStyle = 'rgba(93, 106, 122, 0.18)'
+        ctx.fillRect(320, 120, 1408, 110)
+        ctx.fillRect(320, 1818, 1408, 110)
+        ctx.fillRect(120, 320, 110, 1408)
+        ctx.fillRect(1818, 320, 110, 1408)
+
+        ctx.fillStyle = 'rgba(154, 166, 182, 0.09)'
+        ctx.fillRect(550, 550, 948, 28)
+        ctx.fillRect(550, 1470, 948, 28)
+        ctx.fillRect(550, 550, 28, 948)
+        ctx.fillRect(1470, 550, 28, 948)
 
         ctx.strokeStyle = '#505b6a'
         ctx.lineWidth = 6

@@ -98,6 +98,10 @@ function loadCharacterKit() {
   return context.window.CharacterKit;
 }
 
+function findPart(root, partName) {
+  return root.children.find((child) => child.userData?.part === partName) || null;
+}
+
 describe("CharacterKit", () => {
   it("applies a semi-realistic tactical silhouette with restrained CT/T accents", () => {
     const CharacterKit = loadCharacterKit();
@@ -123,5 +127,21 @@ describe("CharacterKit", () => {
     expect(parts).toContain("thigh-rig-left");
     expect(parts).toContain("back-panel");
     expect(parts).not.toContain("full-body-team-shell");
+  });
+
+  it("separates cloth, armor, gear, and accent material families", () => {
+    const CharacterKit = loadCharacterKit();
+    const kit = new CharacterKit({});
+    const ct = kit.buildPlayer({ team: "ct", isBot: false });
+
+    const torso = findPart(ct, "torso");
+    const chestRig = findPart(ct, "chest-rig");
+    const belt = findPart(ct, "belt");
+    const accent = findPart(ct, "team-accent-left");
+
+    expect(torso.material.options.color).not.toBe(chestRig.material.options.color);
+    expect(chestRig.material.options.color).not.toBe(belt.material.options.color);
+    expect(chestRig.material.options.roughness).toBeLessThan(torso.material.options.roughness);
+    expect(accent.material.options.emissiveIntensity).toBeLessThanOrEqual(0.08);
   });
 });
