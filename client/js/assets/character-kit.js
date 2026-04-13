@@ -98,6 +98,20 @@ class CharacterKit {
     pelvis.position.set(0, 0.36, 0);
     addPart("pelvis", pelvis);
 
+    const belt = new THREE.Mesh(
+      new THREE.BoxGeometry(0.74, 0.14, 0.36),
+      gearMaterial,
+    );
+    belt.position.set(0, 0.5, 0.01);
+    addPart("belt", belt);
+
+    const backPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.68, 0.74, 0.18),
+      gearMaterial,
+    );
+    backPanel.position.set(0, 1.02, -0.2);
+    addPart("back-panel", backPanel);
+
     const leftShoulder = new THREE.Mesh(
       new THREE.BoxGeometry(0.24, 0.24, 0.24),
       gearMaterial,
@@ -139,6 +153,20 @@ class CharacterKit {
     );
     rightLeg.position.set(0.16, -0.18, 0);
     addPart("leg-right", rightLeg);
+
+    const leftThighRig = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.34, 0.18),
+      gearMaterial,
+    );
+    leftThighRig.position.set(-0.26, 0.08, 0.08);
+    addPart("thigh-rig-left", leftThighRig);
+
+    const rightThighRig = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.34, 0.18),
+      gearMaterial,
+    );
+    rightThighRig.position.set(0.26, 0.08, 0.08);
+    addPart("thigh-rig-right", rightThighRig);
 
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.26, 16, 16),

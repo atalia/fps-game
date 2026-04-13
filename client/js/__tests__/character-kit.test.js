@@ -110,4 +110,18 @@ describe("CharacterKit", () => {
     expect(ct.userData.teamAccent).not.toBe(t.userData.teamAccent);
     expect(ct.children.length).toBeGreaterThan(4);
   });
+
+  it("adds layered tactical gear breakup without whole-body team recolors", () => {
+    const CharacterKit = loadCharacterKit();
+    const kit = new CharacterKit({});
+    const ct = kit.buildPlayer({ team: "ct", isBot: false });
+
+    const parts = ct.children.map((child) => child.userData?.part).filter(Boolean);
+
+    expect(parts).toContain("chest-rig");
+    expect(parts).toContain("belt");
+    expect(parts).toContain("thigh-rig-left");
+    expect(parts).toContain("back-panel");
+    expect(parts).not.toContain("full-body-team-shell");
+  });
 });
