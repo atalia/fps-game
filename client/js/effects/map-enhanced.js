@@ -125,15 +125,37 @@ class MapEnhanced {
         return ground
     }
 
-    createModule(x, y, z, w, h, d, kind, variant = '', materialOverrides = {}) {
+    createModule(x, y, z, w, h, d, kind, variant = '', materialOverrides = {}, rotationY = 0) {
         const geometry = new THREE.BoxGeometry(w, h, d)
         const mesh = new THREE.Mesh(geometry, this.createMaterial(kind, materialOverrides))
         mesh.position.set(x, y, z)
+        mesh.rotation.y = rotationY
         mesh.castShadow = true
         mesh.receiveShadow = true
         this.tagMesh(mesh, kind, variant)
         this.scene.add(mesh)
         return mesh
+    }
+
+    offsetPoint(originX, originZ, localX, localZ, rotation = 0) {
+        const cos = Math.cos(rotation)
+        const sin = Math.sin(rotation)
+        return {
+            x: originX + localX * cos - localZ * sin,
+            z: originZ + localX * sin + localZ * cos,
+        }
+    }
+
+    createTrimBand(x, y, z, w, h, d, variant = 'trim-band', zone = 'peripheral', rotationY = 0, color = 0xc1cad5) {
+        const trim = this.createModule(x, y, z, w, h, d, 'trim', variant, { color }, rotationY)
+        trim.userData.zone = zone
+        return trim
+    }
+
+    createSupportFoot(x, y, z, w, h, d, variant = 'support-foot', zone = 'peripheral', rotationY = 0, kind = 'cover') {
+        const foot = this.createModule(x, y, z, w, h, d, kind, variant, { color: kind === 'structure' ? 0x5f6977 : 0x49515d }, rotationY)
+        foot.userData.zone = zone
+        return foot
     }
 
     createAccentStrip(parent, y, width, depth, color) {
@@ -168,7 +190,7 @@ class MapEnhanced {
         return column
     }
 
-    createCoverCluster(x, z, rotation = 0, accentColor = 0x4f87ff) {
+    createRaisedCoverCluster(x, z, rotation = 0, accentColor = 0x4f87ff, zone = 'peripheral') {
         const group = new THREE.Group()
         group.position.set(x, 0, z)
         group.rotation.y = rotation
@@ -176,6 +198,7 @@ class MapEnhanced {
             category: 'cover',
             variant: 'cluster',
             visualProfile: 'competitive-light-realistic',
+            zone,
         }
         this.scene.add(group)
         this.structures.push(group)
@@ -211,11 +234,41 @@ class MapEnhanced {
         group.add(mirrorSide)
 
         this.createAccentStrip(core, 0.7, 4.2, 0.18, accentColor)
+
+        const leftFoot = this.offsetPoint(x, z, -2.45, 0, rotation)
+        this.createSupportFoot(leftFoot.x, 0.28, leftFoot.z, 1.2, 0.56, 2.4, 'cover-foot-left', zone, rotation)
+
+        const rightFoot = this.offsetPoint(x, z, 2.45, 0, rotation)
+        this.createSupportFoot(rightFoot.x, 0.28, rightFoot.z, 1.2, 0.56, 2.4, 'cover-foot-right', zone, rotation)
+
+        const topTrim = this.offsetPoint(x, z, 0, 0, rotation)
+        this.createTrimBand(topTrim.x, 2.28, topTrim.z, 5.8, 0.12, 2.2, 'cover-cap', zone, rotation, 0xaeb9c7)
+
         return group
+    }
+
+    createCoverCluster(x, z, rotation = 0, accentColor = 0x4f87ff, zone = 'peripheral') {
+        return this.createRaisedCoverCluster(x, z, rotation, accentColor, zone)
     }
 
     createBoundaryWall(x, z, w, h, d, variant = 'wall') {
         return this.createModule(x, h / 2, z, w, h, d, 'boundary', variant, { color: 0x3b4450 })
+    }
+
+    createSegmentedBoundaryWall(x, z, span, height, thickness, axis = 'z', variant = 'boundary') {
+        const gap = 2.4
+        const segmentCount = 3
+        const segmentSpan = (span - gap * (segmentCount - 1)) / segmentCount
+        const start = -span / 2 + segmentSpan / 2
+
+        for (let i = 0; i < segmentCount; i++) {
+            const offset = start + i * (segmentSpan + gap)
+            if (axis === 'x') {
+                this.createBoundaryWall(x + offset, z, segmentSpan, height, thickness, `${variant}-${i + 1}`)
+            } else {
+                this.createBoundaryWall(x, z + offset, thickness, height, segmentSpan, `${variant}-${i + 1}`)
+            }
+        }
     }
 
     createBounds(minX, maxX, minZ, maxZ, height = 8, options = {}) {
@@ -234,10 +287,10 @@ class MapEnhanced {
             this.createBoundaryWall(0, maxZ + wallThickness / 2, maxX - minX, height, wallThickness, 'south')
         }
         if (includeWest) {
-            this.createBoundaryWall(minX - wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'west')
+            this.createSegmentedBoundaryWall(minX - wallThickness / 2, 0, maxZ - minZ, height, wallThickness, 'z', 'west')
         }
         if (includeEast) {
-            this.createBoundaryWall(maxX + wallThickness / 2, 0, wallThickness, height, maxZ - minZ, 'east')
+            this.createSegmentedBoundaryWall(maxX + wallThickness / 2, 0, maxZ - minZ, height, wallThickness, 'z', 'east')
         }
     }
 
@@ -273,7 +326,19 @@ class MapEnhanced {
 
         const upperFrame = this.createModule(0, 4.75, 0, 14, 0.4, 14, 'trim', 'upper-frame', { color: 0xc7d0db })
         upperFrame.userData.zone = 'mid-lane'
-        summary.modules += 2
+
+        ;[
+            [10.5, 0, 1.8, 3.6, 1.8, 0],
+            [-10.5, 0, 1.8, 3.6, 1.8, 0],
+            [0, 10.5, 14, 3.2, 1.8, Math.PI / 2],
+            [0, -10.5, 14, 3.2, 1.8, Math.PI / 2],
+            [6.4, 6.4, 2.2, 2.4, 2.2, Math.PI / 4],
+            [-6.4, -6.4, 2.2, 2.4, 2.2, Math.PI / 4],
+        ].forEach(([x, z, w, h, d, rotation]) => {
+            const brace = this.createModule(x, 1.6, z, w, h, d, 'structure', 'central-brace', { color: 0x5f6976 }, rotation)
+            brace.userData.zone = 'mid-lane'
+        })
+        summary.modules += 8
 
         const trims = [
             [0, 3.9, 28, 18, 0.18, 0.4, 'trim', 'north-trim', 'mid-lane'],
@@ -296,9 +361,9 @@ class MapEnhanced {
             [-38, 0, Math.PI / 2, 0xfbbf24, 'lane-west'],
         ]
         coverClusters.forEach(([x, z, rotation, accentColor, zone]) => {
-            const cluster = this.createCoverCluster(x, z, rotation, accentColor)
+            const cluster = this.createCoverCluster(x, z, rotation, accentColor, zone)
             cluster.userData.zone = zone
-            summary.modules += 1
+            summary.modules += 4
         })
 
         ;[
@@ -316,7 +381,7 @@ class MapEnhanced {
             includeNorth: !coreZoneBoundaries.north,
             includeSouth: !coreZoneBoundaries.south,
         })
-        summary.modules += (coreZoneBoundaries.north ? 0 : 1) + (coreZoneBoundaries.south ? 0 : 1) + 2
+        summary.modules += (coreZoneBoundaries.north ? 0 : 1) + (coreZoneBoundaries.south ? 0 : 1) + 6
 
         return summary
     }

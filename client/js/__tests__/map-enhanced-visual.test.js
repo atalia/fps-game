@@ -216,4 +216,28 @@ describe("MapEnhanced competitive scene kit", () => {
     expect(northLikeBoundaries).toHaveLength(1);
     expect(southLikeBoundaries).toHaveLength(1);
   });
+
+  it("builds layered cover and center structures instead of single primitive masses", () => {
+    const added = [];
+    const scene = {
+      add(object) {
+        added.push(object);
+      },
+    };
+    const renderer = { scene };
+    renderer.environmentKit = new EnvironmentKit(renderer);
+    const map = new MapEnhanced(renderer);
+
+    map.createCompetitiveArena();
+
+    const coverParts = added.filter((item) => item?.userData?.category === "cover");
+    const structureParts = added.filter((item) => item?.userData?.category === "structure");
+    const trimParts = added.filter((item) => item?.userData?.category === "trim");
+    const boundaryParts = added.filter((item) => item?.userData?.category === "boundary");
+
+    expect(coverParts.length).toBeGreaterThanOrEqual(10);
+    expect(structureParts.length).toBeGreaterThanOrEqual(12);
+    expect(trimParts.length).toBeGreaterThanOrEqual(10);
+    expect(boundaryParts.length).toBeGreaterThanOrEqual(6);
+  });
 });
