@@ -34,27 +34,32 @@ class CharacterKit {
     const gearColor = isCT ? 0x2f3945 : isT ? 0x3d2c25 : 0x3b4048;
     const accentColor = isCT ? 0x5fa8ff : isT ? 0xf5a623 : 0xa3a3a3;
 
-    const bodyMaterial = this.createMaterial({
+    const clothMaterial = this.createMaterial({
       color: bodyColor,
-      roughness: 0.8,
-      metalness: 0.08,
+      roughness: 0.84,
+      metalness: 0.05,
     });
     const headMaterial = this.createMaterial({
       color: headColor,
       roughness: 0.92,
       metalness: 0.02,
     });
+    const armorMaterial = this.createMaterial({
+      color: isCT ? 0x3b4755 : isT ? 0x4a3730 : 0x454c55,
+      roughness: 0.64,
+      metalness: 0.22,
+    });
     const gearMaterial = this.createMaterial({
       color: gearColor,
-      roughness: 0.7,
-      metalness: 0.18,
+      roughness: 0.76,
+      metalness: 0.12,
     });
     const accentMaterial = this.createMaterial({
       color: accentColor,
-      roughness: 0.42,
-      metalness: 0.28,
+      roughness: 0.5,
+      metalness: 0.22,
       emissive: accentColor,
-      emissiveIntensity: 0.12,
+      emissiveIntensity: 0.08,
     });
 
     const bodyGroup = new THREE.Group();
@@ -80,13 +85,13 @@ class CharacterKit {
       typeof THREE.CapsuleGeometry === "function"
         ? new THREE.CapsuleGeometry(0.28, 0.82, 8, 16)
         : new THREE.CylinderGeometry(0.3, 0.34, 1.3, 12);
-    const torso = new THREE.Mesh(torsoGeometry, bodyMaterial);
+    const torso = new THREE.Mesh(torsoGeometry, clothMaterial);
     torso.position.y = 1.02;
     addPart("torso", torso);
 
     const chestRig = new THREE.Mesh(
       new THREE.BoxGeometry(0.82, 0.56, 0.36),
-      gearMaterial,
+      armorMaterial,
     );
     chestRig.position.set(0, 1.04, 0.12);
     addPart("chest-rig", chestRig);
@@ -98,16 +103,30 @@ class CharacterKit {
     pelvis.position.set(0, 0.36, 0);
     addPart("pelvis", pelvis);
 
+    const belt = new THREE.Mesh(
+      new THREE.BoxGeometry(0.74, 0.14, 0.36),
+      gearMaterial,
+    );
+    belt.position.set(0, 0.5, 0.01);
+    addPart("belt", belt);
+
+    const backPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.68, 0.74, 0.18),
+      armorMaterial,
+    );
+    backPanel.position.set(0, 1.02, -0.2);
+    addPart("back-panel", backPanel);
+
     const leftShoulder = new THREE.Mesh(
       new THREE.BoxGeometry(0.24, 0.24, 0.24),
-      gearMaterial,
+      armorMaterial,
     );
     leftShoulder.position.set(-0.42, 1.18, 0);
     addPart("shoulder-left", leftShoulder);
 
     const rightShoulder = new THREE.Mesh(
       new THREE.BoxGeometry(0.24, 0.24, 0.24),
-      gearMaterial,
+      armorMaterial,
     );
     rightShoulder.position.set(0.42, 1.18, 0);
     addPart("shoulder-right", rightShoulder);
@@ -128,17 +147,31 @@ class CharacterKit {
 
     const leftLeg = new THREE.Mesh(
       new THREE.BoxGeometry(0.22, 0.9, 0.24),
-      bodyMaterial,
+      clothMaterial,
     );
     leftLeg.position.set(-0.16, -0.18, 0);
     addPart("leg-left", leftLeg);
 
     const rightLeg = new THREE.Mesh(
       new THREE.BoxGeometry(0.22, 0.9, 0.24),
-      bodyMaterial,
+      clothMaterial,
     );
     rightLeg.position.set(0.16, -0.18, 0);
     addPart("leg-right", rightLeg);
+
+    const leftThighRig = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.34, 0.18),
+      gearMaterial,
+    );
+    leftThighRig.position.set(-0.26, 0.08, 0.08);
+    addPart("thigh-rig-left", leftThighRig);
+
+    const rightThighRig = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.34, 0.18),
+      gearMaterial,
+    );
+    rightThighRig.position.set(0.26, 0.08, 0.08);
+    addPart("thigh-rig-right", rightThighRig);
 
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.26, 16, 16),
@@ -149,7 +182,7 @@ class CharacterKit {
 
     const helmet = new THREE.Mesh(
       new THREE.CylinderGeometry(0.25, 0.28, 0.18, 12),
-      gearMaterial,
+      armorMaterial,
     );
     helmet.position.y = 1.95;
     addPart(isCT ? "helmet" : "headgear", helmet);

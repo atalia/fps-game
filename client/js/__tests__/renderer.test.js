@@ -217,29 +217,38 @@ describe("Renderer remote player positioning", () => {
     expect(remote.userData.team).toBe("ct");
   });
 
-  it("captures a tactical lighting profile with medium post-processing guardrails", () => {
+  it("tracks a clean tactical lighting profile with restrained post-processing", () => {
     const renderer = Object.create(Renderer.prototype);
     renderer.scene = { add() {} };
     renderer.renderer = {
       toneMapping: "ACESFilmicToneMapping",
       toneMappingExposure: 1.0,
     };
+    renderer.postProcessingEnabled = true;
 
     renderer.setupLighting();
 
     expect(renderer.tacticalLightingProfile.primaryDirectionalLights).toBe(1);
     expect(renderer.tacticalLightingProfile.postProcessingLevel).toBe("medium");
+    expect(renderer.tacticalLightingProfile.localFunctionalLights).toBeGreaterThanOrEqual(4);
+    expect(renderer.tacticalLightingProfile.localFunctionalLights).toBeLessThanOrEqual(4);
     expect(renderer.tacticalLightingProfile.readabilityGuardrails).toContain(
       "target-visibility",
     );
-    expect(renderer.localFunctionalLights).toHaveLength(4);
+    expect(renderer.tacticalLightingProfile.readabilityGuardrails).toContain(
+      "cover-definition",
+    );
+    expect(renderer.tacticalLightingProfile.localLightPolicy).toBe("purposeful-only");
+    expect(renderer.postProcessingProfile.bloomStrength).toBeLessThanOrEqual(0.28);
+    expect(renderer.postProcessingProfile.bloomThreshold).toBeGreaterThanOrEqual(0.9);
   });
 
   it("toggles tactical post-processing without losing the medium profile", () => {
     const renderer = Object.create(Renderer.prototype);
     renderer.postProcessingProfile = {
       level: "medium",
-      bloomStrength: 0.35,
+      bloomStrength: 0.26,
+      bloomThreshold: 0.9,
     };
     renderer.postProcessingEnabled = true;
 
@@ -247,6 +256,7 @@ describe("Renderer remote player positioning", () => {
 
     expect(renderer.postProcessingEnabled).toBe(false);
     expect(renderer.postProcessingProfile.level).toBe("medium");
-    expect(renderer.postProcessingProfile.bloomStrength).toBe(0.35);
+    expect(renderer.postProcessingProfile.bloomStrength).toBe(0.26);
+    expect(renderer.postProcessingProfile.bloomThreshold).toBe(0.9);
   });
 });

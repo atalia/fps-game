@@ -216,4 +216,46 @@ describe("MapEnhanced competitive scene kit", () => {
     expect(northLikeBoundaries).toHaveLength(1);
     expect(southLikeBoundaries).toHaveLength(1);
   });
+
+  it("builds layered cover and center structures instead of single primitive masses", () => {
+    const added = [];
+    const scene = {
+      add(object) {
+        added.push(object);
+      },
+    };
+    const renderer = { scene };
+    renderer.environmentKit = new EnvironmentKit(renderer);
+    const map = new MapEnhanced(renderer);
+
+    map.createCompetitiveArena();
+
+    const coverParts = added.filter((item) => item?.userData?.category === "cover");
+    const structureParts = added.filter((item) => item?.userData?.category === "structure");
+    const trimParts = added.filter((item) => item?.userData?.category === "trim");
+    const boundaryParts = added.filter((item) => item?.userData?.category === "boundary");
+
+    expect(coverParts.length).toBeGreaterThanOrEqual(10);
+    expect(structureParts.length).toBeGreaterThanOrEqual(12);
+    expect(trimParts.length).toBeGreaterThanOrEqual(10);
+    expect(boundaryParts.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("assigns restrained no-texture material families across arena surfaces", () => {
+    const map = new MapEnhanced({ scene: { add() {} } });
+
+    const ground = map.createMaterial("ground");
+    const structure = map.createMaterial("structure");
+    const cover = map.createMaterial("cover");
+    const trim = map.createMaterial("trim");
+    const accent = map.createMaterial("accent");
+    const boundary = map.createMaterial("boundary");
+
+    expect(ground.options.roughness).toBeGreaterThan(0.9);
+    expect(structure.options.roughness).toBeLessThan(0.76);
+    expect(cover.options.roughness).toBeGreaterThan(structure.options.roughness);
+    expect(trim.options.metalness).toBeGreaterThanOrEqual(0.42);
+    expect(accent.options.emissiveIntensity).toBeLessThanOrEqual(0.18);
+    expect(boundary.options.roughness).toBeGreaterThan(structure.options.roughness);
+  });
 });
