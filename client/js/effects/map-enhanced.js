@@ -308,10 +308,10 @@ class MapEnhanced {
 
     getFunctionalLightAnchors() {
         return [
-            { x: -48, z: 0, color: 0x60a5fa, intensity: 0.65, height: 5.5, zone: 'spawn-ct' },
-            { x: 48, z: 0, color: 0xf59e0b, intensity: 0.65, height: 5.5, zone: 'spawn-t' },
-            { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: 'lane-north' },
-            { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.3, height: 6.5, zone: 'lane-south' },
+            { x: -48, z: 0, color: 0x60a5fa, intensity: 0.48, height: 5.5, zone: 'spawn-ct' },
+            { x: 48, z: 0, color: 0xf59e0b, intensity: 0.48, height: 5.5, zone: 'spawn-t' },
+            { x: 0, z: 28, color: 0xcbd5e1, intensity: 0.22, height: 6.5, zone: 'lane-north' },
+            { x: 0, z: -28, color: 0xcbd5e1, intensity: 0.22, height: 6.5, zone: 'lane-south' },
         ]
     }
 

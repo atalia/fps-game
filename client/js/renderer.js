@@ -39,9 +39,9 @@ class Renderer {
     this.postProcessingProfile = {
       level: "medium",
       bloomEnabled: true,
-      bloomStrength: 0.35,
-      bloomRadius: 0.22,
-      bloomThreshold: 0.84,
+      bloomStrength: 0.26,
+      bloomRadius: 0.18,
+      bloomThreshold: 0.9,
     };
 
     // 光照状态
@@ -172,9 +172,9 @@ class Renderer {
       ...(this.postProcessingProfile || {}),
       level: "medium",
       bloomEnabled: this.postProcessingEnabled,
-      bloomStrength: 0.35,
-      bloomRadius: 0.22,
-      bloomThreshold: 0.84,
+      bloomStrength: 0.26,
+      bloomRadius: 0.18,
+      bloomThreshold: 0.9,
       enabled: this.postProcessingEnabled,
     };
 
@@ -187,10 +187,10 @@ class Renderer {
 
   setupLighting() {
     // 竞技风光照，强调体积和可读性
-    this.ambientLight = new THREE.AmbientLight(0xc7d2e2, 0.42);
+    this.ambientLight = new THREE.AmbientLight(0xc7d2e2, 0.34);
     this.scene.add(this.ambientLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xfff1d6, 1.35);
+    this.sunLight = new THREE.DirectionalLight(0xfff1d6, 1.18);
     this.sunLight.position.set(65, 95, 40);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 2048;
@@ -204,15 +204,15 @@ class Renderer {
     this.sunLight.shadow.bias = -0.0001;
     this.scene.add(this.sunLight);
 
-    this.moonLight = new THREE.DirectionalLight(0x8ca8d8, 0.18);
+    this.moonLight = new THREE.DirectionalLight(0x8ca8d8, 0.12);
     this.moonLight.position.set(-40, 55, -45);
     this.scene.add(this.moonLight);
 
-    this.fillLight = new THREE.DirectionalLight(0xd9e2f0, 0.38);
+    this.fillLight = new THREE.DirectionalLight(0xd9e2f0, 0.28);
     this.fillLight.position.set(-25, 50, -35);
     this.scene.add(this.fillLight);
 
-    this.hemisphereLight = new THREE.HemisphereLight(0xb7c8df, 0x1f242c, 0.52);
+    this.hemisphereLight = new THREE.HemisphereLight(0xb7c8df, 0x1f242c, 0.42);
     this.scene.add(this.hemisphereLight);
 
     this.localFunctionalLights = this.getFunctionalLightAnchors().map((light) => {
@@ -242,6 +242,8 @@ class Renderer {
         "cover-definition",
         "lane-contrast",
       ],
+      localLightPolicy: "purposeful-only",
+      contrastModel: "clean-key-fill",
     };
   }
 
