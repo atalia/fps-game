@@ -258,4 +258,17 @@ describe("MapEnhanced competitive scene kit", () => {
     expect(accent.options.emissiveIntensity).toBeLessThanOrEqual(0.18);
     expect(boundary.options.roughness).toBeGreaterThan(structure.options.roughness);
   });
+
+  it("tracks collision volumes for central masses and tactical cover", () => {
+    const renderer = { scene: { add() {} } };
+    renderer.environmentKit = new EnvironmentKit(renderer);
+    const map = new MapEnhanced(renderer);
+
+    map.createCompetitiveArena();
+    const volumes = map.getCollisionVolumes();
+
+    expect(volumes.some((volume) => volume.variant === "central-core")).toBe(true);
+    expect(volumes.some((volume) => volume.variant === "cover-cluster")).toBe(true);
+    expect(volumes.some((volume) => volume.category === "boundary")).toBe(true);
+  });
 });

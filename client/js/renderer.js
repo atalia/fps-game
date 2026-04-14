@@ -153,6 +153,12 @@ class Renderer {
     return this.mapEnhanced;
   }
 
+  getCollisionVolumes() {
+    const environmentVolumes = this.environmentKit?.getCollisionVolumes?.() || [];
+    const mapVolumes = this.mapEnhanced?.getCollisionVolumes?.() || [];
+    return [...environmentVolumes, ...mapVolumes, ...(this.fallbackCollisionVolumes || [])];
+  }
+
   getFunctionalLightAnchors() {
     if (this.mapEnhanced?.getFunctionalLightAnchors) {
       return this.mapEnhanced.getFunctionalLightAnchors();
@@ -342,6 +348,14 @@ class Renderer {
       { x: 20, z: 0, w: 2, h: 4, d: 8, color: 0xee8844 },
       { x: -20, z: 0, w: 2, h: 4, d: 8, color: 0x8844ee },
     ];
+    this.fallbackCollisionVolumes = obstacles.map((obs) => ({
+      category: "structure",
+      variant: "fallback-obstacle",
+      minX: obs.x - obs.w / 2,
+      maxX: obs.x + obs.w / 2,
+      minZ: obs.z - obs.d / 2,
+      maxZ: obs.z + obs.d / 2,
+    }));
 
     obstacles.forEach((obs) => {
       const geometry = new THREE.BoxGeometry(obs.w, obs.h, obs.d);

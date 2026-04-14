@@ -10,6 +10,7 @@ class MapEnhanced {
         this.decorations = []
         this.details = []
         this.structures = []
+        this.collisionVolumes = []
     }
 
     createMaterial(kind, overrides = {}) {
@@ -37,6 +38,41 @@ class MapEnhanced {
         }
         this.structures.push(mesh)
         return mesh
+    }
+
+    isCollidableCategory(category) {
+        return ['structure', 'cover', 'boundary'].includes(category)
+    }
+
+    createCollisionVolume(x, z, w, d, category, variant = '', zone = 'peripheral', rotationY = 0) {
+        const cos = Math.cos(rotationY)
+        const sin = Math.sin(rotationY)
+        const halfWidth = (Math.abs(w * cos) + Math.abs(d * sin)) / 2
+        const halfDepth = (Math.abs(w * sin) + Math.abs(d * cos)) / 2
+
+        return {
+            category,
+            variant,
+            zone,
+            minX: x - halfWidth,
+            maxX: x + halfWidth,
+            minZ: z - halfDepth,
+            maxZ: z + halfDepth,
+        }
+    }
+
+    registerCollisionVolume(x, z, w, d, category, variant = '', zone = 'peripheral', rotationY = 0) {
+        if (!this.isCollidableCategory(category)) {
+            return null
+        }
+
+        const volume = this.createCollisionVolume(x, z, w, d, category, variant, zone, rotationY)
+        this.collisionVolumes.push(volume)
+        return volume
+    }
+
+    getCollisionVolumes() {
+        return [...this.collisionVolumes]
     }
 
     createGround(size = 150, theme = 'competitive') {
@@ -145,6 +181,7 @@ class MapEnhanced {
         mesh.castShadow = true
         mesh.receiveShadow = true
         this.tagMesh(mesh, kind, variant)
+        this.registerCollisionVolume(x, z, w, d, kind, variant, mesh.userData?.zone || 'peripheral', rotationY)
         this.scene.add(mesh)
         return mesh
     }
@@ -255,6 +292,7 @@ class MapEnhanced {
 
         const topTrim = this.offsetPoint(x, z, 0, 0, rotation)
         this.createTrimBand(topTrim.x, 2.28, topTrim.z, 5.8, 0.12, 2.2, 'cover-cap', zone, rotation, 0xaeb9c7)
+        this.registerCollisionVolume(x, z, 5.8, 3.6, 'cover', 'cover-cluster', zone, rotation)
 
         return group
     }
@@ -452,6 +490,7 @@ class MapEnhanced {
         })
         this.decorations = []
         this.structures = []
+        this.collisionVolumes = []
         if (this.ground) {
             this.scene.remove?.(this.ground)
             this.ground = null

@@ -9,6 +9,7 @@ class EnvironmentKit {
     this.scene = renderer.scene;
     this.runtimeAssets = options.runtimeAssets || renderer.runtimeAssets || null;
     this.registry = new Map();
+    this.placedStructures = [];
     this.visualProfile = "semi-realistic-tactical";
     this.registerDefaultAssets();
   }
@@ -24,6 +25,22 @@ class EnvironmentKit {
       ...descriptor,
     });
     return this.registry.get(key);
+  }
+
+  isCollidableCategory(category) {
+    return ["structure", "cover", "boundary"].includes(category);
+  }
+
+  createCollisionVolume(descriptor) {
+    return {
+      assetKey: descriptor.key,
+      category: descriptor.category,
+      zone: descriptor.zone,
+      minX: descriptor.position.x - descriptor.dimensions.width / 2,
+      maxX: descriptor.position.x + descriptor.dimensions.width / 2,
+      minZ: descriptor.position.z - descriptor.dimensions.depth / 2,
+      maxZ: descriptor.position.z + descriptor.dimensions.depth / 2,
+    };
   }
 
   registerDefaultAssets() {
@@ -138,10 +155,19 @@ class EnvironmentKit {
     }
     const object = this.createFallbackStructure(descriptor);
     this.scene.add?.(object);
+    this.placedStructures.push(object);
     return object;
   }
 
+  getCollisionVolumes() {
+    return this.placedStructures
+      .filter((object) => this.isCollidableCategory(object?.userData?.category))
+      .map((object) => this.createCollisionVolume(this.registry.get(object.userData.assetKey)));
+  }
+
   buildCoreZones() {
+    this.placedStructures = [];
+
     const orderedKeys = [
       "spawn-ct-anchor",
       "spawn-t-anchor",

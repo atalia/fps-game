@@ -65,6 +65,22 @@ describe('PlayerController', () => {
     expect(Math.abs(result.position.z)).toBeLessThan(0.001)
   })
 
+  it('does not walk through collidable map volumes exposed by the renderer', () => {
+    window.renderer = {
+      getCollisionVolumes: () => [
+        { minX: -1, maxX: 1, minZ: -1, maxZ: 1, category: 'structure' }
+      ]
+    }
+    player.position = { x: 0, y: 0, z: 1.4 }
+    player.keys['KeyW'] = true
+
+    const before = { ...player.position }
+    const result = player.update()
+
+    expect(result.position.z).toBe(before.z)
+    expect(result.position.x).toBe(before.x)
+  })
+
   it('jumps and becomes airborne when space is pressed on ground', () => {
     player.keys['Space'] = true
     player.update()

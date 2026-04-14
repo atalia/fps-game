@@ -33,6 +33,7 @@ class PlayerController {
     this.speed = 5;
     this.jumpForce = 8;
     this.isGrounded = true;
+    this.collisionRadius = 0.5;
 
     this.keys = {};
     this.mouse = { x: 0, y: 0 };
@@ -137,9 +138,26 @@ class PlayerController {
     this._eventHandlers = {};
   }
 
+  getCollisionVolumes() {
+    return window.renderer?.getCollisionVolumes?.() || [];
+  }
+
+  checkObstacleCollision(x, z, radius = this.collisionRadius) {
+    return this.getCollisionVolumes().some((volume) => {
+      if (!volume) return false;
+      return (
+        x + radius > volume.minX &&
+        x - radius < volume.maxX &&
+        z + radius > volume.minZ &&
+        z - radius < volume.maxZ
+      );
+    });
+  }
+
   update() {
     const dt = 1 / 60;
     const canMove = this.canMoveDuringRound();
+    const boundary = 48;
 
     // 移动
     let moveX = 0;
@@ -161,9 +179,18 @@ class PlayerController {
     // 应用移动
     const sin = Math.sin(this.rotation);
     const cos = Math.cos(this.rotation);
+    const deltaX = (moveX * cos + moveZ * sin) * this.speed * dt;
+    const deltaZ = (-moveX * sin + moveZ * cos) * this.speed * dt;
 
-    this.position.x += (moveX * cos + moveZ * sin) * this.speed * dt;
-    this.position.z += (-moveX * sin + moveZ * cos) * this.speed * dt;
+    const nextX = Math.max(-boundary, Math.min(boundary, this.position.x + deltaX));
+    if (!this.checkObstacleCollision(nextX, this.position.z)) {
+      this.position.x = nextX;
+    }
+
+    const nextZ = Math.max(-boundary, Math.min(boundary, this.position.z + deltaZ));
+    if (!this.checkObstacleCollision(this.position.x, nextZ)) {
+      this.position.z = nextZ;
+    }
 
     // 重力
     if (!this.isGrounded) {
@@ -176,11 +203,6 @@ class PlayerController {
         this.isGrounded = true;
       }
     }
-
-    // 边界限制
-    const boundary = 48;
-    this.position.x = Math.max(-boundary, Math.min(boundary, this.position.x));
-    this.position.z = Math.max(-boundary, Math.min(boundary, this.position.z));
 
     return {
       position: { ...this.position },

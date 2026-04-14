@@ -97,4 +97,39 @@ describe("EnvironmentKit", () => {
       ),
     ).toBe(true);
   });
+
+  it("exposes collision volumes for collidable core-zone structures", () => {
+    const EnvironmentKit = loadEnvironmentKit();
+    const renderer = {
+      scene: {
+        add() {},
+      },
+    };
+    const kit = new EnvironmentKit(renderer);
+
+    kit.buildCoreZones();
+    const volumes = kit.getCollisionVolumes();
+
+    expect(volumes.some((volume) => volume.category === "boundary")).toBe(true);
+    expect(volumes.some((volume) => volume.category === "cover")).toBe(true);
+    expect(volumes.some((volume) => volume.assetKey === "mid-lane-bulkhead-north")).toBe(true);
+  });
+
+  it("rebuilds core zones without duplicating old collision volumes", () => {
+    const EnvironmentKit = loadEnvironmentKit();
+    const renderer = {
+      scene: {
+        add() {},
+      },
+    };
+    const kit = new EnvironmentKit(renderer);
+
+    kit.buildCoreZones();
+    const firstPass = kit.getCollisionVolumes();
+
+    kit.buildCoreZones();
+    const secondPass = kit.getCollisionVolumes();
+
+    expect(secondPass).toHaveLength(firstPass.length);
+  });
 });
